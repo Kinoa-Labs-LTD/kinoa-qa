@@ -1,0 +1,15 @@
+{
+  "name": "kinoa-qa",
+  "description": "QA plugin: Jira Story + PRD + OpenSpec specs -> Allure TestOps test cases",
+  "owner": { "name": "Dmytro Kapeliukh", "email": "d.kapeliukh@kinoa.io" },
+  "plugins": [
+    {
+      "name": "kinoa-qa",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "QA test-plan + TestOps case generator: the /kinoa-qa:testplan orchestrator skill",
+      "homepage": "https://github.com/Kinoa-Labs-LTD/kinoa-qa",
+      "author": { "name": "Dmytro Kapeliukh", "email": "d.kapeliukh@kinoa.io" }
+    }
+  ]
+}
