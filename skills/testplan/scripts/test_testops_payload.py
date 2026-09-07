@@ -27,6 +27,12 @@ class TestPayload(unittest.TestCase):
         b = traceability_tag("KING-1", "svc", "cap", "scenario: Sign-in/Bad password")
         self.assertNotEqual(a, b)
 
+    def test_traceability_tag_distinguishes_cases_sharing_a_scenario(self):
+        src = "scenario: Sign-in/Happy path"
+        a = traceability_tag("KING-1", "svc", "cap", src, "Happy path sign-in")
+        b = traceability_tag("KING-1", "svc", "cap", src, "Sign-in rejects a locked account")
+        self.assertNotEqual(a, b)
+
     def test_payload_shape(self):
         p = case_to_payload(CASE, story="KING-1", service="svc", capability="cap",
                             jira_base_url="https://kinoadev.atlassian.net")
@@ -39,7 +45,7 @@ class TestPayload(unittest.TestCase):
         self.assertIn("spec-derived", p["tags"])
         self.assertIn("type-functional", p["tags"])
         self.assertIn("priority-p1", p["tags"])
-        self.assertIn(traceability_tag("KING-1", "svc", "cap", CASE["tags"]["source"]), p["tags"])
+        self.assertIn(traceability_tag("KING-1", "svc", "cap", CASE["tags"]["source"], CASE["title"]), p["tags"])
         self.assertEqual(p["links"][0]["url"], "https://kinoadev.atlassian.net/browse/KING-1")
 
 if __name__ == "__main__":
