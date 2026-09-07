@@ -1,0 +1,8 @@
+{
+  "kinoa-client-support-tool": {
+    "owner": "Kinoa-Labs-LTD",
+    "repo": "kinoa-client-support-tool",
+    "specs_root": "openspec/specs",
+    "default_ref": "main"
+  }
+}
