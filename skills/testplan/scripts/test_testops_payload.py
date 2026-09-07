@@ -45,8 +45,28 @@ class TestPayload(unittest.TestCase):
         self.assertIn("spec-derived", p["tags"])
         self.assertIn("type-functional", p["tags"])
         self.assertIn("priority-p1", p["tags"])
-        self.assertIn(traceability_tag("KING-1", "svc", "cap", CASE["tags"]["source"], CASE["title"]), p["tags"])
+        self.assertIn(traceability_tag("KING-1", "svc", "cap", CASE["tags"]["source"], CASE["title"], CASE["tags"]["type"]), p["tags"])
         self.assertEqual(p["links"][0]["url"], "https://kinoadev.atlassian.net/browse/KING-1")
+
+    def test_traceability_tag_is_length_bounded(self):
+        long_src = "scenario: " + "Very Long Requirement Name " * 10 + "/" + "Verbose scenario " * 10
+        long_title = "An extremely verbose scenario title " * 10
+        t = traceability_tag("KING-22737", "kinoa-client-support-tool", "admin-authentication",
+                             long_src, long_title, "functional")
+        self.assertLessEqual(len(t), 100)
+        self.assertRegex(t, r"^[a-z0-9-]+$")
+
+    def test_traceability_tag_distinguishes_cases_by_type(self):
+        src, title = "scenario: Sign-in/Happy path", "Sign in"
+        a = traceability_tag("KING-1", "svc", "cap", src, title, "functional")
+        b = traceability_tag("KING-1", "svc", "cap", src, title, "negative")
+        self.assertNotEqual(a, b)
+
+    def test_traceability_tag_handles_non_ascii(self):
+        a = traceability_tag("KING-1", "svc", "cap", "ac: AC-1", "Вхід користувача")
+        b = traceability_tag("KING-1", "svc", "cap", "ac: AC-1", "Блокування акаунта")
+        self.assertNotEqual(a, b)
+        self.assertRegex(a, r"^[a-z0-9-]+$")
 
 if __name__ == "__main__":
     unittest.main()

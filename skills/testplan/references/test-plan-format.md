@@ -14,6 +14,7 @@ Allure TestOps cases (1:1). The deterministic validator
 story: <STORY-KEY> · target: <service>/<capability>@<ref> · generated: <YYYY-MM-DD> · spec-sha: <sha12 | none>
 specs: <resolved | none (<reason>)>
 ```
+> The `specs:` line is informational — it records whether specs were resolved; the validator infers spec-grounded vs business-only mode purely from whether a spec file is passed to it, not from this line.
 
 ## `## Acceptance Criteria` (required in business-only mode; optional in spec mode)
 

@@ -668,7 +668,7 @@ git commit -m "feat: validator — spec-grounded + business-only modes, ac-cover
 - Consumes: a parsed case dict from `plan_parser.parse_cases` (T2).
 - Produces (consumed by SKILL Step E / testops-sync.md T7):
   - `slugify(text) -> str` (lowercase, non-alnum runs → single `-`, trimmed);
-  - `traceability_tag(story, service, capability, source) -> str` (`tp-<slug>`, deterministic, AQL-safe `[a-z0-9-]`);
+  - `traceability_tag(story, service, capability, source, title="") -> str` (`tp-<slug>`, deterministic, AQL-safe `[a-z0-9-]`; `title` included so cases sharing one `source` scenario don't collide);
   - `case_to_payload(case, *, story, service, capability, jira_base_url) -> dict` — the shared TestOps V2 create/update body (`name, description, precondition, expectedResult, scenario.steps[], tags[], links[]`); the caller adds `projectId` (create) or `id` (update).
 
 - [ ] **Step 1: Write the failing test**
@@ -1139,7 +1139,7 @@ For each `### TC-<n>` case, build the body with `scripts/testops_payload.py`
 the `tp-<slug>` traceability tag inside `tags`.
 
 ## Idempotent upsert (per case)
-1. `ttag = testops_payload.traceability_tag(story, service, capability, source)`.
+1. `ttag = testops_payload.traceability_tag(story, service, capability, source, title)` — `title` = the case's TC title; required so two cases citing the same `source` scenario (functional + negative) don't collide onto one TestOps case.
 2. `testops_find_testcases(projectId, aql='tags = "<ttag>"', expand=["tags"])`.
 3. **Found (≥1):** `testops_update_testcase(id=<first hit id>, **payload)`.
    **None:** `testops_create_testcase(projectId=<pid>, **payload)`.

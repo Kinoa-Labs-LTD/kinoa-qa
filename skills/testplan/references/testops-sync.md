@@ -1,7 +1,7 @@
 # testops-sync.md — Step E (writes; only after the human gate)
 
 Uses the Allure TestOps MCP. `project_id` from `config.json` (resolve once via
-`testops_find_projects`/`testops_get_project` on `project_name` "KINOA" and cache it).
+`testops_get_project` on `project_name` "KINOA" and cache it).
 
 For each `### TC-<n>` case, build the body with `scripts/testops_payload.py`
 `case_to_payload(case, story=…, service=…, capability=…, jira_base_url=…)` — this yields
@@ -9,7 +9,7 @@ For each `### TC-<n>` case, build the body with `scripts/testops_payload.py`
 the `tp-<slug>` traceability tag inside `tags`.
 
 ## Idempotent upsert (per case)
-1. `ttag = testops_payload.traceability_tag(story, service, capability, source, title)` — `title` = the case's TC title; required so two cases citing the same `source` scenario (functional + negative) don't collide onto one TestOps case.
+1. `ttag = testops_payload.traceability_tag(story, service, capability, source, title, case_type)` — `title` = the case's TC title, `case_type` = the case's `type:` field; required so two cases citing the same `source` scenario (functional + negative) don't collide onto one TestOps case.
 2. `testops_find_testcases(projectId, aql='tags = "<ttag>"', expand=["tags"])`.
 3. **Found (≥1):** `testops_update_testcase(id=<first hit id>, **payload)`.
    **None:** `testops_create_testcase(projectId=<pid>, **payload)`.

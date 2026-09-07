@@ -1,6 +1,7 @@
 """Pure mapping: a parsed test-plan case -> an Allure TestOps V2 payload body, plus the
 deterministic traceability tag used as the idempotency key. stdlib-only, no network."""
 import re
+import hashlib
 
 PRIORITY_TAG = {"P1": "priority-p1", "P2": "priority-p2", "P3": "priority-p3"}
 
@@ -9,21 +10,23 @@ def slugify(text):
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", text.lower())).strip("-")
 
 
-def traceability_tag(story, service, capability, source, title=""):
-    """Deterministic, AQL-matchable tag identifying ONE case across re-runs.
+def traceability_tag(story, service, capability, source, title="", case_type=""):
+    """Deterministic, AQL-matchable, LENGTH-BOUNDED tag identifying ONE case across re-runs.
 
-    Includes `title` so multiple cases sharing one `source` scenario (e.g. a
-    functional + a negative case on the same scenario, which the QA lens
-    deliberately produces) get DISTINCT tags — otherwise they collide and the
-    idempotent upsert overwrites one with the other. Trade-off: a reworded title
-    yields a new tag (new TestOps case + an orphan), which the human gate /
-    --dry-run surfaces — acceptable vs. silent case loss. Fields are slugified
-    after joining, so boundary shifts across the fixed, small-cardinality
-    (story, service, capability) taxonomy values are not disambiguated; safe
-    given those come from the repo/Jira taxonomy, not free text.
+    A readable, capped prefix (story/service/capability) + a short deterministic hash of
+    the FULL key (story|service|capability|source|title|case_type). The hash:
+      - keeps the tag bounded — Allure tag names are a bounded field; an over-long tag
+        could be truncated/rejected on write, so a re-run's full-length AQL match would
+        miss it -> a duplicate create, breaking the "0 duplicates on re-run" invariant;
+      - guarantees per-case uniqueness — a functional + a negative case on one scenario
+        differ by title and/or type, so they never collide onto one TestOps case;
+      - is robust to non-ASCII (e.g. Cyrillic) source/title text that slugify flattens.
+    Do NOT fold in the TC-n id — it renumbers across runs and would break cross-run stability.
     """
-    parts = [p for p in (story, service, capability, source, title) if p]
-    return "tp-" + slugify("-".join(parts))
+    full_key = "|".join([story or "", service or "", capability or "", source or "", title or "", case_type or ""])
+    prefix = slugify("-".join([p for p in (story, service, capability) if p]))[:80]
+    digest = hashlib.sha1(full_key.encode("utf-8")).hexdigest()[:10]
+    return "tp-" + (prefix + "-" if prefix else "") + digest
 
 
 def _strip_num(step):
@@ -41,7 +44,7 @@ def _dedupe(items):
 def case_to_payload(case, *, story, service, capability, jira_base_url):
     """Shared TestOps create/update body. Caller adds projectId (create) or id (update)."""
     tags = case["tags"]
-    ttag = traceability_tag(story, service or "", capability or "", tags.get("source", ""), case.get("title", ""))
+    ttag = traceability_tag(story, service or "", capability or "", tags.get("source", ""), case.get("title", ""), tags.get("type", ""))
     return {
         "name": f"{case['id']} · {case['title']}",
         "description": f"source: {tags.get('source', '')}\ntraceability: {ttag}\nstory: {story}",
