@@ -1,0 +1,87 @@
+{
+  "skill_name": "kinoa-qa:testplan",
+  "notes": "Fixtures live in ./fixtures/. Subagents can't nest in the eval harness, so the generation subagent's work (Step B) runs INLINE by the eval-running agent. Atlassian, gh (SpecResolver) and Allure TestOps are SIMULATED (no reachable MCP/repo in the eval env) — but skills/testplan/scripts/validate_test_plan.py runs for REAL against the generated test-plan.md and fixture spec.md, and its real exit code/output is what assertions are checked against.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "spec-grounded-every-scenario-covered",
+      "fixture": "spec-grounded",
+      "prompt": "Given fixtures/spec-grounded/spec.md (two scenario'd requirements + one scenario-less 'Token rate limiting'), generate test-plan.md per generation.md + test-plan-format.md (generation inline), then run validate_test_plan.py against the spec.",
+      "expected_output": "Every #### Scenario is covered by >=1 case with source: scenario: <Req>/<Scenario> matching the headings; the scenario-less requirement appears as a ## Gaps line; validate_test_plan.py exits 0 with RESULT: PASS.",
+      "files": [],
+      "assertions": [
+        { "text": "Each spec scenario is referenced by >=1 case's source: scenario: <Req>/<Scenario>, exact string match", "passed": false, "evidence": "" },
+        { "text": "The scenario-less 'Token rate limiting' requirement is named in a ## Gaps ⚠️ GAP line (not silently dropped)", "passed": false, "evidence": "" },
+        { "text": "validate_test_plan.py was actually executed against the generated plan and fixture spec (not self-checked only)", "passed": false, "evidence": "" },
+        { "text": "validate_test_plan.py exits 0 and prints RESULT: PASS (all five checks PASS or n/a)", "passed": false, "evidence": "" }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "business-only-ac-coverage",
+      "fixture": "business-only",
+      "prompt": "No service repo resolves. Using only a Jira Story + PRD (acceptance criteria AC-1, AC-2), generate a business-only test-plan.md and validate WITHOUT --spec.",
+      "expected_output": "The plan has a ## Acceptance Criteria section; every AC is covered by >=1 case with source: ac: AC-<n>; header records specs: none; validate_test_plan.py (no --spec) exits 0, scenario-coverage and gap-honesty report n/a.",
+      "files": [],
+      "assertions": [
+        { "text": "Every AC-<n> in ## Acceptance Criteria is cited by >=1 case source: ac: AC-<n>", "passed": false, "evidence": "" },
+        { "text": "No case uses source: scenario: (there is no spec) — sources are ac: or QA-added:", "passed": false, "evidence": "" },
+        { "text": "Header records specs: none (<reason>)", "passed": false, "evidence": "" },
+        { "text": "validate_test_plan.py without --spec exits 0; scenario-coverage and gap-honesty show n/a", "passed": false, "evidence": "" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "qa-lens-adds-negative",
+      "fixture": "spec-grounded",
+      "prompt": "For a scenario implying a boundary/auth failure (break-glass), apply generation.md rule 2 and add a negative/edge case, then validate.",
+      "expected_output": "Beyond the base functional case, >=1 case tagged type: negative or type: edge exists, its boundary implied by the source scenario's WHEN/THEN, still using a valid source: reference. Validator passes.",
+      "files": [],
+      "assertions": [
+        { "text": "A type: negative or type: edge case exists beyond the happy-path case", "passed": false, "evidence": "" },
+        { "text": "Its boundary/invalid input is implied by the source scenario text, not fabricated", "passed": false, "evidence": "" },
+        { "text": "It uses a valid source: (scenario: or ac:), not QA-added: as an escape hatch", "passed": false, "evidence": "" },
+        { "text": "validate_test_plan.py exits 0", "passed": false, "evidence": "" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "no-fabrication-gap-honesty",
+      "fixture": "spec-grounded",
+      "prompt": "The spec has a scenario-less requirement ('Token rate limiting'). Confirm no case is invented for it and it is marked as a gap; validate.",
+      "expected_output": "No case cites 'Token rate limiting'; it appears once as a ## Gaps ⚠️ GAP line with an em dash and a reason; validate_test_plan.py gap-honesty PASS.",
+      "files": [],
+      "assertions": [
+        { "text": "No ### TC- case is invented for the scenario-less requirement", "passed": false, "evidence": "" },
+        { "text": "'Token rate limiting' appears as a ## Gaps ⚠️ GAP: <req> — <reason> line (em dash U+2014)", "passed": false, "evidence": "" },
+        { "text": "validate_test_plan.py gap-honesty check PASS", "passed": false, "evidence": "" }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "idempotent-upsert-key-stable",
+      "fixture": "spec-grounded",
+      "prompt": "Simulate two Step E runs over the SAME approved plan via testops_payload.traceability_tag + a simulated testops_find_testcases. Show the second run updates, not duplicates.",
+      "expected_output": "For each case, traceability_tag(story, service, capability, source) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice.",
+      "files": [],
+      "assertions": [
+        { "text": "traceability_tag is byte-identical for the same case across the two runs", "passed": false, "evidence": "" },
+        { "text": "Run 2's find (aql tags = the same tp- tag) matches run 1's created case, so the action is update", "passed": false, "evidence": "" },
+        { "text": "No case results in two create calls (0 duplicates)", "passed": false, "evidence": "" },
+        { "text": "The tp- tag is AQL-safe ([a-z0-9-]+) and present in the payload tags", "passed": false, "evidence": "" }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "dry-run-writes-nothing",
+      "fixture": "spec-grounded",
+      "prompt": "Run Step E with --dry-run over the approved plan. Confirm no create/update is issued and a per-case preview is printed.",
+      "expected_output": "Per testops-sync.md --dry-run: for each case, print intended action (create|update), its tp- tag, and payload name; issue ZERO testops_create_testcase / testops_update_testcase calls.",
+      "files": [],
+      "assertions": [
+        { "text": "Zero create/update TestOps calls are issued under --dry-run", "passed": false, "evidence": "" },
+        { "text": "A per-case line prints the intended action, the tp- tag, and the payload name", "passed": false, "evidence": "" }
+      ]
+    }
+  ]
+}
