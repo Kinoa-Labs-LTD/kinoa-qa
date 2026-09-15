@@ -1,0 +1,80 @@
+{
+  "name": "Collecting a non-final milestone does not change the eligibility counter",
+  "description": "Verify eligibility is untouched while the player progresses through milestones before the last one.",
+  "precondition": "Published Milestone in-app with 3 milestones and Max Eligibility = 2.\nTest player has an active in-app instance with actual_eligibility = 2 and no milestones collected.",
+  "expectedResult": "Eligibility is decremented only at the final milestone; intermediate collects leave actual_eligibility, the instance ID and the progression intact.",
+  "status": "Draft",
+  "workflow": "Manual Kinoa",
+  "issues": [
+    {
+      "name": "Kinoa-Allure",
+      "value": "KING-18454"
+    }
+  ],
+  "customFields": [
+    {
+      "name": "Suite",
+      "value": "[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app"
+    },
+    {
+      "name": "Story",
+      "value": "Template"
+    },
+    {
+      "name": "Component",
+      "value": "In-Apps"
+    },
+    {
+      "name": "Feature",
+      "value": "Milestones"
+    }
+  ],
+  "scenario": {
+    "steps": [
+      {
+        "type": "body",
+        "body": "Reach and collect milestone 1 via the collect-milestones endpoint.",
+        "expectedResultSteps": [
+          {
+            "type": "expected_body",
+            "body": "Request succeeds; the reward of milestone 1 is granted."
+          }
+        ]
+      },
+      {
+        "type": "body",
+        "body": "Inspect the collect-milestones response body.",
+        "expectedResultSteps": [
+          {
+            "type": "expected_body",
+            "body": "The response contains no in_app key — the claim did not engage."
+          }
+        ]
+      },
+      {
+        "type": "body",
+        "body": "Fetch the player's in-app instance.",
+        "expectedResultSteps": [
+          {
+            "type": "expected_body",
+            "body": "actual_eligibility is still 2; the instance ID is unchanged; progression reflects milestone 1 as collected."
+          }
+        ]
+      },
+      {
+        "type": "body",
+        "body": "Reach and collect milestone 2 (still not the final one).",
+        "expectedResultSteps": [
+          {
+            "type": "expected_body",
+            "body": "Request succeeds, no in_app key in the response, actual_eligibility is still 2, progression is not reset."
+          }
+        ]
+      }
+    ]
+  },
+  "tags": [
+    "qa-generated",
+    "tp-king-18454-kinoa-in-app-milestones-eligibility-b414d1aeef"
+  ]
+}

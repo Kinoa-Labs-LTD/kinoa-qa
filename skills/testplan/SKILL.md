@@ -5,7 +5,9 @@ description: Build a validator-checked QA test plan from a Jira Story (+ optiona
 
 # testplan — Jira Story → Allure TestOps cases
 
-`/kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>] [--openspec-path <dir>] [--dry-run]`
+`/kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>]
+[--openspec-path <dir>] [--story-field <value>] [--component <value>] [--feature <value>]
+[--allow-unverified-fields] [--dry-run]`
 
 "Spec" in this plugin means an OpenSpec `spec.md` file generated from service-repo code;
 a Confluence PRD/HLD is never called a "spec" here.
@@ -35,7 +37,7 @@ not read the whole spec/PRD itself.
 | Assemble the SoT; adapters (Jira, Confluence, Figma, `gh`) | `references/sot-assembly.md` |
 | QA-lens derivation rules, conflicts, no-fabrication | `references/generation.md` |
 | Exact `test-plan.md` shape + TestOps mapping | `references/test-plan-format.md` |
-| Idempotent TestOps upsert, `--dry-run` | `references/testops-sync.md` |
+| Idempotent TestOps upsert, custom-field pre-flight, `--dry-run` | `references/testops-sync.md` |
 | Deterministic validator (script, not an LLM) | `scripts/validate_test_plan.py` |
 
 ## Step A — Assemble the SoT (read-only)
@@ -81,9 +83,22 @@ explicit approval.
 ## Step E — TestOps upsert
 Re-run the validator first. **Exit 2 (HOLD) refuses the upsert** — name the unresolved
 conflicts and stop; approval at the gate does not override an unannotated conflict.
+Then run the custom-field pre-flight: resolve `Suite`/`Story`/`Component`/`Feature`, and
+**abort naming the offending field and value** if one is unset or is unverified — Allure fails
+the whole creation silently on an unknown value. Each of `Story`/`Component`/`Feature` comes
+from its flag (`--story-field` / `--component` / `--feature`), else the matching
+`testops.custom_fields.*` default in `config.json`, else the run aborts; the shipped defaults
+are **empty** on purpose, so a default run needs the flags. `Suite` is composed from the plan
+header. The verification is a by-value case lookup, so it proves a value is *in use*, not that
+it exists; `--allow-unverified-fields` downgrades that one check to a warning. Details, order
+and the exact calls are in `references/testops-sync.md` (Gate 0).
 Otherwise follow `references/testops-sync.md`: per case, AQL-find by the `tp-<slug>` tag →
 `update` or `create` in project KINOA (id from `config.json`), then write `@allure.id`
 back into the `.md`. With `--dry-run`, print intended actions instead.
+
+**Tag policy: `tp-<slug>` + `qa-generated` only.** `type-*`, `priority-*`, `openspec-context`,
+`design-backed` and `spec-derived` are retired; OpenSpec and mockup provenance rides as a
+`Provenance:` line on the payload `description`.
 
 ## Degradation
 | Failure | Behavior |
@@ -100,6 +115,8 @@ back into the `.md`. With `--dry-run`, print intended actions instead.
 | Generation fails | One retry, then stop and surface. |
 | Validator FAIL | One retry → stop before the gate; never ships. |
 | QA rejects at the gate | Nothing pushed; edits re-validated. |
+| A custom-field value is unset (no flag, empty `config.json` default) | Abort at Step E's Gate 0b naming the field and the flag; nothing is looked up, nothing is written. |
+| A custom-field value is used by no existing case (it may still exist in Allure) | Abort at Step E's Gate 0b naming the field and the value. Re-run with `--allow-unverified-fields` to downgrade it to a warning when the value was just created in Allure and no case uses it yet. |
 | TestOps write fails mid-batch | No rollback — keyed upsert; re-run resumes. |
 | TestOps unreachable | `test-plan.md` is on disk; re-run Step E later. |
 

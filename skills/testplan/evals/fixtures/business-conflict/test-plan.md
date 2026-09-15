@@ -2,7 +2,7 @@
 > AUTO-GENERATED DRAFT — review, then approve to sync into Allure TestOps.
 > System of record: Allure TestOps · project KINOA. This file is a reviewable intermediate.
 
-story: KING-22988 · target: kinoa-reports/scheduled-export@main · generated: 2026-09-14
+story: KING-22988 · title: Scheduled report export retention · target: kinoa-reports/scheduled-export@main · generated: 2026-09-14
 prd: resolved
 openspec: none
 design: remote (simulated)
@@ -16,13 +16,18 @@ design: remote (simulated)
 ### TC-1 · A requested export is queued and its download link is emailed
 - type: functional
 - priority: P1
+- purpose: Verify that requesting an export queues the job and emails the operator a download link once the CSV is ready.
 - source: ac: AC-1
 - design-ref: Zx9QwErTy012/880:1420 — Export · Ready
-- preconditions: an operator is signed in and a scheduled report with at least one row exists
+- preconditions: An operator is signed in to the Reports screen.
+  A scheduled report with at least one row exists.
 - steps:
-  1. request an export of the scheduled report
-  2. wait for the export job to finish
-  3. open the operator's mailbox
+  1. Request an export of the scheduled report.
+     → expected: The export job is accepted and the Reports screen shows the export as queued.
+  2. Wait for the export job to finish.
+     → expected: The Reports screen shows "Your export is ready." with a "Download CSV" action.
+  3. Open the operator's mailbox.
+     → expected: An email has arrived containing a download link for the generated CSV.
 - expected: the job is queued, and when the CSV is ready the operator receives an email containing a download link, and the Reports screen shows "Your export is ready." with a "Download CSV" action
 
 ## Conflicts

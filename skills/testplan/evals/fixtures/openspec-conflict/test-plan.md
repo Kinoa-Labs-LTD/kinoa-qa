@@ -2,7 +2,7 @@
 > AUTO-GENERATED DRAFT — review, then approve to sync into Allure TestOps.
 > System of record: Allure TestOps · project KINOA. This file is a reviewable intermediate.
 
-story: KING-22901 · target: kinoa-client-support-tool/admin-lockout@main · generated: 2026-09-14
+story: KING-22901 · title: Admin sign-in lockout · target: kinoa-client-support-tool/admin-lockout@main · generated: 2026-09-14
 prd: resolved
 openspec: admin-lockout@0f1e2d3c4b5a
 design: none (no Figma link on the Story)
@@ -16,12 +16,16 @@ design: none (no Figma link on the Story)
 ### TC-1 · Five consecutive failures lock the admin account
 - type: functional
 - priority: P1
+- purpose: Verify that five consecutive failed sign-in attempts lock the admin account.
 - source: ac: AC-1
 - openspec-ref: Admin sign-in lockout/Five failed attempts lock the account
-- preconditions: admin account is ACTIVE with 0 recorded failures
+- preconditions: The admin account is ACTIVE.
+  The account has 0 recorded failed attempts.
 - steps:
-  1. post 5 sign-ins with an incorrect password
-  2. read the account state
+  1. Sign in five times in a row with an incorrect password.
+     → expected: Every attempt is refused as invalid credentials.
+  2. Read the account state.
+     → expected: The account state is LOCKED.
 - expected: the account state is LOCKED
 
 ## Conflicts

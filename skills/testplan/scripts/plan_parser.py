@@ -21,18 +21,35 @@ def parse_spec(spec_text):
     return scenarios, reqs_without
 
 
+STEP_RE = re.compile(r"^\s+\d+\.\s+(\S.*?)\s*$")
+STEP_EXPECTED_RE = re.compile(r"^\s+\u2192\s*expected:\s*(.*?)\s*$")
+
+
 def parse_cases(plan_text):
-    """Return list of dicts: {id, title, tags:{k:v}, steps:[...]}."""
+    """Return list of dicts: {id, title, tags:{k:v}, steps:[{action, expected, extra_expected}]}.
+
+    A step is a numbered line; its expected result is the `\u2192 expected:` line under it, and
+    `expected` is None when the step has none, so an old-shape plan parses instead of crashing.
+    Further expected lines for the same step land in `extra_expected`, which the validator
+    rejects: the payload carries exactly one expected result per step. An indented line
+    matching neither shape continues the action or expected result above it, so a wrapped
+    sentence is never dropped.
+    """
     cases = []
     cur = None
     in_steps = False
+    last_key = None
+    last_step_part = None
     for line in plan_text.splitlines():
         m = re.match(r"^###\s+(TC-\S+)\s+·\s+(.*\S)\s*$", line)
         if m:
             if cur:
                 cases.append(cur)
-            cur = {"id": m.group(1), "title": m.group(2).strip(), "tags": {}, "steps": []}
+            cur = {"id": m.group(1), "title": m.group(2).strip(),
+                   "tags": {}, "steps": []}
             in_steps = False
+            last_key = None
+            last_step_part = None
             continue
         if cur is None:
             continue
@@ -40,15 +57,49 @@ def parse_cases(plan_text):
             cases.append(cur)
             cur = None
             in_steps = False
+            last_step_part = None
             continue
         m = re.match(r"^-\s+([a-z-]+):\s*(.*)$", line)
         if m:
             key, val = m.group(1), m.group(2).strip()
             cur["tags"][key] = val
             in_steps = (key == "steps")
+            last_key = None if in_steps else key
+            last_step_part = None
             continue
-        if in_steps and re.match(r"^\s+\d+\.\s+\S", line):
-            cur["steps"].append(line.strip())
+        if not in_steps and last_key and re.match(r"^\s+\S", line):
+            # A continuation line extends the previous `- key: value` field, so a
+            # multi-line `preconditions:` reaches TestOps newline-separated.
+            prev = cur["tags"][last_key]
+            cur["tags"][last_key] = (prev + "\n" + line.strip()) if prev else line.strip()
+            continue
+        if in_steps:
+            m = STEP_RE.match(line)
+            if m:
+                cur["steps"].append({"action": m.group(1), "expected": None,
+                                     "extra_expected": []})
+                last_step_part = "action"
+                continue
+            m = STEP_EXPECTED_RE.match(line)
+            if m and cur["steps"]:
+                step = cur["steps"][-1]
+                if step["expected"] is None:
+                    step["expected"] = m.group(1)
+                else:
+                    step["extra_expected"].append(m.group(1))
+                last_step_part = "expected"
+                continue
+            # An indented line that is neither a numbered step nor an expected result
+            # continues whichever half was written last, so a wrapped sentence reaches
+            # TestOps whole instead of being truncated at the line break.
+            if last_step_part and cur["steps"] and re.match(r"^\s+\S", line):
+                step = cur["steps"][-1]
+                if last_step_part == "expected" and step["extra_expected"]:
+                    prev = step["extra_expected"][-1]
+                    step["extra_expected"][-1] = (prev + "\n" + line.strip()) if prev else line.strip()
+                else:
+                    prev = step[last_step_part] or ""
+                    step[last_step_part] = (prev + "\n" + line.strip()) if prev else line.strip()
     if cur:
         cases.append(cur)
     return cases

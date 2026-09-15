@@ -48,6 +48,25 @@ warns at the gate.
 5. **Nonfunctional:** only when the source text states an observable nonfunctional
    requirement (a timeout, a rate limit with an asserted response). Never infer silently.
 
+## Authoring conventions (how each case is written)
+
+These are the house conventions for a normal manual TC. They decide the *wording* of a case;
+the QA-lens rules above decide *which* cases exist. `references/test-plan-format.md` owns the
+grammar — this section owns the content that goes in it.
+
+| Field | Convention |
+|---|---|
+| title (`### TC-<n> · <title>`) | A clean behavioural statement of what the system does — `Project selection dropdown populates with all accessible destination projects`. Never a `TC-` prefix inside the title, never a bare feature name, never an imperative ("Check the dropdown"). |
+| `purpose:` | **One** sentence beginning "Verify", stating what the case proves — `Verify that the Destination Project dropdown excludes the source project.` Not a restatement of the title and not a summary of the steps. |
+| `preconditions:` | The state that must hold before step 1, as statements, one per line. Several statements are newline-separated continuation lines, not a comma list. |
+| `steps:` | User-level actions — what a tester does in the product, not API calls or internal state. |
+| `→ expected:` | Exactly one per step: the observable result of that step. No step without one, no step with two. |
+| `expected:` | The overall pass condition for the case, not a repeat of the last step's expected result. |
+
+Coverage style: prefer several focused cases over one mega-case — a case that verifies three
+unrelated behaviours fails for three unrelated reasons and tells the reader nothing. Order the
+cases happy path first, then the negative and edge cases the analysis surfaced.
+
 ## No fabrication (hard rule)
 An untestable or unassertable requirement is NOT turned into a case. Name each
 requirement with no scenario, and each OpenSpec scenario covered by no case, in a
