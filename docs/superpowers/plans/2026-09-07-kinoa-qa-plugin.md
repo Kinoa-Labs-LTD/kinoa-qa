@@ -1,3 +1,5 @@
+> **Superseded — historical record (2026-09-07).** Vocabulary here (e.g. `source: scenario:`) no longer matches the plugin and now fails validation. Current authority: `skills/testplan/references/`.
+
 # kinoa-qa Plugin Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -2,8 +2,10 @@
 > AUTO-GENERATED DRAFT — review, then approve to sync into Allure TestOps.
 > System of record: Allure TestOps · project KINOA. This file is a reviewable intermediate.
 
-story: KING-22737 · target: (none) · generated: 2026-09-07 · spec-sha: none
-specs: none (no service repo resolved)
+story: KING-22737 · target: (none) · generated: 2026-09-07
+prd: resolved
+openspec: none (no service repo resolved)
+design: none (no Figma link on the Story)
 
 ## Acceptance Criteria
 - AC-1: Authorized Workspace users get an Author account on first sign-in
@@ -28,5 +30,7 @@ specs: none (no service repo resolved)
 - steps:
   1. exceed the allowed number of break-glass attempts
 - expected: access is refused and the attempt is audited
+
+## Conflicts
 
 ## Gaps

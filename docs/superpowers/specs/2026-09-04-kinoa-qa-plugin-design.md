@@ -1,3 +1,5 @@
+> **Superseded — historical record (2026-09-04).** Vocabulary and flags here (`--spec-path`, the constant `spec-derived` tag) no longer match the plugin. Current authority: `skills/testplan/references/`.
+
 # kinoa-qa — QA plugin design
 
 **Jira:** KING-22737 ([AQA][TECH][AI] QA Plugin) · **Author:** Dmytro Kapeliukh · **Date:** 2026-09-04

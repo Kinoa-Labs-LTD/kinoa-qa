@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Jira Story -> affected service repos -> exact OpenSpec capability specs, via `gh`.
 
-Prototype auto-resolver for the SpecResolver seam. Given a Jira Story key plus its
+Prototype auto-resolver for the OpenSpecResolver seam. Given a Jira Story key plus its
 subtask keys, it uses the GitHub CLI to find the feature PRs, filters out release /
 cross-referenced noise, reads each PR's changed files to pin the OpenSpec capability,
 and returns the archived spec path to read. All `gh` calls go through an injected
@@ -125,7 +125,7 @@ def main():
         print(json.dumps(results, indent=2))
         return
     if not results:
-        print("no spec-grounded capabilities resolved — business-only for this Story")
+        print("no OpenSpec capabilities resolved for this Story")
         return
     for r in results:
         print(f"{r['repo']}\t{r['capability']}\t{r['spec_path']}\t(via {r['via_pr']})")

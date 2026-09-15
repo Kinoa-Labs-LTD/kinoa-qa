@@ -1,4 +1,4 @@
 {
-  "testops": { "project_name": "KINOA", "project_id": null },
+  "testops": { "project_name": "KINOA", "project_id": 1 },
   "jira_base_url": "https://kinoadev.atlassian.net"
 }
