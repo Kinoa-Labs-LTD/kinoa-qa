@@ -45,14 +45,24 @@ def case_to_payload(case, *, story, service, capability, jira_base_url):
     """Shared TestOps create/update body. Caller adds projectId (create) or id (update)."""
     tags = case["tags"]
     ttag = traceability_tag(story, service or "", capability or "", tags.get("source", ""), case.get("title", ""), tags.get("type", ""))
+    openspec_ref = tags.get("openspec-ref", "")
+    design_ref = tags.get("design-ref", "")
+    desc = [f"source: {tags.get('source', '')}"]
+    if openspec_ref:
+        desc.append(f"openspec-ref: {openspec_ref}")
+    if design_ref:
+        desc.append(f"design-ref: {design_ref}")
+    desc += [f"traceability: {ttag}", f"story: {story}"]
     return {
         "name": f"{case['id']} · {case['title']}",
-        "description": f"source: {tags.get('source', '')}\ntraceability: {ttag}\nstory: {story}",
+        "description": "\n".join(desc),
         "precondition": tags.get("preconditions", ""),
         "expectedResult": tags.get("expected", ""),
         "scenario": {"steps": [{"type": "body", "body": _strip_num(s)} for s in case["steps"]]},
         "tags": _dedupe([
-            "spec-derived",
+            "qa-generated",
+            "openspec-context" if openspec_ref else "",
+            "design-backed" if design_ref else "",
             f"type-{slugify(tags.get('type', ''))}",
             PRIORITY_TAG.get(tags.get("priority", ""), "priority-unset"),
             ttag,

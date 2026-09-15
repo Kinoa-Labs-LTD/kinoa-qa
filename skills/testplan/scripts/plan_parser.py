@@ -41,7 +41,7 @@ def parse_cases(plan_text):
             cur = None
             in_steps = False
             continue
-        m = re.match(r"^-\s+([a-z]+):\s*(.*)$", line)
+        m = re.match(r"^-\s+([a-z-]+):\s*(.*)$", line)
         if m:
             key, val = m.group(1), m.group(2).strip()
             cur["tags"][key] = val
@@ -86,3 +86,63 @@ def parse_acs(plan_text):
             if m:
                 acs[m.group(1)] = m.group(2).strip()
     return acs
+
+
+RESOLVED_RE = re.compile(r"→\s*resolved:")
+CONFLICT_LINE_RE = re.compile(r"^-\s+⚠️\s+CONFLICT:\s+(.*\S)\s*$")
+
+
+def parse_conflicts(plan_text):
+    """Return (has_section, [{claim, annotated, annotation}], unrecognised) for `## Conflicts`.
+
+    `has_section` distinguishes a plan that omits the header (an old-shape plan) from one
+    whose section is legitimately empty. A conflict is annotated when `→ resolved:` follows
+    it, on the same line or on the next non-blank line before the next conflict; `claim` is
+    the conflict text with that annotation stripped and `annotation` is the text that
+    followed `→ resolved:` (None when the conflict is unannotated), so a caller can check
+    it against the documented grammar. `unrecognised` holds every other
+    non-blank line of the section, so a malformed conflict is never silently dropped.
+    """
+    section = []
+    has_section = False
+    in_conflicts = False
+    for line in plan_text.splitlines():
+        if re.match(r"^##\s+Conflicts\s*$", line):
+            has_section = True
+            in_conflicts = True
+            continue
+        if in_conflicts and line.startswith("## "):
+            in_conflicts = False
+        if in_conflicts:
+            section.append(line)
+
+    conflicts = []
+    consumed = set()
+    for pos, line in enumerate(section):
+        m = CONFLICT_LINE_RE.match(line)
+        if not m:
+            continue
+        body = m.group(1)
+        annotation = None
+        annotated = bool(RESOLVED_RE.search(body))
+        if annotated:
+            head, tail = RESOLVED_RE.split(body, maxsplit=1)
+            body, annotation = head, tail.strip()
+        else:
+            for j in range(pos + 1, len(section)):
+                later = section[j].strip()
+                if not later:
+                    continue
+                if CONFLICT_LINE_RE.match(section[j]):
+                    break
+                if RESOLVED_RE.match(later):
+                    annotated = True
+                    annotation = RESOLVED_RE.split(later, maxsplit=1)[1].strip()
+                    consumed.add(j)
+                break
+        conflicts.append({"claim": body.strip().rstrip("·—-").strip(),
+                          "annotated": annotated, "annotation": annotation})
+
+    unrecognised = [line.strip() for j, line in enumerate(section)
+                    if line.strip() and j not in consumed and not CONFLICT_LINE_RE.match(line)]
+    return has_section, conflicts, unrecognised

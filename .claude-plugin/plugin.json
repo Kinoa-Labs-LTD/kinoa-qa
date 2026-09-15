@@ -1,6 +1,6 @@
 {
   "name": "kinoa-qa",
-  "description": "QA plugin: builds Allure TestOps test cases from Jira Story + PRD + OpenSpec specs. Standalone, decoupled from kinoa-dev.",
+  "description": "QA plugin: builds Allure TestOps test cases from Jira Story + Confluence PRD + linked Figma mockups, enriched by OpenSpec specs. Standalone, decoupled from kinoa-dev.",
   "version": "0.1.0",
   "author": {
     "name": "Dmytro Kapeliukh",
@@ -8,5 +8,5 @@
   },
   "homepage": "https://github.com/Kinoa-Labs-LTD/kinoa-qa",
   "repository": "https://github.com/Kinoa-Labs-LTD/kinoa-qa.git",
-  "keywords": ["jira", "confluence", "openspec", "allure-testops", "qa", "test-plan", "kinoa"]
+  "keywords": ["jira", "confluence", "figma", "openspec", "allure-testops", "qa", "test-plan", "kinoa"]
 }

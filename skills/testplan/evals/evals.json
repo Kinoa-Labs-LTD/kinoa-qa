@@ -1,86 +1,415 @@
 {
   "skill_name": "kinoa-qa:testplan",
-  "notes": "Fixtures live in ./fixtures/. Subagents can't nest in the eval harness, so the generation subagent's work (Step B) runs INLINE by the eval-running agent. Atlassian, gh (SpecResolver) and Allure TestOps are SIMULATED (no reachable MCP/repo in the eval env) — but skills/testplan/scripts/validate_test_plan.py runs for REAL against the generated test-plan.md and fixture spec.md, and its real exit code/output is what assertions are checked against.",
+  "notes": "Fixtures live in ./fixtures/. Subagents can't nest in the eval harness, so the generation subagent's work (Step B) runs INLINE by the eval-running agent. Atlassian, gh (OpenSpecResolver) and Allure TestOps are SIMULATED (no reachable MCP/repo in the eval env) — but skills/testplan/scripts/validate_test_plan.py runs for REAL against the generated test-plan.md and fixture spec.md, and its real exit code/output is what assertions are checked against. The Figma MCP is likewise SIMULATED: fixtures/figma-story/design-context.md stands in for get_screenshot + get_design_context, and the 'Figma down' run simply withholds it.",
   "evals": [
     {
       "id": 0,
-      "name": "spec-grounded-every-scenario-covered",
-      "fixture": "spec-grounded",
-      "prompt": "Given fixtures/spec-grounded/spec.md (two scenario'd requirements + one scenario-less 'Token rate limiting'), generate test-plan.md per generation.md + test-plan-format.md (generation inline), then run validate_test_plan.py against the spec.",
-      "expected_output": "Every #### Scenario is covered by >=1 case with source: scenario: <Req>/<Scenario> matching the headings; the scenario-less requirement appears as a ## Gaps line; validate_test_plan.py exits 0 with RESULT: PASS.",
+      "name": "openspec-grounded-context-enrichment",
+      "fixture": "openspec-grounded",
+      "prompt": "Given fixtures/openspec-grounded/spec.md (two scenario'd requirements + one scenario-less 'Token rate limiting') plus the Story's acceptance criteria, generate test-plan.md per generation.md + test-plan-format.md (generation inline), then run validate_test_plan.py with --openspec pointing at the fixture spec.",
+      "expected_output": "Every case is grounded in an AC (source: ac: AC-<n>) and the OpenSpec scenarios ride only as openspec-ref: enrichment; the scenario-less requirement appears as a ## Gaps line; ## Conflicts is present (empty); validate_test_plan.py exits 0 with RESULT: PASS and scenario-coverage reports an advisory count, never a failure.",
       "files": [],
       "assertions": [
-        { "text": "Each spec scenario is referenced by >=1 case's source: scenario: <Req>/<Scenario>, exact string match", "passed": false, "evidence": "" },
-        { "text": "The scenario-less 'Token rate limiting' requirement is named in a ## Gaps ⚠️ GAP line (not silently dropped)", "passed": false, "evidence": "" },
-        { "text": "validate_test_plan.py was actually executed against the generated plan and fixture spec (not self-checked only)", "passed": false, "evidence": "" },
-        { "text": "validate_test_plan.py exits 0 and prints RESULT: PASS (all five checks PASS or n/a)", "passed": false, "evidence": "" }
+        {
+          "text": "Every case's source: is 'ac: AC-<n>' (an AC listed in ## Acceptance Criteria) or 'QA-added: <reason>' — no case uses source: scenario:",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Each OpenSpec scenario that shaped a case is cited as that case's openspec-ref: <Requirement>/<Scenario>, exact string match against the spec headings",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The scenario-less 'Token rate limiting' requirement is named in a ## Gaps ⚠️ GAP line (not silently dropped)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The plan contains a ## Conflicts section header (empty is fine) and a ## Acceptance Criteria section",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py was actually executed against the generated plan and fixture spec (not self-checked only)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py exits 0 and prints RESULT: PASS; scenario-coverage is reported as an advisory count and does not gate the outcome",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     },
     {
       "id": 1,
       "name": "business-only-ac-coverage",
       "fixture": "business-only",
-      "prompt": "No service repo resolves. Using only a Jira Story + PRD (acceptance criteria AC-1, AC-2), generate a business-only test-plan.md and validate WITHOUT --spec.",
-      "expected_output": "The plan has a ## Acceptance Criteria section; every AC is covered by >=1 case with source: ac: AC-<n>; header records specs: none; validate_test_plan.py (no --spec) exits 0, scenario-coverage and gap-honesty report n/a.",
+      "prompt": "No service repo resolves and there is no OpenSpec file. Using only a Jira Story + PRD (acceptance criteria AC-1, AC-2), generate a business-only test-plan.md and validate WITHOUT --openspec.",
+      "expected_output": "The plan has a ## Acceptance Criteria section and a ## Conflicts header; every AC is covered by >=1 case with source: ac: AC-<n>; the header records openspec: none (<reason>); validate_test_plan.py (no --openspec) exits 0, scenario-coverage and gap-honesty report n/a.",
       "files": [],
       "assertions": [
-        { "text": "Every AC-<n> in ## Acceptance Criteria is cited by >=1 case source: ac: AC-<n>", "passed": false, "evidence": "" },
-        { "text": "No case uses source: scenario: (there is no spec) — sources are ac: or QA-added:", "passed": false, "evidence": "" },
-        { "text": "Header records specs: none (<reason>)", "passed": false, "evidence": "" },
-        { "text": "validate_test_plan.py without --spec exits 0; scenario-coverage and gap-honesty show n/a", "passed": false, "evidence": "" }
+        {
+          "text": "Every AC-<n> in ## Acceptance Criteria is cited by >=1 case source: ac: AC-<n>",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No case uses source: scenario: or source: design: — sources are ac: or QA-added: only",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The header records openspec: none (<reason>) — the 'openspec:' spelling, not 'specs:'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The plan contains a ## Conflicts section header (may be empty)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py without --openspec exits 0 with RESULT: PASS; scenario-coverage and gap-honesty show n/a",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     },
     {
       "id": 2,
       "name": "qa-lens-adds-negative",
-      "fixture": "spec-grounded",
-      "prompt": "For a scenario implying a boundary/auth failure (break-glass), apply generation.md rule 2 and add a negative/edge case, then validate.",
-      "expected_output": "Beyond the base functional case, >=1 case tagged type: negative or type: edge exists, its boundary implied by the source scenario's WHEN/THEN, still using a valid source: reference. Validator passes.",
+      "fixture": "openspec-grounded",
+      "prompt": "For an acceptance criterion whose OpenSpec scenario implies a boundary/auth failure (break-glass), apply generation.md rule 2 and add a negative/edge case, then validate.",
+      "expected_output": "Beyond the base functional case, >=1 case tagged type: negative or type: edge exists, its boundary implied by the AC and the enriching OpenSpec scenario's WHEN/THEN, still using a business source: ac: AC-<n>. Validator exits 0.",
       "files": [],
       "assertions": [
-        { "text": "A type: negative or type: edge case exists beyond the happy-path case", "passed": false, "evidence": "" },
-        { "text": "Its boundary/invalid input is implied by the source scenario text, not fabricated", "passed": false, "evidence": "" },
-        { "text": "It uses a valid source: (scenario: or ac:), not QA-added: as an escape hatch", "passed": false, "evidence": "" },
-        { "text": "validate_test_plan.py exits 0", "passed": false, "evidence": "" }
+        {
+          "text": "A type: negative or type: edge case exists beyond the happy-path case",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Its boundary/invalid input is implied by the acceptance criterion and the enriching OpenSpec scenario text, not fabricated",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "It uses source: ac: AC-<n> (business grounding), not QA-added: as an escape hatch, and any spec grounding rides as openspec-ref:",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py exits 0",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     },
     {
       "id": 3,
       "name": "no-fabrication-gap-honesty",
-      "fixture": "spec-grounded",
+      "fixture": "openspec-grounded",
       "prompt": "The spec has a scenario-less requirement ('Token rate limiting'). Confirm no case is invented for it and it is marked as a gap; validate.",
       "expected_output": "No case cites 'Token rate limiting'; it appears once as a ## Gaps ⚠️ GAP line with an em dash and a reason; validate_test_plan.py gap-honesty PASS.",
       "files": [],
       "assertions": [
-        { "text": "No ### TC- case is invented for the scenario-less requirement", "passed": false, "evidence": "" },
-        { "text": "'Token rate limiting' appears as a ## Gaps ⚠️ GAP: <req> — <reason> line (em dash U+2014)", "passed": false, "evidence": "" },
-        { "text": "validate_test_plan.py gap-honesty check PASS", "passed": false, "evidence": "" }
+        {
+          "text": "No ### TC- case is invented for the scenario-less requirement",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "'Token rate limiting' appears as a ## Gaps ⚠️ GAP: <req> — <reason> line (em dash U+2014)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No case carries an openspec-ref: naming the scenario-less requirement",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py gap-honesty check PASS",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     },
     {
       "id": 4,
       "name": "idempotent-upsert-key-stable",
-      "fixture": "spec-grounded",
+      "fixture": "openspec-grounded",
       "prompt": "Simulate two Step E runs over the SAME approved plan via testops_payload.traceability_tag + a simulated testops_find_testcases. Show the second run updates, not duplicates.",
-      "expected_output": "For each case, traceability_tag(story, service, capability, source) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice.",
+      "expected_output": "For each case, traceability_tag(story, service, capability, source, title, case_type) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice. Tags are qa-generated (always) plus openspec-context / design-backed when the case carries the matching ref; spec-derived is retired and never emitted.",
       "files": [],
       "assertions": [
-        { "text": "traceability_tag is byte-identical for the same case across the two runs", "passed": false, "evidence": "" },
-        { "text": "Run 2's find (aql tags = the same tp- tag) matches run 1's created case, so the action is update", "passed": false, "evidence": "" },
-        { "text": "No case results in two create calls (0 duplicates)", "passed": false, "evidence": "" },
-        { "text": "The tp- tag is AQL-safe ([a-z0-9-]+) and present in the payload tags", "passed": false, "evidence": "" }
+        {
+          "text": "traceability_tag is called with its real six-argument signature (story, service, capability, source, title, case_type) and is byte-identical for the same case across the two runs",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 2's find (aql tags = the same tp- tag) matches run 1's created case, so the action is update",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No case results in two create calls (0 duplicates)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The tp- tag is AQL-safe ([a-z0-9-]+) and present in the payload tags",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Every payload carries the qa-generated tag; openspec-context appears exactly when the case has an openspec-ref: and design-backed exactly when it has a design-ref:",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No payload emits the retired spec-derived tag",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     },
     {
       "id": 5,
       "name": "dry-run-writes-nothing",
-      "fixture": "spec-grounded",
+      "fixture": "openspec-grounded",
       "prompt": "Run Step E with --dry-run over the approved plan. Confirm no create/update is issued and a per-case preview is printed.",
       "expected_output": "Per testops-sync.md --dry-run: for each case, print intended action (create|update), its tp- tag, and payload name; issue ZERO testops_create_testcase / testops_update_testcase calls.",
       "files": [],
       "assertions": [
-        { "text": "Zero create/update TestOps calls are issued under --dry-run", "passed": false, "evidence": "" },
-        { "text": "A per-case line prints the intended action, the tp- tag, and the payload name", "passed": false, "evidence": "" }
+        {
+          "text": "Zero create/update TestOps calls are issued under --dry-run",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "A per-case line prints the intended action, the tp- tag, and the payload name",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "openspec-contradicts-business-holds",
+      "fixture": "openspec-conflict",
+      "prompt": "fixtures/openspec-conflict/ holds a Story (story.md) whose AC-2 says a correct password while an account is LOCKED is refused with HTTP 423 and leaves the account locked, and an OpenSpec spec.md whose scenario 'A correct password clears the lock' says the opposite. Generate test-plan.md per generation.md + test-plan-format.md (generation inline), run validate_test_plan.py with --openspec spec.md, then append '→ resolved: business wins' to the conflict, regenerate the contradicted AC's case from the winning source, and run the validator again.",
+      "expected_output": "Run 1: no case is generated for the contradicted AC-2; a '⚠️ CONFLICT: AC-2 · story: … vs openspec: … — …' line names both sides; the validator exits 2 and prints 'RESULT: HOLD' naming that unresolved conflict. Run 2 (the same plan annotated '→ resolved: business wins', with AC-2's case now generated from the winning business source so it asserts the 423 refusal): the validator exits 0 with RESULT: PASS.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Any case that does exist takes its expected: from the acceptance criterion, never from the contradicting OpenSpec scenario",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 1's plan contains NO ### TC- case citing source: ac: AC-2 — a contradicted AC yields no case at all",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "A '- ⚠️ CONFLICT: AC-2 · <source-a>: <claim> vs <source-b>: <claim> — <consequence>' line exists naming both the story and the openspec side (em dash U+2014 before the consequence)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The plugin picks no winner: run 1's plan contains no '→ resolved:' annotation anywhere",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py on run 1 exits 2 and prints 'RESULT: HOLD', echoing the unresolved conflict line",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 1 does NOT fail ac-coverage on the contradicted AC-2 (the exempt path), and the OpenSpec scenario the conflict names needs no ## Gaps line while the conflict is unresolved",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "After '→ resolved: business wins' is annotated and AC-2's case is regenerated from the winning business source (expected: the 423 refusal, not the spec's lock-clearing), validate_test_plan.py exits 0 with RESULT: PASS",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "sot-precedence-is-documented",
+      "fixture": "business-only",
+      "prompt": "Without generating any plan, read skills/testplan/SKILL.md and skills/testplan/references/*.md and report, quoting the exact lines, where the source-of-truth precedence is stated and whether any reference doc still calls OpenSpec files part of the source of truth. This is a documentation check: answer only from the files on disk, with grep-able quotes.",
+      "expected_output": "SKILL.md's '## Source of truth' section and generation.md's '## Precedence (read this first)' section both name the Jira Story + Confluence PRD + linked Figma mockup as the authoritative tier and OpenSpec spec.md files as supporting context only, with an explicit never-decide-`expected` rule; no reference doc lists OpenSpec files in the source of truth.",
+      "files": [
+        "skills/testplan/SKILL.md",
+        "skills/testplan/references/generation.md",
+        "skills/testplan/references/test-plan-format.md",
+        "skills/testplan/references/sot-assembly.md"
+      ],
+      "assertions": [
+        {
+          "text": "SKILL.md contains a '## Source of truth' section naming the Jira Story, the Confluence PRD and a Figma mockup linked from the Story as the authoritative tier",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "SKILL.md states OpenSpec spec.md files are supporting context only and that they may shape preconditions and steps but never a case's expected",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "generation.md opens with a '## Precedence (read this first)' section stating the Story/PRD/mockup decide what a case asserts and OpenSpec files only enrich",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "generation.md contains the never-override rule in so many words: OpenSpec text 'may never decide expected'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Both files state there is no precedence between Story, PRD and mockup inside the authoritative tier, and that a contradiction becomes a ## Conflicts line rather than a chosen expected",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "grep across skills/testplan/SKILL.md and skills/testplan/references/*.md finds NO sentence placing OpenSpec/spec files in the source of truth or the authoritative tier (every 'source of truth' mention lists Story/PRD/mockup only)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Both files state that a Confluence PRD/HLD is never called a 'spec' in this plugin",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No reference doc still documents 'source: scenario:' or 'source: design:' as an accepted source kind (test-plan-format.md's migration note may only name them as the rejected old shape)",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "figma-mockup-is-a-business-requirement",
+      "fixture": "figma-story",
+      "prompt": "fixtures/figma-story/story.md links a Figma frame and states only AC-1; fixtures/figma-story/design-context.md is a SIMULATED Figma design context (the eval env has NO Figma MCP — read that file instead of calling Figma) describing a 'Notifications · Empty state' frame the Story never mentions. Run 1: generate test-plan.md per generation.md + test-plan-format.md (generation inline) treating the mockup as a business requirement, and run validate_test_plan.py (no --openspec). Run 2: repeat with the Figma MCP simulated as unreachable — no design context at all — and validate again.",
+      "expected_output": "Run 1: the mockup's empty state is written into ## Acceptance Criteria as a new AC-<n> (an added detail, not a conflict); its case cites source: ac: AC-<n> and carries design-ref: <fileKey>/<nodeId> — <frame name>; the header reads design: remote (simulated); the validator exits 0 with RESULT: PASS. Run 2: the header reads design: none (<reason>), no design-ref: appears, the mockup-only AC and its case are absent, and the validator still exits 0 with RESULT: PASS — an unreachable Figma degrades, it never hard-stops.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "The empty state shown only in the mockup appears in ## Acceptance Criteria as its own AC-<n>, with the frame's real strings (\"You're all caught up\" / \"New notifications will appear here.\")",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "It is recorded as an added acceptance criterion, NOT as a ## Conflicts line — the mockup adds detail the Story omits rather than contradicting it",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The case covering that AC uses source: ac: AC-<n> — no case anywhere uses a 'design:' source kind",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "That case carries a well-formed design-ref: <fileKey>/<nodeId> — <frame name> (em dash U+2014) matching the fileKey and node id from the simulated design context, and validate_test_plan.py's design-ref-valid check PASSes",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 1's header carries a design: line naming the backend that answered (remote, simulated)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py on run 1 exits 0 with RESULT: PASS",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 2 (Figma simulated as down) writes design: none (<reason>) in the header, emits no design-ref: on any case, and does not invent the mockup-only AC from nothing",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py on run 2 exits 0 with RESULT: PASS — an unreachable Figma degrades the run, it is never a hard stop or a FAIL",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No real Figma MCP call is made in either run; the simulated design context file is the only design input",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "story-prd-mockup-contradict-no-precedence",
+      "fixture": "business-conflict",
+      "prompt": "fixtures/business-conflict/ holds three EQUAL business sources that disagree on one behaviour: story.md says a download link is valid for 7 days, prd.md says an export file is retained for 24 hours, and design-context.md — a SIMULATED Figma design context (the eval env has NO Figma MCP; read that file instead of calling Figma) — shows an 'Export · Ready' frame whose helper text reads 'This link expires in 30 days.'. Run 1: generate test-plan.md per generation.md + test-plan-format.md (generation inline) and run validate_test_plan.py (no --openspec). Run 2: the ADDITION variant — story-addition.md plus design-context-addition.md, where the mockup only adds detail the Story omits (an 'Export · In progress' frame) and contradicts nothing; generate test-plan-addition.md and validate it.",
+      "expected_output": "Run 1: no case is generated for the contradicted AC-2; a single '⚠️ CONFLICT: AC-2 · story: … vs prd: … vs design: … — …' line names all three disagreeing sides with their artifact and states that no winner was picked; the validator exits 2 and prints 'RESULT: HOLD' echoing that conflict, with ac-coverage PASSing (AC-2 is exempt while the conflict is unresolved). Run 2: the mockup-only detail becomes an extra AC-2 whose case cites source: ac: AC-2 and carries a design-ref:, the ## Conflicts section is empty, and the validator exits 0 with RESULT: PASS.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Run 1's plan contains NO ### TC- case citing source: ac: AC-2 — a contradicted acceptance criterion yields no case at all, not a case built on one of the three sources",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "A single '- ⚠️ CONFLICT: AC-2 · <source>: <claim> vs <source>: <claim> vs <source>: <claim> — <consequence>' line names ALL THREE disagreeing sides with their artifact keyword (story, prd and design), each with its own claim (em dash U+2014 before the consequence)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The plugin picks no winner anywhere in run 1's plan: no '→ resolved:' annotation, and no AC, case or conflict text that asserts one of 7 days / 24 hours / 30 days as the correct retention",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Story, PRD and mockup are treated as equal authoritative sources — the plan contains no statement of precedence between them (the mockup is not demoted to context the way an OpenSpec file is)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py on run 1 exits 2 and prints 'RESULT: HOLD', echoing the unresolved conflict line",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 1 does NOT fail ac-coverage on the contradicted AC-2 — the check PASSes because an AC named by an unresolved conflict is exempt and carries no case",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 2 (the ADDITION variant): the detail shown only in the mockup — the spinner labelled \"Preparing your export…\" beside a \"Cancel export\" action — appears in ## Acceptance Criteria as its own AC-<n>, whose case cites source: ac: AC-<n> and carries a well-formed design-ref: <fileKey>/<nodeId> — <frame name>",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 2's ## Conflicts section is present and EMPTY — a source that merely ADDS detail the Story omits is an extra acceptance criterion, never a conflict",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py on run 2 exits 0 with RESULT: PASS",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No real Figma MCP call is made in either run; the simulated design context files are the only design input",
+          "passed": false,
+          "evidence": ""
+        }
       ]
     }
   ]

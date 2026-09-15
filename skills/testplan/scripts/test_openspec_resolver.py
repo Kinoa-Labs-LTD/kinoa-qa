@@ -6,7 +6,7 @@ import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
-from spec_resolver import (
+from openspec_resolver import (
     title_leading_key, pr_matches, capabilities_from_files, resolve,
 )
 
@@ -25,6 +25,15 @@ def make_runner(search_map, files_map):
                 return types.SimpleNamespace(returncode=0, stdout="\n".join(files_map.get((repo, num), [])), stderr="")
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
     return runner
+
+
+class TestModuleVocabulary(unittest.TestCase):
+    def test_module_is_openspec_resolver_and_the_old_name_is_gone(self):
+        import openspec_resolver
+        self.assertEqual(openspec_resolver.__name__, "openspec_resolver")
+        self.assertFalse(
+            os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "spec_resolver.py")),
+            "spec_resolver.py must not survive the rename")
 
 
 class TestPure(unittest.TestCase):
