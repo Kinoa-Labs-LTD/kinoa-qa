@@ -142,7 +142,7 @@
       "name": "idempotent-upsert-key-stable",
       "fixture": "openspec-grounded",
       "prompt": "Simulate two Step E runs over the SAME approved plan via testops_payload.traceability_tag + a simulated testops_find_testcases. Show the second run updates, not duplicates.",
-      "expected_output": "For each case, traceability_tag(story, service, capability, source, title, case_type) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice. Tags are qa-generated (always) plus openspec-context / design-backed when the case carries the matching ref; spec-derived is retired and never emitted.",
+      "expected_output": "For each case, traceability_tag(story, service, capability, source, title, case_type) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice. Tags are exactly qa-generated plus the tp- traceability tag and nothing else; type-*, priority-*, openspec-context, design-backed and spec-derived are all retired and never emitted.",
       "files": [],
       "assertions": [
         {
@@ -166,12 +166,12 @@
           "evidence": ""
         },
         {
-          "text": "Every payload carries the qa-generated tag; openspec-context appears exactly when the case has an openspec-ref: and design-backed exactly when it has a design-ref:",
+          "text": "Every payload's tags are exactly the tp- tag plus qa-generated — two tags, no more",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "No payload emits the retired spec-derived tag",
+          "text": "No payload emits a retired tag: spec-derived, openspec-context, design-backed, type-* or priority-*",
           "passed": false,
           "evidence": ""
         }
@@ -407,6 +407,129 @@
         },
         {
           "text": "No real Figma MCP call is made in either run; the simulated design context files are the only design input",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "payload-matches-reference-shape",
+      "fixture": "reference-shape",
+      "prompt": "fixtures/reference-shape/test-plan.md holds one case whose content is Allure TestOps case 12684 (project 1, KING-18454) written in the new test-plan.md grammar. TestOps is SIMULATED, but skills/testplan/scripts/plan_parser.py and skills/testplan/scripts/testops_payload.py are pure stdlib Python and must be RUN FOR REAL: parse the plan with parse_cases, build the body with case_to_payload(case, story='KING-18454', service='kinoa-in-app', capability='milestones-eligibility', custom_fields={'Suite': '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app', 'Story': 'Template', 'Component': 'In-Apps', 'Feature': 'Milestones'}), and compare the resulting dict key by key with fixtures/reference-shape/expected-payload.json. Report any extra, missing or differing key. NOTE: expected-payload.json was produced by case_to_payload and then hand-verified literal by literal against references/allure-push.md and Allure TestOps case 12684, so it is a checked reference, not merely the builder's own output; never regenerate it from the builder without repeating that hand verification.",
+      "expected_output": "The built payload equals fixtures/reference-shape/expected-payload.json exactly — same set of top-level keys, same values: name without a TC-n prefix, description = the purpose sentence, precondition = both precondition statements newline-separated, expectedResult = the case-level expected, status 'Draft', workflow 'Manual Kinoa', issues = [{name: 'Kinoa-Allure', value: 'KING-18454'}], customFields = Suite/Story/Component/Feature in that order with Suite composed as '[KING-18454] <story title>' and Story a project category value, one expectedResultSteps entry per step, and tags = exactly ['qa-generated', 'tp-…']. No links key and no testLayer key anywhere.",
+      "files": [
+        "skills/testplan/evals/fixtures/reference-shape/test-plan.md",
+        "skills/testplan/evals/fixtures/reference-shape/expected-payload.json"
+      ],
+      "assertions": [
+        {
+          "text": "case_to_payload was actually executed (real import of skills/testplan/scripts/testops_payload.py) against the case parsed from the fixture plan — the payload is built, not hand-written",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The built payload's top-level key set is exactly the expected JSON's: name, description, precondition, expectedResult, status, workflow, issues, customFields, scenario, tags — no extra key and no missing key",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['name'] == 'Collecting a non-final milestone does not change the eligibility counter' — the TC-n prefix is stripped, the name is the title alone",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['description'] == the case's purpose sentence ('Verify eligibility is untouched while the player progresses through milestones before the last one.') and contains no source:/traceability:/story: machine dump",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['precondition'] carries BOTH precondition statements, newline-separated, exactly as the expected JSON has them — a continuation line is not dropped",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['expectedResult'] == the case-level expected: line",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['status'] == 'Draft' and payload['workflow'] == 'Manual Kinoa'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['issues'] == [{'name': 'Kinoa-Allure', 'value': 'KING-18454'}] and the payload has NO 'links' key",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['customFields'] is the four {name, value} entries Suite, Story, Component, Feature in that order; Suite == '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app' (composed from the key and the story title) and Story == 'Template' (a project category value, not the Jira story)",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Every entry of payload['scenario']['steps'] is {'type': 'body', 'body': <action without its number>, 'expectedResultSteps': [{'type': 'expected_body', 'body': <result>}]} with exactly ONE expected_body per step, in plan order",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "payload['tags'] == ['qa-generated', 'tp-king-18454-kinoa-in-app-milestones-eligibility-b414d1aeef'] — exactly two tags, and no type-*, priority-*, openspec-context, design-backed or spec-derived tag",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The payload has no 'testLayer' key at any level",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The diff against fixtures/reference-shape/expected-payload.json is empty — the comparison is reported as equal, not 'close enough'",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "unknown-custom-field-value-aborts-the-push",
+      "fixture": "reference-shape",
+      "prompt": "Step E's Gate 0 pre-flight. Allure TestOps is SIMULATED, but skills/testplan/scripts/testops_fields.py is pure stdlib Python and must be RUN FOR REAL. Call check_field_values(fields={'Suite': '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app', 'Story': 'Template', 'Component': 'In-App Templates', 'Feature': 'Milestones'}, lookups={'Story': {'totalElements': 32}, 'Component': {'content': [], 'totalElements': 0}, 'Feature': {'totalElements': 7}}, project_name='KINOA') — the simulated by-value lookup for the Component value 'In-App Templates' returned ZERO hits, i.e. that value does not exist in the project. Then carry out Step E as testops-sync.md describes, reporting every TestOps create/update call you would issue.",
+      "expected_output": "check_field_values returns ok=False with exactly one error naming the field and the offending value — \"Component 'In-App Templates' does not exist in project KINOA — create it in Allure or pass an existing value\" — and checked=['Story','Component','Feature'] (Suite is never looked up). Step E aborts at Gate 0: ZERO testops_create_testcase and ZERO testops_update_testcase calls are issued, and the abort message names the field and the value.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "check_field_values was actually executed (real import of skills/testplan/scripts/testops_fields.py), not simulated by hand",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "It returns ok=False — a zero-hit lookup is treated as 'the value does not exist', never as 'unknown, proceed anyway'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The error names BOTH the field ('Component') and the offending value ('In-App Templates'), and the project name",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "checked == ['Story', 'Component', 'Feature'] — Suite is never looked up, because Allure creates Suite values on the fly",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Story and Feature, whose lookups returned >=1 hit, produce no error — only the zero-hit value is rejected",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "ZERO testops_create_testcase calls and ZERO testops_update_testcase calls are issued: the abort happens at Gate 0, before any write",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The run reports the abort to the user naming the offending field and value, rather than silently pushing and letting Allure fail the whole creation",
           "passed": false,
           "evidence": ""
         }

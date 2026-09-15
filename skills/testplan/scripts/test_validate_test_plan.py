@@ -44,11 +44,13 @@ PLAN_OPENSPEC_MODE = """# QA Test Plan — svc / cap
 ### TC-1 · Happy path
 - type: functional
 - priority: P1
+- purpose: Verify a user with valid credentials is signed in.
 - source: ac: AC-1
 - openspec-ref: Sign-in/Happy path
 - preconditions: a user exists
 - steps:
   1. enter valid credentials
+     → expected: the session opens
 - expected: signed in
 ## Conflicts
 ## Gaps
@@ -63,18 +65,22 @@ PLAN_BUSINESS_MODE = """# QA Test Plan — KING-1 (business-only)
 ### TC-1 · Sign in
 - type: functional
 - priority: P1
+- purpose: Verify a user can sign in.
 - source: ac: AC-1
 - preconditions: a user exists
 - steps:
   1. sign in
+     → expected: the session opens
 - expected: signed in
 ### TC-2 · Reject bad password
 - type: negative
 - priority: P1
+- purpose: Verify a wrong password is rejected.
 - source: ac: AC-2
 - preconditions: a user exists
 - steps:
   1. sign in with wrong password
+     → expected: an error is shown
 - expected: rejected
 ## Conflicts
 ## Gaps
@@ -92,10 +98,12 @@ PLAN_CONFLICT = """# QA Test Plan — KING-1
 ### TC-1 · Sign in
 - type: functional
 - priority: P1
+- purpose: Verify a user can sign in.
 - source: ac: AC-1
 - preconditions: a user exists
 - steps:
   1. sign in
+     → expected: the session opens
 - expected: signed in
 ## Conflicts
 """ + CONFLICT_LINE + """## Gaps
@@ -147,8 +155,10 @@ class TestValidate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
                 "### TC-2 · Reject bad password\n- type: negative\n- priority: P1\n"
+                "- purpose: Verify a wrong password is rejected.\n"
                 "- source: ac: AC-2\n- preconditions: a user exists\n- steps:\n"
-                "  1. sign in with wrong password\n- expected: rejected\n", ""))
+                "  1. sign in with wrong password\n     → expected: an error is shown\n"
+                "- expected: rejected\n", ""))
             r = validate(plan, None)
             self.assertFalse(r["ok"])
             self.assertFalse(_checks(r)["ac-coverage"]["ok"])
@@ -221,10 +231,12 @@ class TestConflictResolution(unittest.TestCase):
                 "## Conflicts\n", """### TC-2 · Reject bad password
 - type: negative
 - priority: P1
+- purpose: Verify a wrong password is rejected.
 - source: ac: AC-2
 - preconditions: a user exists
 - steps:
   1. sign in with wrong password
+     → expected: an error is shown
 - expected: rejected
 ## Conflicts
 """)
@@ -262,10 +274,12 @@ class TestConflictResolution(unittest.TestCase):
         case = """### TC-2 \u00b7 Reject bad password
 - type: negative
 - priority: P1
+- purpose: Verify a wrong password is rejected.
 - source: ac: AC-2
 - preconditions: a user exists
 - steps:
   1. sign in with wrong password
+     → expected: an error is shown
 - expected: rejected
 ## Conflicts
 """
@@ -303,10 +317,12 @@ class TestConflictResolution(unittest.TestCase):
             text = PLAN_CONFLICT.replace("## Conflicts\n", """### TC-2 · Reject bad password
 - type: negative
 - priority: P1
+- purpose: Verify a wrong password is rejected.
 - source: ac: AC-2
 - preconditions: a user exists
 - steps:
   1. sign in with wrong password
+     → expected: an error is shown
 - expected: rejected
 ## Conflicts
 """)
@@ -333,10 +349,12 @@ class TestConflictResolution(unittest.TestCase):
                 "## Conflicts\n", """### TC-2 \u00b7 Reject bad password
 - type: negative
 - priority: P1
+- purpose: Verify a wrong password is rejected.
 - source: ac: AC-2
 - preconditions: a user exists
 - steps:
   1. sign in with wrong password
+     → expected: an error is shown
 - expected: rejected
 ## Conflicts
 """)
@@ -496,6 +514,78 @@ class TestOldShapePlanRejected(unittest.TestCase):
             self.assertFalse(c["conflict-resolution"]["ok"])   # no ## Conflicts header
 
 
+# --- G2 2.1 purpose and one expected result per step ------------------------
+class TestPurposeAndPerStepExpected(unittest.TestCase):
+    def test_case_without_purpose_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "- purpose: Verify a user can sign in.\n", "", 1))
+            r = validate(plan, None)
+            self.assertEqual(1, r["exit_code"])
+            self.assertFalse(_checks(r)["required-fields"]["ok"])
+            detail = _checks(r)["required-fields"]["detail"]
+            self.assertIn("TC-1", detail)
+            self.assertIn("purpose", detail)
+
+    def test_step_without_expected_result_fails_naming_the_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "  1. sign in with wrong password\n     \u2192 expected: an error is shown\n",
+                "  1. sign in with wrong password\n"
+                "     \u2192 expected: an error is shown\n"
+                "  2. retry with the same password\n", 1))
+            r = validate(plan, None)
+            self.assertEqual(1, r["exit_code"])
+            self.assertFalse(_checks(r)["required-fields"]["ok"])
+            detail = _checks(r)["required-fields"]["detail"]
+            self.assertIn("TC-2", detail)
+            self.assertIn("step 2", detail)
+            self.assertIn("no expected result", detail)
+            self.assertNotIn("step 1", detail)
+
+    def test_step_with_two_expected_results_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "  1. sign in\n     \u2192 expected: the session opens\n",
+                "  1. sign in\n     \u2192 expected: the session opens\n"
+                "     \u2192 expected: the dashboard loads\n", 1))
+            r = validate(plan, None)
+            self.assertEqual(1, r["exit_code"])
+            self.assertFalse(_checks(r)["required-fields"]["ok"])
+            detail = _checks(r)["required-fields"]["detail"]
+            self.assertIn("TC-1", detail)
+            self.assertIn("step 1", detail)
+            self.assertIn("2 expected results", detail)
+
+    def test_well_formed_multi_step_case_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "  1. sign in\n     \u2192 expected: the session opens\n",
+                "  1. sign in\n     \u2192 expected: the session opens\n"
+                "  2. open the dashboard\n     \u2192 expected: the dashboard loads\n", 1))
+            r = validate(plan, None)
+            self.assertTrue(_checks(r)["required-fields"]["ok"],
+                            _checks(r)["required-fields"])
+            self.assertEqual(0, r["exit_code"])
+
+
+# --- G2 2.2 an old-shape plan is rejected on the new format break -----------
+class TestOldShapeStepsRejected(unittest.TestCase):
+    def test_bare_numbered_steps_fail_naming_purpose_and_the_step(self):
+        # Distinct from TestOldShapePlanRejected, which pins the KING-22798 break
+        # (source:/AC section/Conflicts header). This pins the KING-22795 break.
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_SPEC_MODE)
+            r = validate(plan, None)
+            self.assertEqual("FAIL", r["outcome"])
+            self.assertEqual(1, r["exit_code"])
+            check = _checks(r)["required-fields"]
+            self.assertFalse(check["ok"])
+            self.assertIn("TC-1", check["detail"])
+            self.assertIn("purpose", check["detail"])
+            self.assertIn("step 1 has no expected result", check["detail"])
+
+
 # --- 2.6 design-ref is syntactically validated ------------------------------
 class TestDesignRef(unittest.TestCase):
     def _plan_with(self, ref, source="- source: ac: AC-1"):
@@ -526,6 +616,32 @@ class TestDesignRef(unittest.TestCase):
             r = validate(_write(tmp, text), None)
             self.assertFalse(_checks(r)["design-ref-valid"]["ok"])
             self.assertIn("TC-1", _checks(r)["design-ref-valid"]["detail"])
+
+
+# --- a blank expected result is as missing as no expected result at all -----
+class TestBlankExpectedRejected(unittest.TestCase):
+    """A bare `→ expected:` yields an empty string, which the payload builder drops.
+    The validator must refuse it so no step reaches TestOps without an expected body."""
+
+    def test_bare_expected_marker_fails_required_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "→ expected: the session opens", "→ expected:", 1))
+            r = validate(plan, None)
+            self.assertEqual("FAIL", r["outcome"])
+            self.assertEqual(1, r["exit_code"])
+            check = _checks(r)["required-fields"]
+            self.assertFalse(check["ok"])
+            self.assertIn("step 1 has no expected result", check["detail"])
+
+    def test_whitespace_only_expected_fails_required_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "→ expected: the session opens", "→ expected:   ", 1))
+            r = validate(plan, None)
+            self.assertEqual(1, r["exit_code"])
+            self.assertIn("step 1 has no expected result",
+                          _checks(r)["required-fields"]["detail"])
 
 
 if __name__ == "__main__":

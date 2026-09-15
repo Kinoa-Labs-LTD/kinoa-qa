@@ -1,4 +1,12 @@
 {
-  "testops": { "project_name": "KINOA", "project_id": 1 },
+  "testops": {
+    "project_name": "KINOA",
+    "project_id": 1,
+    "custom_fields": {
+      "story": "",
+      "component": "",
+      "feature": ""
+    }
+  },
   "jira_base_url": "https://kinoadev.atlassian.net"
 }

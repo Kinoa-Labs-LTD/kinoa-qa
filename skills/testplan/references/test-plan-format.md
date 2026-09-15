@@ -16,11 +16,14 @@ PRD/HLD is never called a "spec" in this plugin; "spec" means an OpenSpec file.
 > AUTO-GENERATED DRAFT — review, then approve to sync into Allure TestOps.
 > System of record: Allure TestOps · project KINOA. This file is a reviewable intermediate.
 
-story: <STORY-KEY> · target: <service>/<capability>@<ref> · generated: <YYYY-MM-DD>
+story: <STORY-KEY> · title: <story title> · target: <service>/<capability>@<ref> · generated: <YYYY-MM-DD>
 prd: <resolved | none (<reason>)>
 openspec: <<capability>@<sha12> | none | none (<reason>)>
 design: <<backend> | none (<reason>)>
 ```
+> `title:` is the Jira Story summary verbatim, on the same logical line as `story:`. It is
+> required: Step E composes the `Suite` custom field as `[<STORY-KEY>] <story title>` by
+> reading it back from this header, so a Step E re-run in a fresh session needs no Jira call.
 > The `openspec:` and `design:` lines are informational. `openspec: none` is the ordinary
 > path — a service repo may simply have no OpenSpec files; only a spec the QA engineer
 > explicitly asked for, or a resolver error, carries a `(<reason>)` and warns at the gate.
@@ -47,18 +50,57 @@ line is exempt and MUST carry no case at all.
 ### TC-<n> · <title>
 - type: functional            # functional | negative | edge | regression | e2e | nonfunctional
 - priority: P1                # P1 | P2 | P3
+- purpose: Verify <what this case proves>.   # one sentence, begins "Verify"
 - source: ac: AC-<n>          # OR  QA-added: <reason>   — business grounding ONLY
 - openspec-ref: <capability>#<Requirement>/<Scenario>   # optional, context enrichment
 - design-ref: <fileKey>/<nodeId> — <frame name>         # optional, authoritative traceability
 - preconditions: <state that must hold>
+  <a second state statement on its own line>
 - steps:
   1. <action>
+     → expected: <what the system does in response>
   2. <action>
-- expected: <observable outcome>
+     → expected: <what the system does in response>
+- expected: <the overall pass condition>
 ```
-Field order is fixed. `steps` are `  N. ` numbered lines. `type`, `priority`, `source`,
-`preconditions`, `steps` and `expected` are required (validator `required-fields`);
-`openspec-ref` and `design-ref` are optional.
+Field order is fixed. `type`, `priority`, `purpose`, `source`, `preconditions`, `steps` and
+`expected` are required (validator `required-fields`); `openspec-ref` and `design-ref` are
+optional.
+
+- **`### TC-<n> · <title>`** — the `TC-<n>` is a plan-local handle for review and for the
+  `## Conflicts` / `## Gaps` cross-references. It is **not** part of the TestOps case name:
+  only `<title>` is pushed. The title is a clean behavioural statement — e.g.
+  `Project selection dropdown populates with all accessible destination projects`.
+- **`purpose:`** is one sentence beginning "Verify", stating what the case proves. It becomes
+  the TestOps `description`; it is not a restatement of the title and not a list of steps.
+- **`preconditions:`** is the state that must hold before step 1. Several statements go on
+  their own continuation lines and reach TestOps newline-separated.
+
+### Per-step expected results
+
+`steps` are `  N. <action>` numbered lines. Every step MUST carry **exactly one**
+`     → expected: <result>` line on the line below it — no more and no less. A step with none
+and a step with two both FAIL the validator (`required-fields`), because a TestOps step maps
+to exactly one `expected_body` block. The case-level `expected:` stays: it is the overall pass
+condition, not a repeat of the last step.
+
+Worked example:
+
+```
+### TC-2 · Export is blocked when no destination project is selected
+- type: negative
+- priority: P2
+- purpose: Verify that the Export action stays disabled until a destination project is chosen.
+- source: ac: AC-3
+- preconditions: The user has access to 5 destination projects.
+  The user is on the In-App Template list page.
+- steps:
+  1. Click the Export button on any In-App template.
+     → expected: The "Export In-App Template" modal opens with the Export button disabled.
+  2. Select a destination project from the dropdown.
+     → expected: The Export button becomes enabled.
+- expected: Export is unavailable without a destination project and available once one is chosen.
+```
 
 - **`source:`** may cite business grounding only — `ac: AC-<n>` or `QA-added: <reason>`.
   There is no `scenario:` source and no `design:` source: a spec may not own a case, and a
@@ -118,24 +160,45 @@ exemption is gone and the scenario needs its case or its Gap line.
 
 | test-plan.md | TestOps create/update field |
 |---|---|
-| `### TC-n · <title>` | `name` = `"TC-n · <title>"` |
-| `type` | tag `type-<type>` |
-| `priority` | tag `priority-<p>` (no first-class severity field in V2; a Severity custom field is optional, only if `testops_get_project` confirms one) |
-| `source` | `description` (+ the `tp-…` traceability tag) |
-| `openspec-ref` / `design-ref` | `description` (when present) |
-| `preconditions` | `precondition` |
-| `steps` | `scenario.steps[{type:"body", body}]` (numbering stripped) |
-| `expected` | `expectedResult` |
-| — | tags always include `qa-generated` + the `tp-<slug>` traceability tag, plus `openspec-context` when the case has an `openspec-ref` and `design-backed` when it has a `design-ref`; `links[0]` → the Jira Story |
+| `### TC-n · <title>` | `name` = `"<title>"` — the `TC-n` prefix is **stripped** |
+| `purpose` | `description` (plus a one-line provenance suffix naming `openspec-ref:` / `design-ref:` when present) |
+| `type` / `priority` | not pushed — no `type-*` / `priority-*` tags |
+| `source` | not pushed as text; it is an input to the `tp-…` traceability tag |
+| `preconditions` | `precondition` (newline-separated) |
+| `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped, exactly one `expected_body` per step |
+| `expected` | `expectedResult` — the case-level pass condition |
+| `title:` header | `customFields.Suite` = `[<STORY-KEY>] <story title>`, composed from the header — never re-fetched from Jira |
+| — | `customFields`: `Story` / `Component` / `Feature` from `--story-field` / `--component` / `--feature` or their `config.json` defaults (shipped empty) |
+| `story:` header | `issues` = `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array |
+| — | `status` = `"Draft"`, `workflow` = `"Manual Kinoa"`; `testLayer` is never sent |
+| — | `tags` = the `tp-<slug>` traceability tag + `qa-generated`, and nothing else |
+
+**Tag policy: `tp-` + `qa-generated` only.** `tp-<slug>` is the idempotency key — it is how a
+re-run finds the case it already created, so it cannot be dropped. `qa-generated` is the only
+fleet-level handle for finding or bulk-rolling-back plugin-authored cases. Everything else is
+gone: `type-*` and `priority-*` duplicated real Allure fields, and `openspec-context` /
+`design-backed` are replaced by the provenance suffix on `description`.
+
+`Story`, `Component` and `Feature` values MUST already exist in the project — Allure rejects an
+unknown value **silently** and the whole creation fails — so Step E checks them before any write
+and aborts naming the offending value. The check is a by-value case lookup: it can prove a value
+is *in use*, never that it exists, so a value created in Allure that no case uses yet is passed
+with `--allow-unverified-fields` (see `testops-sync.md`, Gate 0b). `Suite` is exempt: Allure
+creates Suite values on the fly.
 
 `## Gaps` and `## Conflicts` lines are never pushed to TestOps.
 
 ## Migration note
 
-This format is a breaking change. A `test-plan.md` written before it — `source: scenario:`
-cases, no `## Acceptance Criteria`, no `## Conflicts` header — is **rejected** by the
-validator, not upgraded in place: the missing `## Conflicts` header is what makes an old
-plan detectable. Delete it and regenerate from Step B. Nothing had been upserted when this
-landed, so no TestOps case carries the old vocabulary. From the first real upsert onward the
-format is frozen: changing a case's `source:` re-keys its `tp-` tag and strands the case
-already in TestOps.
+This format is a breaking change, twice over. A `test-plan.md` written before it — `source:
+scenario:` cases, no `## Acceptance Criteria`, no `## Conflicts` header, no `purpose:`, steps
+as bare numbered lines with no `→ expected:` — is **rejected** by the validator, not upgraded
+in place. The parser still reads an old-shape plan (a bare step parses with no expected result)
+precisely so the validator can FAIL it naming both reasons — the missing `purpose:` and the
+steps with no expected result — rather than crash. Delete the plan and regenerate from Step B;
+pre-existing plans are regenerated, never hand-patched. Nothing had been upserted when this
+landed, so no TestOps case carries the old vocabulary or the old payload shape. From the first
+real upsert onward the format is frozen: changing a case's `source:` re-keys its `tp-` tag and
+strands the case already in TestOps. Dropping the `TC-n` prefix from the pushed `name` does
+**not** re-key anything — the `tp-` tag is built from the title, which the prefix was never
+part of.

@@ -88,6 +88,37 @@ PLAN_BLANK_BEFORE_RESOLVED = """# QA Test Plan — svc / cap
 ## Gaps
 """
 
+
+PLAN_PER_STEP = """# QA Test Plan — svc / cap
+
+## Cases
+
+### TC-1 · Happy path sign-in
+- type: functional
+- priority: P1
+- purpose: Verify that a user with valid credentials can sign in.
+- source: ac: AC-1
+- preconditions: a user exists
+- steps:
+  1. enter valid credentials
+     → expected: the submit button becomes enabled
+  2. submit
+- expected: the user is signed in
+"""
+
+PLAN_TWO_EXPECTED = """# QA Test Plan — svc / cap
+
+## Cases
+
+### TC-1 · Happy path sign-in
+- purpose: Verify that a user with valid credentials can sign in.
+- steps:
+  1. submit
+     → expected: the dashboard loads
+     → expected: a welcome toast appears
+- expected: the user is signed in
+"""
+
 class TestParsers(unittest.TestCase):
     def test_parse_spec_scenarios_and_scenarioless_reqs(self):
         scenarios, reqs_without = parse_spec(SPEC)
@@ -155,6 +186,112 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(1, len(conflicts))
         self.assertTrue(conflicts[0]["annotated"])
         self.assertEqual([], unrecognised)
+
+    def test_parse_cases_pairs_a_step_with_its_expected_result(self):
+        c = parse_cases(PLAN_PER_STEP)[0]
+        self.assertEqual(c["steps"][0],
+                         {"action": "enter valid credentials",
+                          "expected": "the submit button becomes enabled",
+                          "extra_expected": []})
+
+    def test_parse_cases_reports_a_step_with_no_expected_result(self):
+        c = parse_cases(PLAN_PER_STEP)[0]
+        self.assertEqual(c["steps"][1],
+                         {"action": "submit", "expected": None, "extra_expected": []})
+
+    def test_parse_cases_keeps_purpose_as_a_case_field(self):
+        c = parse_cases(PLAN_PER_STEP)[0]
+        self.assertEqual(c["tags"]["purpose"],
+                         "Verify that a user with valid credentials can sign in.")
+
+    def test_parse_cases_records_a_second_expected_result_for_a_step(self):
+        c = parse_cases(PLAN_TWO_EXPECTED)[0]
+        self.assertEqual(c["steps"][0]["expected"], "the dashboard loads")
+        self.assertEqual(c["steps"][0]["extra_expected"], ["a welcome toast appears"])
+
+    def test_parse_cases_still_parses_old_shape_bare_steps(self):
+        c = parse_cases(PLAN)[0]
+        self.assertEqual(c["steps"],
+                         [{"action": "enter valid credentials", "expected": None,
+                           "extra_expected": []},
+                          {"action": "submit", "expected": None, "extra_expected": []}])
+        self.assertNotIn("purpose", c["tags"])
+
+
+PLAN_MULTILINE_PRECONDITION = """## Cases
+### TC-1 · Multi-line precondition
+- type: functional
+- priority: P1
+- purpose: Verify the precondition survives parsing.
+- source: ac: AC-1
+- preconditions: Published Milestone in-app with 3 milestones and Max Eligibility = 2.
+  Test player has an active instance with actual_eligibility = 2.
+- steps:
+  1. do the thing
+     → expected: it happens
+- expected: all good
+"""
+
+
+class TestContinuationLines(unittest.TestCase):
+    def test_a_field_keeps_its_continuation_lines_newline_joined(self):
+        c = parse_cases(PLAN_MULTILINE_PRECONDITION)[0]
+        self.assertEqual(
+            c["tags"]["preconditions"],
+            "Published Milestone in-app with 3 milestones and Max Eligibility = 2.\n"
+            "Test player has an active instance with actual_eligibility = 2.",
+        )
+
+    def test_continuation_lines_do_not_disturb_steps(self):
+        c = parse_cases(PLAN_MULTILINE_PRECONDITION)[0]
+        self.assertEqual(c["steps"],
+                         [{"action": "do the thing", "expected": "it happens", "extra_expected": []}])
+
+
+PLAN_WRAPPED_STEPS = """## Cases
+### TC-1 · Wrapped step lines
+- type: functional
+- purpose: Verify a wrapped step survives parsing.
+- preconditions:
+  First state.
+  Second state.
+- steps:
+  1. Do a very long action that wraps
+     onto a second line here.
+     → expected: it happens
+     and the toast wraps too.
+"""
+
+
+class TestWrappedStepLines(unittest.TestCase):
+    def test_a_wrapped_action_keeps_its_continuation_line(self):
+        c = parse_cases(PLAN_WRAPPED_STEPS)[0]
+        self.assertEqual(c["steps"][0]["action"],
+                         "Do a very long action that wraps\nonto a second line here.")
+
+    def test_a_wrapped_expected_result_keeps_its_continuation_line(self):
+        c = parse_cases(PLAN_WRAPPED_STEPS)[0]
+        self.assertEqual(c["steps"][0]["expected"],
+                         "it happens\nand the toast wraps too.")
+
+    def test_a_field_declared_empty_gains_no_leading_newline(self):
+        c = parse_cases(PLAN_WRAPPED_STEPS)[0]
+        self.assertEqual(c["tags"]["preconditions"],
+                         "First state.\nSecond state.")
+
+
+class TestPurposeHasOneHome(unittest.TestCase):
+    def test_purpose_lives_only_in_tags(self):
+        for fixture in (PLAN_PER_STEP, PLAN_TWO_EXPECTED, PLAN_MULTILINE_PRECONDITION):
+            for c in parse_cases(fixture):
+                self.assertNotIn("purpose", c, "purpose must have a single home in tags")
+
+    def test_purpose_keeps_its_continuation_line(self):
+        text = PLAN_PER_STEP.replace(
+            "- source: ac: AC-1",
+            "  It also covers the happy path.\n- source: ac: AC-1", 1)
+        c = parse_cases(text)[0]
+        self.assertTrue(c["tags"]["purpose"].endswith("It also covers the happy path."))
 
 
 if __name__ == "__main__":

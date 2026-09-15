@@ -4,8 +4,9 @@
 Checks a generated QA test-plan.md. The Jira Story, the PRD and any linked mockup are the
 source of truth; OpenSpec files (`--openspec`, optional) are context only. Checks:
 
-  1. required-fields — every `### TC-` case has type, priority, source, preconditions,
-     non-empty steps, non-empty expected;
+  1. required-fields — every `### TC-` case has type, priority, purpose, source,
+     preconditions, non-empty steps, non-empty expected, and every step carries exactly
+     one `\u2192 expected:` result (the offending step is named by number);
   2. source-valid — every `source:` is `ac: AC-<n>` (must exist in `## Acceptance
      Criteria`) or `QA-added: <reason>`; there is no `scenario:` source;
   3. openspec-ref-valid — every `openspec-ref:` names a real scenario of a supplied
@@ -72,6 +73,21 @@ def conflict_sides(claim):
     return sides if len(sides) >= 2 else []
 
 
+def _step_problems(steps):
+    """Every step must carry exactly one `\u2192 expected:` result, because a TestOps step maps
+    to exactly one expected_body. Returns one message per offending step, naming its 1-based
+    number so the QA engineer knows which line to fix. A blank `\u2192 expected:` counts as
+    missing, matching the payload builder, which omits an empty expected result entirely."""
+    problems = []
+    for n, step in enumerate(steps, 1):
+        if not step.get("expected"):
+            problems.append(f"step {n} has no expected result")
+        elif step.get("extra_expected"):
+            problems.append(f"step {n} has {1 + len(step['extra_expected'])} expected results "
+                            f"(exactly one is allowed)")
+    return problems
+
+
 def validate(plan_path, openspec_path=None):
     with open(plan_path, encoding="utf-8") as f:
         plan_text = f.read()
@@ -96,13 +112,16 @@ def validate(plan_path, openspec_path=None):
     # 1. required-fields
     bad = []
     for c in cases:
-        missing = [k for k in ("type", "priority", "source", "preconditions") if not c["tags"].get(k)]
+        missing = [k for k in ("type", "priority", "purpose", "source", "preconditions")
+                   if not c["tags"].get(k)]
         if not c["tags"].get("expected"):
             missing.append("expected")
         if not c["steps"]:
             missing.append("steps")
-        if missing:
-            bad.append(f"{c['id']}: missing {', '.join(missing)}")
+        problems = [f"missing {', '.join(missing)}"] if missing else []
+        problems += _step_problems(c["steps"])
+        if problems:
+            bad.append(f"{c['id']}: {'; '.join(problems)}")
     checks.append({"name": "required-fields", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
