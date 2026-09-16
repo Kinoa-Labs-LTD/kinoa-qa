@@ -2,7 +2,7 @@ import os, sys, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
 from plan_parser import parse_cases
-from testops_payload import slugify, traceability_tag, case_to_payload
+from testops_payload import slugify, case_to_payload, target_marker, parse_target
 
 FIELDS = {"Suite": "[KING-1] Admin sign-in", "Story": "Template",
           "Component": "Game-Settings", "Feature": "In-Apps"}
@@ -74,30 +74,13 @@ class TestPayload(unittest.TestCase):
     def test_slugify(self):
         self.assertEqual(slugify("Sign-in/Happy path!"), "sign-in-happy-path")
 
-    def test_traceability_tag_is_deterministic_and_aql_safe(self):
-        a = traceability_tag("KING-1", "svc", "cap", "scenario: Sign-in/Happy path")
-        b = traceability_tag("KING-1", "svc", "cap", "scenario: Sign-in/Happy path")
-        self.assertEqual(a, b)                       # re-run stability
-        self.assertTrue(a.startswith("tp-"))
-        self.assertRegex(a, r"^[a-z0-9-]+$")         # AQL-safe
-
-    def test_traceability_tag_differs_per_scenario(self):
-        a = traceability_tag("KING-1", "svc", "cap", "scenario: Sign-in/Happy path")
-        b = traceability_tag("KING-1", "svc", "cap", "scenario: Sign-in/Bad password")
-        self.assertNotEqual(a, b)
-
-    def test_traceability_tag_distinguishes_cases_sharing_a_scenario(self):
-        src = "scenario: Sign-in/Happy path"
-        a = traceability_tag("KING-1", "svc", "cap", src, "Happy path sign-in")
-        b = traceability_tag("KING-1", "svc", "cap", src, "Sign-in rejects a locked account")
-        self.assertNotEqual(a, b)
-
     def test_payload_shape(self):
         p = _payload(CASE)
         self.assertEqual(p["name"], "Happy path sign-in")          # no TC-n prefix
         self.assertNotIn("TC-", p["name"])
         self.assertEqual(p["description"],
-                         "Verify an admin with valid credentials reaches the dashboard.")
+                         "Verify an admin with valid credentials reaches the dashboard."
+                         "\nTarget: service=svc; capability=cap")
         self.assertEqual(p["precondition"], "a user exists")
         self.assertEqual(p["expectedResult"], "signed in")
         self.assertEqual(p["status"], "Draft")
@@ -115,34 +98,8 @@ class TestPayload(unittest.TestCase):
             self.assertEqual(step["expectedResultSteps"],
                              [{"type": "expected_body", "body": expected}])
 
-    def test_tags_are_only_the_traceability_key_and_qa_generated(self):
-        p = _payload(CASE)
-        ttag = traceability_tag("KING-1", "svc", "cap", CASE["tags"]["source"],
-                                CASE["title"], CASE["tags"]["type"])
-        self.assertEqual(sorted(p["tags"]), sorted(["qa-generated", ttag]))
-
-    def test_traceability_tag_is_length_bounded(self):
-        long_src = "scenario: " + "Very Long Requirement Name " * 10 + "/" + "Verbose scenario " * 10
-        long_title = "An extremely verbose scenario title " * 10
-        t = traceability_tag("KING-22737", "kinoa-client-support-tool", "admin-authentication",
-                             long_src, long_title, "functional")
-        self.assertLessEqual(len(t), 100)
-        self.assertRegex(t, r"^[a-z0-9-]+$")
-
-    def test_traceability_tag_distinguishes_cases_by_type(self):
-        src, title = "scenario: Sign-in/Happy path", "Sign in"
-        a = traceability_tag("KING-1", "svc", "cap", src, title, "functional")
-        b = traceability_tag("KING-1", "svc", "cap", src, title, "negative")
-        self.assertNotEqual(a, b)
-
-    def test_traceability_tag_handles_non_ascii(self):
-        a = traceability_tag("KING-1", "svc", "cap", "ac: AC-1", "Вхід користувача")
-        b = traceability_tag("KING-1", "svc", "cap", "ac: AC-1", "Блокування акаунта")
-        self.assertNotEqual(a, b)
-        self.assertRegex(a, r"^[a-z0-9-]+$")
-
 class TestTagVocabulary(unittest.TestCase):
-    """The emitted vocabulary is exactly two tags: the tp- idempotency key and qa-generated.
+    """The emitted vocabulary is exactly one tag: qa-generated.
     type-*, priority-*, openspec-context, design-backed and spec-derived are all retired;
     provenance that rode on the dropped tags now lives in the description suffix."""
 
@@ -165,11 +122,13 @@ class TestTagVocabulary(unittest.TestCase):
         self.assertTrue(d.startswith("Verify sign-in works."))
         self.assertIn("openspec-ref: auth#Sign-in/Happy path", d)
         self.assertIn("design-ref: abc123/1:2 — Sign-in", d)
-        self.assertEqual(len(d.splitlines()), 2)      # purpose + one provenance line
+        # purpose + one provenance line + the target marker
+        self.assertEqual(len(d.splitlines()), 3)
+        self.assertEqual(d.splitlines()[-1], "Target: service=svc; capability=cap")
 
     def test_description_omits_absent_refs(self):
         d = _payload(_case())["description"]
-        self.assertEqual(d, "Verify sign-in works.")
+        self.assertEqual(d, "Verify sign-in works.\nTarget: service=svc; capability=cap")
         self.assertNotIn("openspec-ref", d)
         self.assertNotIn("design-ref", d)
         self.assertNotIn("source:", d)
@@ -204,16 +163,91 @@ class TestCustomFields(unittest.TestCase):
             self.assertIn(absent, str(ctx.exception))
 
 
-class TestTraceabilityTagRegression(unittest.TestCase):
-    """The tag's inputs and hashing are frozen: the tp- tag is TestOps' idempotency key,
-    so any drift re-keys every case. This pins one fixed input to its exact current value."""
+class TestDerivedKeyIsGone(unittest.TestCase):
+    """KING-22861: identity is the assigned Allure case id, not a derived hash. The
+    `tp-` tag and `traceability_tag` are removed; `qa-generated` stays as the fleet-level
+    handle and KING-22795's retired-taxonomy pin still holds."""
 
-    def test_traceability_tag_output_is_frozen(self):
-        self.assertEqual(
-            traceability_tag("KING-22737", "kinoa-client-support-tool",
-                             "admin-authentication", "ac: AC-1",
-                             "Happy path sign-in", "functional"),
-            "tp-king-22737-kinoa-client-support-tool-admin-authentication-51a56980d9")
+    def test_traceability_tag_is_no_longer_importable(self):
+        import testops_payload
+        self.assertFalse(hasattr(testops_payload, "traceability_tag"),
+                         "traceability_tag must be gone: identity is the assigned allure-id")
+
+    def test_tags_are_exactly_qa_generated(self):
+        for case in (_case(), _case(**{"openspec-ref": "Sign-in/Happy path"}),
+                     _case(**{"design-ref": "abc123/1:2 — Sign-in"})):
+            self.assertEqual(_payload(case)["tags"], ["qa-generated"])
+
+
+class TestTargetMarker(unittest.TestCase):
+    """The description carries a machine-read target marker so reconciliation can narrow
+    `issue = "<STORY-KEY>"` — which returns every target's cases — down to this plan's
+    service and capability. The marker must round-trip through `parse_target`."""
+
+    def test_marker_is_the_last_description_line(self):
+        d = _payload(CASE)["description"]
+        self.assertEqual(d.splitlines()[-1], "Target: service=svc; capability=cap")
+
+    def test_reconciliation_parses_the_target_back_out(self):
+        self.assertEqual(parse_target(_payload(CASE)["description"]), ("svc", "cap"))
+
+    def test_marker_round_trips_for_multiword_targets(self):
+        c = case_to_payload(CASE, story="KING-1", service="In App Templates",
+                            capability="Export / Import", custom_fields=FIELDS)
+        self.assertEqual(parse_target(c["description"]),
+                         ("in-app-templates", "export-import"))
+        self.assertEqual(target_marker("In App Templates", "Export / Import"),
+                         "Target: service=in-app-templates; capability=export-import")
+
+    def test_parse_target_returns_none_when_there_is_no_marker(self):
+        self.assertIsNone(parse_target("Verify sign-in works."))
+        self.assertIsNone(parse_target(""))
+        self.assertIsNone(parse_target(None))
+
+    def test_two_targets_of_one_story_are_distinguishable(self):
+        a = _payload(CASE)["description"]
+        b = case_to_payload(CASE, story="KING-1", service="svc", capability="other",
+                            custom_fields=FIELDS)["description"]
+        self.assertNotEqual(parse_target(a), parse_target(b))
+
+    def test_every_target_the_plugin_can_be_invoked_with_round_trips(self):
+        """A run with no `--target`, or with only one half of it, must still emit a marker
+        `parse_target` can read back. Empty is a value, not an absence."""
+        for service, capability in (("", ""), ("svc", ""), ("", "cap"), ("svc", "cap"),
+                                    ("In App Templates", ""), ("none", "none")):
+            with self.subTest(target=(service, capability)):
+                marker = target_marker(service, capability)
+                self.assertEqual(parse_target("Purpose line.\n" + marker),
+                                 (slugify(service), slugify(capability)))
+
+    def test_no_target_run_emits_a_parseable_empty_marker(self):
+        self.assertEqual(target_marker("", ""), "Target: service=; capability=")
+        self.assertEqual(parse_target(target_marker(None, None)), ("", ""))
+
+    def test_targets_that_differ_compare_unequal_even_when_half_empty(self):
+        pairs = (("", ""), ("svc", ""), ("", "cap"), ("svc", "cap"), ("none", "none"))
+        parsed = [parse_target(target_marker(s, c)) for s, c in pairs]
+        self.assertEqual(len(set(parsed)), len(pairs))
+
+    def test_marker_survives_a_case_with_no_purpose(self):
+        c = dict(CASE, tags=dict(CASE["tags"], purpose=""))
+        self.assertEqual(parse_target(_payload(c)["description"]), ("svc", "cap"))
+
+
+class TestStoryLinkIsLoadBearing(unittest.TestCase):
+    """`issues` is the only way to find a case whose assigned id was lost, so a payload
+    must never be emitted with a blank or missing Story link — such a case is unfindable."""
+
+    def test_blank_story_raises(self):
+        for story in ("", "   ", None):
+            with self.assertRaises(ValueError):
+                case_to_payload(CASE, story=story, service="svc", capability="cap",
+                                custom_fields=FIELDS)
+
+    def test_issues_is_never_emitted_blank(self):
+        issues = _payload(CASE)["issues"]
+        self.assertEqual(issues, [{"name": "Kinoa-Allure", "value": "KING-1"}])
+        self.assertTrue(all(i["value"].strip() for i in issues))
 
 
 if __name__ == "__main__":

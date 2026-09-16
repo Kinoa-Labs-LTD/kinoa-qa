@@ -21,6 +21,10 @@ def parse_spec(spec_text):
     return scenarios, reqs_without
 
 
+# The one spelling of a case heading: `### TC-<handle> · <title>`. plan_writer inserts
+# fields under the same headings this parser reads, so both must agree byte for byte.
+CASE_HEADING_RE = re.compile(r"^###\s+(TC-\S+)\s+·\s+(.*\S)\s*$")
+
 STEP_RE = re.compile(r"^\s+\d+\.\s+(\S.*?)\s*$")
 STEP_EXPECTED_RE = re.compile(r"^\s+\u2192\s*expected:\s*(.*?)\s*$")
 
@@ -41,7 +45,7 @@ def parse_cases(plan_text):
     last_key = None
     last_step_part = None
     for line in plan_text.splitlines():
-        m = re.match(r"^###\s+(TC-\S+)\s+·\s+(.*\S)\s*$", line)
+        m = CASE_HEADING_RE.match(line)
         if m:
             if cur:
                 cases.append(cur)

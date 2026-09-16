@@ -9,7 +9,7 @@ Step E runs in this order and stops at the first refusal:
 re-run the validator  →  resolve the custom fields  →  abort if anything is missing
 →  three by-value lookups  →  check_field_values  →  abort if not ok (unverified values
    pass as warnings under --allow-unverified-fields)
-→  build payloads  →  upsert
+→  build payloads  →  update by verified id | reconcile by Story + target
 ```
 
 ## Gate 0 — nothing is written until both pre-flights pass
@@ -111,19 +111,21 @@ case_to_payload(case, *, story, service, capability, custom_fields)
 `story` is the Jira key; `custom_fields` is the `fields` dict Gate 0b checked. There is no
 `jira_base_url` parameter — nothing in the payload is a URL. The result carries
 `name, description, precondition, expectedResult, status, workflow, issues, customFields,
-scenario.steps[], tags[]`, and the `tp-<slug>` traceability tag inside `tags`.
+scenario.steps[], tags[]`. There is no identity tag: `tags` is exactly `["qa-generated"]`, and
+a case is addressed by its assigned Allure id (`allure-id:` in the plan), never by a value
+derived from its content.
 
 | payload key | value |
 |---|---|
 | `name` | the case title — the `TC-<n>` prefix is stripped |
-| `description` | the case `purpose:` sentence, plus a `Provenance: openspec-ref: …; design-ref: …` line when either is present |
+| `description` | the case `purpose:` sentence, plus a `Provenance: openspec-ref: …; design-ref: …` line when either is present, plus the target marker as the last line |
 | `precondition` | `preconditions:`, newline-separated |
 | `expectedResult` | the case-level `expected:` |
 | `status` / `workflow` | `"Draft"` / `"Manual Kinoa"` — module constants; `testLayer` is never sent |
-| `issues` | `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array |
+| `issues` | `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array. **Load-bearing**: it is the only way to find a case whose assigned id was lost, so the builder raises on a blank or missing `story` rather than emitting an unfindable case |
 | `customFields` | `Suite`, `Story`, `Component`, `Feature` in that order, each `{name, value}` |
 | `scenario.steps[]` | one `{"type": "body", "body": …}` per step, with exactly one `expected_body` in `expectedResultSteps` |
-| `tags[]` | `qa-generated` + `tp-<slug>-<digest>`, nothing else |
+| `tags[]` | `qa-generated`, nothing else |
 
 A missing or blank custom-field value raises at build time rather than producing a half
 payload — the builder is handed the four verified values or it is not called.
@@ -132,7 +134,7 @@ payload — the builder is handed the four verified values or it is not called.
 {
   "projectId": 1,
   "name": "Project selection dropdown populates with all accessible destination projects",
-  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal",
+  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal\nTarget: service=in-app-templates; capability=export",
   "precondition": "The user has access to 5 destination projects.\nThe user is on the In-App Template list page.",
   "expectedResult": "All 5 destination projects are listed and the source project is not.",
   "status": "Draft",
@@ -153,42 +155,194 @@ payload — the builder is handed the four verified values or it is not called.
       }
     ]
   },
-  "tags": ["qa-generated", "tp-king-20326-export-templates-9f2c1ab4de"]
+  "tags": ["qa-generated"]
 }
 ```
+
+## The target marker
+
+`issue = "<STORY-KEY>"` returns every case of the Story — the plugin writes one plan per
+`--target`, so that set spans targets. The payload therefore records its own target as the
+last line of `description`:
+
+```
+Target: service=<service>; capability=<capability>
+```
+
+Both values are slugified (lower-case, non-alphanumerics collapsed to `-`), so
+`--target "In App Templates/Export / Import"` writes
+`Target: service=in-app-templates; capability=export-import`. Build it with
+`testops_payload.target_marker(service, capability)` and read it back with
+`testops_payload.parse_target(description)`, which returns the `(service, capability)` pair or
+`None` when the description carries no marker. Reconciliation slugifies its own target the same
+way and compares the pair — never the raw strings.
+
+A case with no marker is a case this plugin did not write, or wrote before this format: it is
+**never** treated as a match. It is reported to the QA engineer and left alone.
 
 ## Tag vocabulary
 
 | tag | when |
 |---|---|
 | `qa-generated` | **always** — the only fleet-level handle for finding or bulk-rolling-back plugin-authored cases |
-| `tp-<slug>-<digest>` | **always** — the traceability tag / idempotency key; a re-run finds the case by it, so it cannot be dropped |
 
-Nothing else is emitted. `type-*` and `priority-*` are **retired** — they duplicated real
-Allure fields. `openspec-context`, `design-backed` and the older unconditional `spec-derived`
-are **retired** too: provenance now rides as the `Provenance:` line on `description`, because
-`tp-` is an opaque hash and would otherwise leave OpenSpec and mockup provenance absent from
-TestOps entirely. Write no AQL filter against any retired tag.
+`qa-generated` is the **whole** vocabulary. `type-*` and `priority-*` are **retired** — they
+duplicated real Allure fields. `openspec-context`, `design-backed` and the older unconditional
+`spec-derived` are **retired** too: provenance rides as the `Provenance:` line on `description`.
+The `tp-<slug>-<digest>` traceability tag is **retired as well** — identity is now the assigned
+Allure case id, not a hash of the case's content, three sixths of which the LLM rewrites on
+every regeneration. Write no AQL filter against any retired tag.
 
 `## Gaps` and `## Conflicts` lines are never pushed to TestOps.
 
-## Idempotent upsert (per case)
-1. `ttag = testops_payload.traceability_tag(story, service, capability, source, title, case_type)` — `title` = the case's TC title, `case_type` = the case's `type:` field; required so two cases citing the same `source` scenario (functional + negative) don't collide onto one TestOps case.
-2. `testops_find_testcases(projectId, aql='tags = "<ttag>"', expand=["tags"])`.
-3. **Found (≥1):** `testops_update_testcase(id=<first hit id>, **payload)`.
-   **None:** `testops_create_testcase(projectId=<pid>, **payload)`.
-4. Take the returned case id → write `@allure.id=<id>` back into the `test-plan.md` case
-   header comment (so the file records the TestOps link).
+## Upsert (per case) — update by verified id, or reconcile
 
-Because the key is a tag derived from the case's identity (see "The key is frozen from
-the first real upsert" below), re-running a Story with unchanged `source:`, title and
-`type:` updates in place — 0 duplicates. A partial failure needs no rollback: re-run
-resumes (found→update the landed ones, create the rest).
+Identity is **assigned, not derived**. The Allure case id lives in the plan as the case's first
+field, `- allure-id: <id>` (see `test-plan-format.md`). Its presence decides the path:
+
+```
+allure-id present  →  read the case back  →  verify  →  testops_update_testcase(id=…)
+allure-id absent   →  reconcile by Story + target  →  human confirms  →  create
+```
+
+### The id is present — verify before updating
+
+1. Read the case back by its id — `testops_find_testcases(projectId, aql='id = <allure-id>',
+   expand=["tags","customFields","issues"])`, or the equivalent single-case read.
+2. **Refuse to update unless the case carries the `qa-generated` tag AND the same
+   `<STORY-KEY>` in `issues`.** A stale, hand-edited or copy-pasted id would otherwise
+   overwrite a human-authored case — strictly worse than the duplication this protocol exists
+   to stop. On a mismatch: write nothing for that case, name the case id, the tag and the Story
+   it actually carries, and tell the QA engineer to correct or remove the `allure-id:` line.
+3. Both checks pass → `testops_update_testcase(id=<allure-id>, **payload)`. The `allure-id` is
+   never part of the payload body; it is the address, not a field.
+4. **The id no longer exists in TestOps** (deleted, or a different project) → this is a
+   degradation, not a crash. Report `allure-id <id> for TC-<n> no longer exists in project
+   KINOA`, treat that case as **unidentified**, and let it fall through to reconciliation below
+   with the rest. Never create silently in its place.
+
+### The id is absent — reconcile, never create blind
+
+Absence is the ordinary first-run state. It is also what a regeneration leaves behind for a
+case Step B could not carry forward, so it must not mean "create". See
+"Reconciliation" below: one scoping lookup, a proposed mapping at the **reconciliation gate**
+(a second human stop, inside Step E), and a create only for what the QA engineer confirms is new.
+
+### After a create
+
+Take the returned case id and write it back into the plan at the stable path
+`~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>.test-plan.md` with
+`scripts/plan_writer.py`:
+
+```python
+insert_allure_id(plan_text, case_id, allure_id)   # case_id is "TC-<n>"
+```
+
+It inserts `- allure-id: <id>` as the first field under that case's heading and leaves every
+other byte of the file identical; it raises on a non-positive-integer id, an unknown case, or a
+case that already has an id. Write the file back after each create, not once at the end — a run
+interrupted halfway then still carries the ids it did assign, and the next run updates those
+instead of duplicating them.
+
+A partial failure needs no rollback: re-run resumes — the cases that landed now carry ids and
+are updated, the rest reconcile.
+
+## Reconciliation — every case that has no verified id
+
+Reconciliation runs once per Step E, for the whole set of unidentified cases together, not per
+case.
+
+### 1. One scoping lookup
+
+```json
+{"projectId": 1, "aql": "issue = \"KING-20326\"",
+ "expand": ["tags", "customFields", "issues", "description"]}
+```
+
+The AQL field is **`issue`, singular**. `issues = …` is not a field and errors; `issues` is only
+the payload key and an `expand` option. One call per Step E, never one per case.
+
+### 2. Narrow to this target
+
+The Story's cases span every `--target` ever pushed for it. Keep only the cases whose
+`description` carries this run's target marker — `parse_target(description)` equal to this run's
+slugified `(service, capability)` — and which carry the `qa-generated` tag. Everything else
+belongs to another target or to a human, and is out of scope: not a match candidate, not an
+orphan, not reported as either.
+
+### 3. The reconciliation gate — propose a mapping (inside Step E)
+
+This is a **second human stop**, distinct from the Step D gate and after it: Step D has already
+closed on the merge report, and reconciliation only runs once Step E's Gate 0a/0b have passed
+and the per-id read-backs are done. Show the QA engineer every unidentified plan case against every in-scope existing case, with a
+proposed action:
+
+```
+TC-2  Duplicate template name is rejected
+      → update  #12907  "Duplicate template name is rejected"        (exact title match)
+TC-5  Export fails when the destination project is archived
+      → create  (no existing case in this target matches)
+TC-7  Project dropdown lists accessible projects
+      → AMBIGUOUS: #12903 "Project dropdown populates" and
+                   #12911 "Project dropdown lists projects"          — choose, or skip
+```
+
+A proposal is a proposal. **Nothing is written until the QA engineer confirms the mapping**,
+case by case or as a whole.
+
+### 4. Ambiguity is never auto-resolved
+
+Two plan cases plausibly matching one existing case, or one plan case plausibly matching two,
+is reported and left to the human. The plugin does not rank, score or pick the first hit — a
+wrong pick silently overwrites a real case and loses its history. An ambiguity the QA engineer
+does not resolve means that case is **skipped**: neither updated nor created.
+
+### 5. Refusal — no unconfirmed write, ever
+
+The refusal is scoped to **any** unidentified case, not to a plan that is wholly without ids.
+A MIXED plan — some cases carried their ids forward, one or two came back unmatched — is the
+ordinary regeneration outcome and is fully inside the refusal.
+
+| Run | ≥1 unidentified case, ≥1 in-scope case | Step E |
+|---|---|---|
+| Attended | yes | Write **nothing** — no create, no update, for **any** case in the plan, identified or not — until the QA engineer confirms the mapping at the reconciliation gate (§3). |
+| Unattended (no confirmation possible) | yes | **MUST abort.** Print the full proposed mapping and the orphan list, write nothing, exit non-zero. |
+| Either | no in-scope case (first run for this target) | Proceed: nothing to map onto, every case is a create. |
+| Either | no unidentified case (every case carries a verified id) | Proceed: update by id, no reconciliation gate. |
+
+"Unattended" means any run in which no QA engineer can answer the reconciliation gate — a
+scheduled, piped, CI or subagent-driven invocation included. This is a **hard refusal, not
+advice**: an unattended run must never create for an unidentified case, and must never fall
+back to "create because no match was found". A reworded case the human was meant to map would
+otherwise become a duplicate of the case it was supposed to update.
+
+A target whose scoping lookup returns **no** in-scope case is the ordinary first run: there is
+nothing to map onto, so every case is a create and Step E proceeds normally.
+
+### 6. Orphans are listed and never touched
+
+Any in-scope existing case that no plan case maps to is reported under **"in TestOps, not in
+this plan"**, with its id and name:
+
+```
+in TestOps, not in this plan:
+  #12899  Template export honours the read-only flag
+```
+
+The plugin **never deletes and never mutes** an orphan, and never edits it to mark it stale.
+An orphan is usually a case whose plan entry was intentionally dropped, and deciding its fate
+is the QA engineer's, in Allure. The list is information, not an action.
 
 ## `--dry-run`
 Do NOT call create/update. Gate 0a and Gate 0b still run — a `--dry-run` that skipped the
-field pre-flight would preview a batch that cannot land. Instead print, per case: the intended
-action (create|update), the `ttag`, and the payload `name` — the QA preview of Step E.
+field pre-flight would preview a batch that cannot land. The **read-only** reads still run too:
+the per-id read-back and the one scoping lookup, so the preview is the real mapping and not a
+guess. Print, per case: the intended action (`update #<id>` | `create` | `AMBIGUOUS` | `skipped
+— <reason>`), the id it would address, and the payload `name`; then the orphan list.
+
+`--dry-run` **never refuses**. The no-ids-against-a-non-empty-target refusal above is a refusal
+to *write*, and a dry run writes nothing — including into the plan file, so no `allure-id:` is
+inserted. It reports the mapping the QA engineer would be asked to confirm and exits 0.
 
 ## Degradation
 - TestOps unreachable → the reviewed `test-plan.md` is already on disk; stop and tell the
@@ -200,18 +354,17 @@ action (create|update), the `ttag`, and the payload `name` — the QA preview of
   the whole creation silently.
 - The value exists in Allure but no case uses it yet → same abort; re-run with
   `--allow-unverified-fields` to push it as a recorded warning instead.
+- An `allure-id` no longer exists in TestOps → report it, treat that case as unidentified and
+  let it reconcile with the rest. Never create silently under the missing id.
+- An `allure-id` resolves to a case that lacks `qa-generated` or carries a different Story →
+  that case is skipped, nothing is written for it, and the mismatch is named. The plugin never
+  overwrites a case it cannot prove it wrote.
+- The plan has ≥1 unidentified case and the target already has ≥1 in-scope case — a mixed plan,
+  not only a plan with no ids at all → refuse to write anything for **any** case, print the
+  proposed mapping and the orphans, and exit non-zero, unattended runs included (§5).
+- A mapping is ambiguous → the case is skipped and both candidates are named; never auto-picked.
+- A Story case carries no target marker → out of scope for this run: not a match candidate and
+  not an orphan. It is reported once, and left alone.
 - `priority` has no first-class TestOps field and no longer rides as a tag. It stays in
   `test-plan.md` only; do not invent a `Severity` custom field for it — the four fields in
   `CUSTOM_FIELD_ORDER` are the whole set this plugin writes.
-
-## The key is frozen from the first real upsert
-
-`traceability_tag` hashes `story|service|capability|source|title|case_type`. Changing a
-case's `source:` (or its title or type) therefore produces a **different** `tp-` tag: the
-re-run finds no match, creates a second TestOps case, and the case written under the old
-key is stranded — orphaned, still green, and invisible to the new AQL filter.
-
-This is prospective, not a cleanup instruction: project KINOA holds zero plugin-authored
-cases today, so the vocabulary and `source:` changes made here are the first keys ever
-written. From the first non-dry-run upsert onward the format is frozen — a later `source:`
-edit needs a deliberate migration (delete or re-tag the old case), never a silent re-run.

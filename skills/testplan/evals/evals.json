@@ -139,39 +139,54 @@
     },
     {
       "id": 4,
-      "name": "idempotent-upsert-key-stable",
+      "name": "assigned-id-identity-update-by-id",
       "fixture": "openspec-grounded",
-      "prompt": "Simulate two Step E runs over the SAME approved plan via testops_payload.traceability_tag + a simulated testops_find_testcases. Show the second run updates, not duplicates.",
-      "expected_output": "For each case, traceability_tag(story, service, capability, source, title, case_type) is identical across both runs; run 1 (find returns none) => create; run 2 (find returns the id) => update; no case is created twice. Tags are exactly qa-generated plus the tp- traceability tag and nothing else; type-*, priority-*, openspec-context, design-backed and spec-derived are all retired and never emitted.",
+      "prompt": "Identity is the ASSIGNED Allure case id, not a derived key. Allure TestOps is SIMULATED, but skills/testplan/scripts/plan_parser.py, plan_writer.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Setup: read fixtures/openspec-grounded/test-plan.md (its three cases carry no allure-id — the first-run state) and assign ids by calling plan_writer.insert_allure_id three times for real: TC-1 -> 12901, TC-2 -> 12902, TC-3 -> 12903. That id-carrying plan is the approved plan. Now carry out Step E over it TWICE as references/testops-sync.md describes, service 'kinoa-client-support-tool', capability 'admin-authentication', story 'KING-22737', building each body with case_to_payload for real. Report every simulated TestOps call of both runs: each find/search, each create and each update, with its aql or its id.",
+      "expected_output": "Every case's allure-id is present, so both runs take the id path only: for each case Step E reads the case back by its id, verifies it carries the qa-generated tag and the same KING-22737 in issues, then issues testops_update_testcase(id=12901|12902|12903). Across BOTH runs: zero testops_create_testcase calls and zero reconciliation searches (no testops_find_testcases(aql='issue = \"KING-22737\"')) — reconciliation is only for cases with no id. The second run is byte-identical to the first: the same three ids updated, nothing created, so a re-run is an update, never a duplicate. Each built payload carries tags exactly [\"qa-generated\"] and no allure-id field in the body — the id is the address, not a payload key.",
       "files": [],
       "assertions": [
         {
-          "text": "traceability_tag is called with its real six-argument signature (story, service, capability, source, title, case_type) and is byte-identical for the same case across the two runs",
+          "text": "plan_writer.insert_allure_id was actually executed (real import of skills/testplan/scripts/plan_writer.py) to put '- allure-id: <id>' as the first field of each of TC-1, TC-2 and TC-3 — the id-carrying plan is produced by the real writer, not hand-edited",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "Run 2's find (aql tags = the same tp- tag) matches run 1's created case, so the action is update",
+          "text": "Both runs issue exactly three testops_update_testcase calls, addressed by id 12901, 12902 and 12903 — one per case, the id taken from the plan's allure-id: line",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "No case results in two create calls (0 duplicates)",
+          "text": "Across BOTH runs, ZERO testops_create_testcase calls are issued — a plan whose cases all carry ids never creates",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "The tp- tag is AQL-safe ([a-z0-9-]+) and present in the payload tags",
+          "text": "ZERO reconciliation searches are issued in either run: no testops_find_testcases with aql 'issue = \"KING-22737\"' and no search by any content-derived key; the only read is the per-id read-back before each update",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "Every payload's tags are exactly the tp- tag plus qa-generated — two tags, no more",
+          "text": "Before each update the case is read back and the update proceeds only because the read-back case carries the qa-generated tag AND KING-22737 in issues — the verification step is performed, not skipped",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "No payload emits a retired tag: spec-derived, openspec-context, design-backed, type-* or priority-*",
+          "text": "The second run's calls are identical to the first's — same three ids updated, nothing created and nothing renumbered: the re-run is idempotent",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No payload body contains an allure-id / id / traceability key: the assigned id is the update address only",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Every payload's tags are exactly [\"qa-generated\"] — one tag, no more",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No payload emits a retired tag: spec-derived, openspec-context, design-backed, type-* or priority-*, and no content-hash identity tag exists anywhere in the run",
           "passed": false,
           "evidence": ""
         }
@@ -182,7 +197,7 @@
       "name": "dry-run-writes-nothing",
       "fixture": "openspec-grounded",
       "prompt": "Run Step E with --dry-run over the approved plan. Confirm no create/update is issued and a per-case preview is printed.",
-      "expected_output": "Per testops-sync.md --dry-run: for each case, print intended action (create|update), its tp- tag, and payload name; issue ZERO testops_create_testcase / testops_update_testcase calls.",
+      "expected_output": "Per testops-sync.md --dry-run: for each case, print intended action (create|update) and payload name; issue ZERO testops_create_testcase / testops_update_testcase calls.",
       "files": [],
       "assertions": [
         {
@@ -191,7 +206,7 @@
           "evidence": ""
         },
         {
-          "text": "A per-case line prints the intended action, the tp- tag, and the payload name",
+          "text": "A per-case line prints the intended action and the payload name",
           "passed": false,
           "evidence": ""
         }
@@ -417,7 +432,7 @@
       "name": "payload-matches-reference-shape",
       "fixture": "reference-shape",
       "prompt": "fixtures/reference-shape/test-plan.md holds one case whose content is Allure TestOps case 12684 (project 1, KING-18454) written in the new test-plan.md grammar. TestOps is SIMULATED, but skills/testplan/scripts/plan_parser.py and skills/testplan/scripts/testops_payload.py are pure stdlib Python and must be RUN FOR REAL: parse the plan with parse_cases, build the body with case_to_payload(case, story='KING-18454', service='kinoa-in-app', capability='milestones-eligibility', custom_fields={'Suite': '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app', 'Story': 'Template', 'Component': 'In-Apps', 'Feature': 'Milestones'}), and compare the resulting dict key by key with fixtures/reference-shape/expected-payload.json. Report any extra, missing or differing key. NOTE: expected-payload.json was produced by case_to_payload and then hand-verified literal by literal against references/allure-push.md and Allure TestOps case 12684, so it is a checked reference, not merely the builder's own output; never regenerate it from the builder without repeating that hand verification.",
-      "expected_output": "The built payload equals fixtures/reference-shape/expected-payload.json exactly — same set of top-level keys, same values: name without a TC-n prefix, description = the purpose sentence, precondition = both precondition statements newline-separated, expectedResult = the case-level expected, status 'Draft', workflow 'Manual Kinoa', issues = [{name: 'Kinoa-Allure', value: 'KING-18454'}], customFields = Suite/Story/Component/Feature in that order with Suite composed as '[KING-18454] <story title>' and Story a project category value, one expectedResultSteps entry per step, and tags = exactly ['qa-generated', 'tp-…']. No links key and no testLayer key anywhere.",
+      "expected_output": "The built payload equals fixtures/reference-shape/expected-payload.json exactly — same set of top-level keys, same values: name without a TC-n prefix, description = the purpose sentence, precondition = both precondition statements newline-separated, expectedResult = the case-level expected, status 'Draft', workflow 'Manual Kinoa', issues = [{name: 'Kinoa-Allure', value: 'KING-18454'}], customFields = Suite/Story/Component/Feature in that order with Suite composed as '[KING-18454] <story title>' and Story a project category value, one expectedResultSteps entry per step, and tags = exactly ['qa-generated']. No links key and no testLayer key anywhere.",
       "files": [
         "skills/testplan/evals/fixtures/reference-shape/test-plan.md",
         "skills/testplan/evals/fixtures/reference-shape/expected-payload.json"
@@ -474,7 +489,7 @@
           "evidence": ""
         },
         {
-          "text": "payload['tags'] == ['qa-generated', 'tp-king-18454-kinoa-in-app-milestones-eligibility-b414d1aeef'] — exactly two tags, and no type-*, priority-*, openspec-context, design-backed or spec-derived tag",
+          "text": "payload['tags'] == ['qa-generated'] — exactly one tag, and no type-*, priority-*, openspec-context, design-backed or spec-derived tag",
           "passed": false,
           "evidence": ""
         },
@@ -530,6 +545,146 @@
         },
         {
           "text": "The run reports the abort to the user naming the offending field and value, rather than silently pushing and letting Allure fail the whole creation",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "regenerated-plan-updates-never-duplicates",
+      "fixture": "regenerated-plan",
+      "prompt": "The re-run case, end to end. fixtures/regenerated-plan/previous-plan.md is the plan from the last run, living at the stable path ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-admin-authentication.test-plan.md; its three cases carry assigned ids 12901, 12902 and 12903. fixtures/regenerated-plan/regenerated-plan.md is what Step B's generation returned this time, with every drift the ticket names: an acceptance criterion inserted at the top so AC numbers shift by one, a case whose title is reworded, a case whose title differs only in letter case, a case whose type changed from negative to edge, and one brand-new case. It carries no ids — the generator never invents one. Atlassian and Allure TestOps are SIMULATED, but skills/testplan/scripts/plan_writer.py, plan_parser.py, validate_test_plan.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Step B: call plan_writer.merge_allure_ids(previous_plan_text, new_plan_text) for real and report the merged plan and the full report dict (carried / retained / unmatched / orphaned). Run validate_test_plan.py on the merged plan for real (no --openspec). Then carry out Step E over the merged plan per references/testops-sync.md, story 'KING-22737', service 'kinoa-client-support-tool', capability 'admin-authentication', reporting every simulated TestOps call — each find with its aql, each update with its id, each create.",
+      "expected_output": "merge_allure_ids carries an id only on an exact title match (whitespace-collapsed, case-folded) that is unique in the previous plan: report['carried'] is TC-3 'The Break-Glass credentials grant Super admin' -> 12902 and TC-4 'Break-glass sign-in with invalid credentials is refused' -> 12903 — the shifted AC numbers, the letter-case change and the negative->edge type change all cost nothing. report['unmatched'] is TC-1 (the new case) and TC-2 (the reworded one) — a reworded title is REPORTED, never guessed onto an id — and report['orphaned'] is the previous TC-1 carrying 12901. The merged plan validates: exit 0, RESULT: PASS. Step E then updates 12902 and 12903 by id after reading each back and verifying qa-generated + KING-22737, and for the two unmatched cases runs ONE reconciliation lookup testops_find_testcases(aql='issue = \"KING-22737\"') narrowed by the target marker Target: service=kinoa-client-support-tool; capability=admin-authentication, proposes the mapping at the gate (TC-2 -> #12901 by title is NOT auto-resolved; it is proposed and confirmed), and lists #12901 under 'in TestOps, not in this plan' if it is not mapped. Nothing is written for an unconfirmed case. With the mapping confirmed, ZERO testops_create_testcase calls are issued for the two cases that already exist, and the one genuinely new case is the only create.",
+      "files": [
+        "skills/testplan/evals/fixtures/regenerated-plan/previous-plan.md",
+        "skills/testplan/evals/fixtures/regenerated-plan/regenerated-plan.md"
+      ],
+      "assertions": [
+        {
+          "text": "plan_writer.merge_allure_ids was actually executed (real import of skills/testplan/scripts/plan_writer.py) on the two fixture files — the merge is run, not described, and the ids are NOT pre-seeded into the regenerated fixture",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "report['carried'] is exactly TC-3 -> allure_id '12902' and TC-4 -> allure_id '12903': the ids survive a shifted AC numbering, a letter-case-only title change and a case type changed from negative to edge",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "report['unmatched'] is exactly TC-1 and TC-2: the reworded case (TC-2, 'First sign-in from an authorized Workspace domain creates an Author account') is REPORTED as unmatched, never silently given 12901",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "report['orphaned'] is exactly the previous TC-1 with allure_id '12901' — the id whose case no longer matches is surfaced, not dropped and not reused",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The merged plan text contains '- allure-id: 12902' and '- allure-id: 12903' as the first field under their case headings, and no allure-id under TC-1 or TC-2",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py was actually executed against the merged plan and exits 0 with RESULT: PASS — carrying ids forward keeps the plan valid",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Step E updates by id for exactly the two carried cases: testops_update_testcase(id=12902) and testops_update_testcase(id=12903), each preceded by a read-back verifying the qa-generated tag and KING-22737 in issues",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Exactly ONE reconciliation lookup is issued for the whole run — testops_find_testcases with aql 'issue = \"KING-22737\"' (the field is issue, SINGULAR) — not one per case, and never for a case that already has an id",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The reconciliation set is narrowed by the target marker parsed with testops_payload.parse_target — only cases whose description carries Target: service=kinoa-client-support-tool; capability=admin-authentication and the qa-generated tag are candidates",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The mapping of the reworded TC-2 onto the existing #12901 is PROPOSED at the gate and written only after the QA engineer confirms it — the plugin does not resolve it on its own",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "ZERO testops_create_testcase calls are issued for any case that already exists in TestOps: the regeneration updates, it does not duplicate",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "No case is addressed by any content-derived key: no content-hash identity tag and no derived traceability tag appear anywhere in the run",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "no-ids-no-blind-write-reconciliation",
+      "fixture": "openspec-grounded",
+      "prompt": "Reconciliation. fixtures/openspec-grounded/test-plan.md is an approved plan whose three cases carry NO allure-id: — the state a first run and a failed carry-forward both leave behind. Allure TestOps is SIMULATED; skills/testplan/scripts/testops_payload.py and plan_writer.py are pure stdlib Python and must be RUN FOR REAL (build each payload with case_to_payload, read markers back with parse_target, write ids back with insert_allure_id). Story 'KING-22737'. RUN 1 — target kinoa-client-support-tool/admin-authentication. The simulated testops_find_testcases(aql='issue = \"KING-22737\"') returns five cases: #12901 'A first Workspace sign-in provisions an Author account', tags [qa-generated], description ending 'Target: service=kinoa-client-support-tool; capability=admin-authentication'; #12907 'Break-glass sign-in', tags [qa-generated], same target marker; #12899 'Session cookie is cleared on sign-out', tags [qa-generated], same target marker; #12950 'Export modal lists projects', tags [qa-generated], description ending 'Target: service=in-app-templates; capability=export'; #12960 'Manual smoke: admin login', tags [regression], description with NO Target: line. Carry out Step E per references/testops-sync.md and report every TestOps call and the full gate output. Then report what an UNATTENDED run in exactly this state does. RUN 2 — the same plan under target kinoa-client-support-tool/audit-log, where the same scoping lookup returns only #12950 and #12960 (nothing in this target). Report the calls for run 2 too.",
+      "expected_output": "Run 1: exactly one scoping lookup, aql 'issue = \"KING-22737\"' (issue, SINGULAR), narrowed by the target marker to #12901, #12907 and #12899 — #12950 belongs to another target and #12960 has no marker and is not qa-generated, so neither is a candidate, an orphan, or touched. The gate is shown a proposed mapping: TC-1 -> update #12901 (exact title match); TC-2 and TC-3 both plausibly match #12907 -> AMBIGUOUS, reported for the human to choose, never collapsed onto the one case and never merged into each other; #12899 is listed under 'in TestOps, not in this plan' and is never deleted or muted. Because no plan case carries an allure-id and the in-scope set is non-empty, Step E writes NOTHING before confirmation: ZERO testops_create_testcase and ZERO testops_update_testcase calls. An unattended run in this state aborts, prints the same mapping and orphan list, exits non-zero and writes nothing. Run 2: the lookup returns no in-scope case, so this is the ordinary first run — three creates, one per case, and each returned id is written back into the plan with plan_writer.insert_allure_id; no refusal.",
+      "files": [
+        "skills/testplan/evals/fixtures/openspec-grounded/test-plan.md"
+      ],
+      "assertions": [
+        {
+          "text": "Run 1 issues exactly ONE testops_find_testcases call for the whole run, with aql 'issue = \"KING-22737\"' — the field is issue, SINGULAR, and the lookup is not repeated per case",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The in-scope set is exactly #12901, #12907 and #12899: the target marker is parsed back with testops_payload.parse_target (run for real) and #12950 (target in-app-templates/export) is excluded as another target's case",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "#12960 — no Target: marker and no qa-generated tag — is never treated as a match candidate, never listed as an orphan, and never written to",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 1 issues ZERO testops_create_testcase calls and ZERO testops_update_testcase calls: a plan with no ids against a non-empty target writes nothing before the QA engineer confirms the mapping",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "A proposed mapping is printed at the gate for every plan case, including TC-1 -> update #12901 as a proposal, not a performed write",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "TC-2 and TC-3 both plausibly matching the single existing #12907 is reported as AMBIGUOUS and left to the human: the two plan cases are never collapsed onto one existing case and never merged with each other, and the plugin does not rank or pick the first hit",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "#12899 is reported under 'in TestOps, not in this plan' with its id and name, and the run states it is neither deleted nor muted nor edited",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The UNATTENDED variant of run 1 aborts with the same mapping and orphan list and a non-zero exit, and still issues zero creates and zero updates — blind creation is refused unattended too",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Run 2 (a target whose scoping lookup returns no in-scope case) proceeds as the ordinary first run: three testops_create_testcase calls, one per plan case, and no refusal",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "After each create in run 2 the returned id is written back into the plan at ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-audit-log.test-plan.md with plan_writer.insert_allure_id executed for real, as '- allure-id: <id>' first under its case heading",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Every payload built in either run carries tags exactly [\"qa-generated\"] and a description whose last line is the run's own target marker from testops_payload.target_marker",
           "passed": false,
           "evidence": ""
         }

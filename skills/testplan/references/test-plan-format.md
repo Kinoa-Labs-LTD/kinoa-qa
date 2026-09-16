@@ -48,6 +48,7 @@ line is exempt and MUST carry no case at all.
 
 ```
 ### TC-<n> · <title>
+- allure-id: 12907           # optional, written back by Step E — never by the author
 - type: functional            # functional | negative | edge | regression | e2e | nonfunctional
 - priority: P1                # P1 | P2 | P3
 - purpose: Verify <what this case proves>.   # one sentence, begins "Verify"
@@ -63,9 +64,20 @@ line is exempt and MUST carry no case at all.
      → expected: <what the system does in response>
 - expected: <the overall pass condition>
 ```
-Field order is fixed. `type`, `priority`, `purpose`, `source`, `preconditions`, `steps` and
-`expected` are required (validator `required-fields`); `openspec-ref` and `design-ref` are
-optional.
+Field order is fixed: `allure-id`, `type`, `priority`, `purpose`, `source`, `openspec-ref`,
+`design-ref`, `preconditions`, `steps`, `expected`. `type`, `priority`, `purpose`, `source`,
+`preconditions`, `steps` and `expected` are required (validator `required-fields`);
+`allure-id`, `openspec-ref` and `design-ref` are optional.
+
+- **`allure-id:`** is the **assigned** TestOps case identity and the **first** field under the
+  case heading. It is written back by **Step E** after it creates the case, and by nothing
+  else: the QA engineer never types it and the generation subagent never authors or invents
+  one. **Its absence is the normal first-run state** — a plan whose cases have never been
+  upserted carries no ids at all and is fully valid. On a regeneration Step B copies each
+  surviving case's id forward verbatim; a case it genuinely replaces comes back without one.
+  The validator checks the **shape** only (`allure-id-valid`): a present `allure-id` must be a
+  positive integer, so a malformed id cannot reach Step E and address the wrong case. Whether
+  the id still exists in TestOps is Step E's business — the validator is offline.
 
 - **`### TC-<n> · <title>`** — the `TC-<n>` is a plan-local handle for review and for the
   `## Conflicts` / `## Gaps` cross-references. It is **not** part of the TestOps case name:
@@ -160,10 +172,11 @@ exemption is gone and the scenario needs its case or its Gap line.
 
 | test-plan.md | TestOps create/update field |
 |---|---|
+| `allure-id` | **not sent in the body** — it is the update key: Step E calls `testops_update_testcase(id=<allure-id>)`. Absent → Step E reconciles, creates, and writes the assigned id back into this file |
 | `### TC-n · <title>` | `name` = `"<title>"` — the `TC-n` prefix is **stripped** |
 | `purpose` | `description` (plus a one-line provenance suffix naming `openspec-ref:` / `design-ref:` when present) |
 | `type` / `priority` | not pushed — no `type-*` / `priority-*` tags |
-| `source` | not pushed as text; it is an input to the `tp-…` traceability tag |
+| `source` | not pushed — it is provenance for the reader of the plan only |
 | `preconditions` | `precondition` (newline-separated) |
 | `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped, exactly one `expected_body` per step |
 | `expected` | `expectedResult` — the case-level pass condition |
@@ -171,12 +184,12 @@ exemption is gone and the scenario needs its case or its Gap line.
 | — | `customFields`: `Story` / `Component` / `Feature` from `--story-field` / `--component` / `--feature` or their `config.json` defaults (shipped empty) |
 | `story:` header | `issues` = `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array |
 | — | `status` = `"Draft"`, `workflow` = `"Manual Kinoa"`; `testLayer` is never sent |
-| — | `tags` = the `tp-<slug>` traceability tag + `qa-generated`, and nothing else |
+| — | `tags` = `qa-generated`, and nothing else |
 
-**Tag policy: `tp-` + `qa-generated` only.** `tp-<slug>` is the idempotency key — it is how a
-re-run finds the case it already created, so it cannot be dropped. `qa-generated` is the only
-fleet-level handle for finding or bulk-rolling-back plugin-authored cases. Everything else is
-gone: `type-*` and `priority-*` duplicated real Allure fields, and `openspec-context` /
+**Tag policy: `qa-generated` only.** It is the only fleet-level handle for finding or
+bulk-rolling-back plugin-authored cases. No tag carries identity: a case is found by its
+assigned `allure-id`, never by a tag derived from its content. Everything else is gone:
+`type-*` and `priority-*` duplicated real Allure fields, and `openspec-context` /
 `design-backed` are replaced by the provenance suffix on `description`.
 
 `Story`, `Component` and `Feature` values MUST already exist in the project — Allure rejects an
@@ -198,7 +211,6 @@ precisely so the validator can FAIL it naming both reasons — the missing `purp
 steps with no expected result — rather than crash. Delete the plan and regenerate from Step B;
 pre-existing plans are regenerated, never hand-patched. Nothing had been upserted when this
 landed, so no TestOps case carries the old vocabulary or the old payload shape. From the first
-real upsert onward the format is frozen: changing a case's `source:` re-keys its `tp-` tag and
-strands the case already in TestOps. Dropping the `TC-n` prefix from the pushed `name` does
-**not** re-key anything — the `tp-` tag is built from the title, which the prefix was never
-part of.
+real upsert onward a case's identity is its assigned `allure-id:`, so editing `source:`, the
+title or the `TC-n` prefix re-keys nothing and strands nothing — the id is carried forward,
+never re-derived.

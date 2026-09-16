@@ -14,14 +14,18 @@ source of truth; OpenSpec files (`--openspec`, optional) are context only. Check
      file is supplied;
   4. design-ref-valid — every `design-ref:` reads `<fileKey>/<nodeId> — <frame name>` and
      accompanies an `ac:` source; checked syntactically, the validator never calls Figma;
-  5. scenario-coverage — advisory only: how many OpenSpec scenarios a case enriches;
-  6. ac-coverage — `## Acceptance Criteria` is required and every AC listed there is cited
+  5. allure-id-valid — a present `allure-id:` is a positive integer and no two cases carry
+     the same one (shape and uniqueness only; the validator is offline and never asks
+     TestOps whether the id exists). The field is optional: its absence is the ordinary
+     first-run state;
+  6. scenario-coverage — advisory only: how many OpenSpec scenarios a case enriches;
+  7. ac-coverage — `## Acceptance Criteria` is required and every AC listed there is cited
      by >=1 case;
-  7. conflict-resolution — `## Conflicts` header present, no unrecognised line in the
+  8. conflict-resolution — `## Conflicts` header present, no unrecognised line in the
      section, every side of each conflict (two or more) named with a known artifact, and no
      case citing an AC a still-unresolved conflict contradicts, and every `→ resolved:`
      annotation written in the documented grammar;
-  8. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
+  9. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
      enriches is named in a `## Gaps` line, unless an unresolved `## Conflicts` line already
      names it; spec coverage is advisory, dishonesty is not.
 
@@ -44,6 +48,10 @@ def _capability_of(spec_path):
 
 
 AC_SECTION_RE = re.compile(r"^##\s+Acceptance Criteria\s*$", re.M)
+# `allure-id:` is assigned by Allure TestOps, so a valid one is a positive integer with no
+# sign, separator or decimal point. Shape only: the validator is offline and never asks
+# TestOps whether the id exists.
+ALLURE_ID_RE = re.compile(r"^[1-9][0-9]*$")
 DESIGN_REF_RE = re.compile(r"^[^/\s]+/[^/\s]+\s+—\s+\S.*$")
 CONFLICT_SOURCES = ("story", "prd", "design", "openspec")
 CONFLICT_AC_RE = re.compile(r"^(AC-\d+)\s*·")
@@ -184,7 +192,32 @@ def validate(plan_path, openspec_path=None):
     checks.append({"name": "design-ref-valid", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
-    # 5. scenario-coverage — advisory, never a failure
+    # 5. allure-id-valid — shape, plus uniqueness across the plan; existence in TestOps is
+    # Step E's business. Two cases sharing an id would make Step E update one TestOps case
+    # twice and never create the other, so a duplicate is a failure here, before any write.
+    bad, present = [], 0
+    by_id = {}
+    for c in cases:
+        if "allure-id" not in c["tags"]:
+            continue
+        present += 1
+        raw = (c["tags"].get("allure-id") or "").strip()
+        if not ALLURE_ID_RE.match(raw):
+            bad.append(f"{c['id']}: malformed allure-id '{raw}' "
+                       f"(expected a positive integer assigned by Step E)")
+            continue
+        by_id.setdefault(raw, []).append(c["id"])
+    for raw, owners in by_id.items():
+        if len(owners) > 1:
+            bad.append(f"duplicate allure-id '{raw}' carried by " + ", ".join(owners) +
+                       " — one TestOps case cannot be two plan cases")
+    checks.append({"name": "allure-id-valid", "ok": not bad,
+                   "detail": ("; ".join(bad) if bad else
+                              f"ok: {present}/{len(cases)} cases carry an allure-id"
+                              if present else
+                              "ok: no case carries an allure-id (the first-run state)")})
+
+    # 6. scenario-coverage — advisory, never a failure
     if spec_paths:
         uncovered = sorted(scenarios - covered_scn)
         detail = f"advisory: {len(scenarios) - len(uncovered)}/{len(scenarios)} scenarios enriched a case"
@@ -204,7 +237,7 @@ def validate(plan_path, openspec_path=None):
         if m:
             contradicted.add(m.group(1))
 
-    # 6. ac-coverage — required in both modes
+    # 7. ac-coverage — required in both modes
     if not has_ac_section or not acs:
         checks.append({"name": "ac-coverage", "ok": False,
                        "detail": "missing '## Acceptance Criteria' — every case must be "
@@ -214,7 +247,7 @@ def validate(plan_path, openspec_path=None):
         checks.append({"name": "ac-coverage", "ok": not uncovered_ac,
                        "detail": "ok" if not uncovered_ac else "uncovered: " + "; ".join(uncovered_ac)})
 
-    # 7. conflict-resolution
+    # 8. conflict-resolution
     bad = []
     if not has_conflicts_section:
         bad.append("missing '## Conflicts' section header (may be empty, but it is required)")
@@ -241,7 +274,7 @@ def validate(plan_path, openspec_path=None):
     checks.append({"name": "conflict-resolution", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
-    # 8. gap-honesty
+    # 9. gap-honesty
     if spec_paths:
         # An OpenSpec scenario (or requirement) named in an unresolved conflict line is
         # exempt: the contradiction is already surfaced, exactly as its AC is exempt from

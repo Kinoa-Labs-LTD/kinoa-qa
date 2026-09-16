@@ -294,5 +294,71 @@ class TestPurposeHasOneHome(unittest.TestCase):
         self.assertTrue(c["tags"]["purpose"].endswith("It also covers the happy path."))
 
 
+PLAN_WITH_ALLURE_ID = """# QA Test Plan — svc / cap
+story: KING-1 · target: svc/cap@main · generated: 2026-09-07
+
+## Acceptance Criteria
+- AC-1: Users can sign in
+
+## Cases
+
+### TC-1 · Happy path sign-in
+- allure-id: 12907
+- type: functional
+- priority: P1
+- purpose: Verify a user can sign in.
+- source: ac: AC-1
+- openspec-ref: sign-in#Sign-in/Happy path
+- design-ref: aBcD1234/12:34 — Sign-in / empty state
+- preconditions: a user exists
+- steps:
+  1. enter valid credentials
+     → expected: the session opens
+- expected: the user is signed in
+
+### TC-2 · Bad password
+- type: negative
+- priority: P1
+- purpose: Verify a wrong password is rejected.
+- source: ac: AC-1
+- preconditions: a user exists
+- steps:
+  1. enter a wrong password
+     → expected: an error is shown
+- expected: rejected
+
+## Conflicts
+
+## Gaps
+"""
+
+
+class TestAllureIdParses(unittest.TestCase):
+    """`- allure-id: <id>` is an ordinary hyphenated case field: it must reach
+    `case["tags"]["allure-id"]` through the existing field regex, as the first field under
+    the case heading, without displacing any other field. Absence leaves the key out."""
+
+    def test_allure_id_parses_as_a_case_field(self):
+        cases = parse_cases(PLAN_WITH_ALLURE_ID)
+        self.assertEqual("12907", cases[0]["tags"]["allure-id"])
+
+    def test_allure_id_survives_alongside_the_other_hyphenated_fields(self):
+        tags = parse_cases(PLAN_WITH_ALLURE_ID)[0]["tags"]
+        self.assertEqual("sign-in#Sign-in/Happy path", tags["openspec-ref"])
+        self.assertEqual("aBcD1234/12:34 — Sign-in / empty state", tags["design-ref"])
+        self.assertEqual("functional", tags["type"])
+        self.assertEqual("the user is signed in", tags["expected"])
+
+    def test_leading_allure_id_does_not_disturb_the_case_shape(self):
+        cases = parse_cases(PLAN_WITH_ALLURE_ID)
+        self.assertEqual(["TC-1", "TC-2"], [c["id"] for c in cases])
+        self.assertEqual("Happy path sign-in", cases[0]["title"])
+        self.assertEqual(1, len(cases[0]["steps"]))
+        self.assertEqual("the session opens", cases[0]["steps"][0]["expected"])
+
+    def test_a_case_without_an_allure_id_has_no_such_tag(self):
+        self.assertNotIn("allure-id", parse_cases(PLAN_WITH_ALLURE_ID)[1]["tags"])
+
+
 if __name__ == "__main__":
     unittest.main()

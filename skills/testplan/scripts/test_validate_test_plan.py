@@ -86,6 +86,19 @@ PLAN_BUSINESS_MODE = """# QA Test Plan — KING-1 (business-only)
 ## Gaps
 """
 
+# A third case for the plans that need three ids in play; spliced in before `## Conflicts`.
+CASE_TC3 = """### TC-3 · Sign out
+- type: functional
+- priority: P2
+- purpose: Verify a user can sign out.
+- source: ac: AC-1
+- preconditions: a user is signed in
+- steps:
+  1. sign out
+     → expected: the session closes
+- expected: signed out
+"""
+
 CONFLICT_LINE = ("- ⚠️ CONFLICT: AC-2 · story: bad passwords rejected vs "
                  "openspec: bad passwords accepted — no case generated for AC-2\n")
 
@@ -642,6 +655,115 @@ class TestBlankExpectedRejected(unittest.TestCase):
             self.assertEqual(1, r["exit_code"])
             self.assertIn("step 1 has no expected result",
                           _checks(r)["required-fields"]["detail"])
+
+
+class TestAllureIdValid(unittest.TestCase):
+    """`allure-id:` is the assigned TestOps identity, written by Step E. The validator checks
+    its SHAPE — a positive integer — and its UNIQUENESS across the plan, so neither a
+    malformed id nor an id carried by two cases can reach Step E and address the wrong case.
+    Absence is the ordinary first-run state and must stay valid."""
+
+    def test_absent_allure_id_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, PLAN_BUSINESS_MODE), None)
+            self.assertEqual("PASS", r["outcome"])
+            check = _checks(r)["allure-id-valid"]
+            self.assertTrue(check["ok"])
+            self.assertIn("no case carries an allure-id", check["detail"])
+
+    def test_valid_allure_id_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "### TC-1 · Sign in\n", "### TC-1 · Sign in\n- allure-id: 12907\n", 1))
+            r = validate(plan, None)
+            self.assertEqual("PASS", r["outcome"])
+            self.assertTrue(_checks(r)["allure-id-valid"]["ok"])
+
+    def test_non_numeric_allure_id_fails_naming_the_case(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                "### TC-2 · Reject bad password\n",
+                "### TC-2 · Reject bad password\n- allure-id: TC-12907\n", 1))
+            r = validate(plan, None)
+            self.assertEqual("FAIL", r["outcome"])
+            self.assertEqual(1, r["exit_code"])
+            check = _checks(r)["allure-id-valid"]
+            self.assertFalse(check["ok"])
+            self.assertIn("TC-2", check["detail"])
+            self.assertIn("TC-12907", check["detail"])
+
+    def test_non_positive_and_malformed_ids_fail(self):
+        for bad in ("0", "-3", "12.5", "12 907", "", "12907x"):
+            with self.subTest(allure_id=bad), tempfile.TemporaryDirectory() as tmp:
+                plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+                    "### TC-1 · Sign in\n",
+                    "### TC-1 · Sign in\n- allure-id: %s\n" % bad, 1))
+                r = validate(plan, None)
+                self.assertEqual(1, r["exit_code"])
+                self.assertFalse(_checks(r)["allure-id-valid"]["ok"])
+
+    def test_two_cases_sharing_an_id_fail_naming_both(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE
+                          .replace("### TC-1 · Sign in\n",
+                                   "### TC-1 · Sign in\n- allure-id: 12907\n", 1)
+                          .replace("### TC-2 · Reject bad password\n",
+                                   "### TC-2 · Reject bad password\n- allure-id: 12907\n", 1))
+            r = validate(plan, None)
+            self.assertEqual("FAIL", r["outcome"])
+            self.assertEqual(1, r["exit_code"])
+            check = _checks(r)["allure-id-valid"]
+            self.assertFalse(check["ok"])
+            self.assertIn("TC-1", check["detail"])
+            self.assertIn("TC-2", check["detail"])
+            self.assertIn("12907", check["detail"])
+
+    def test_three_cases_with_one_collision_fail_naming_the_colliding_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE
+                          .replace("## Conflicts\n", CASE_TC3 + "## Conflicts\n", 1)
+                          .replace("### TC-1 · Sign in\n",
+                                   "### TC-1 · Sign in\n- allure-id: 100\n", 1)
+                          .replace("### TC-2 · Reject bad password\n",
+                                   "### TC-2 · Reject bad password\n- allure-id: 200\n", 1)
+                          .replace("### TC-3 · Sign out\n",
+                                   "### TC-3 · Sign out\n- allure-id: 200\n", 1))
+            r = validate(plan, None)
+            self.assertEqual(1, r["exit_code"])
+            check = _checks(r)["allure-id-valid"]
+            self.assertFalse(check["ok"])
+            self.assertIn("TC-2", check["detail"])
+            self.assertIn("TC-3", check["detail"])
+            self.assertIn("200", check["detail"])
+
+    def test_distinct_ids_on_every_case_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE
+                          .replace("### TC-1 · Sign in\n",
+                                   "### TC-1 · Sign in\n- allure-id: 100\n", 1)
+                          .replace("### TC-2 · Reject bad password\n",
+                                   "### TC-2 · Reject bad password\n- allure-id: 200\n", 1))
+            r = validate(plan, None)
+            self.assertEqual("PASS", r["outcome"])
+            self.assertTrue(_checks(r)["allure-id-valid"]["ok"])
+
+    def test_one_id_among_cases_without_ids_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = _write(tmp, PLAN_BUSINESS_MODE
+                          .replace("## Conflicts\n", CASE_TC3 + "## Conflicts\n", 1)
+                          .replace("### TC-2 · Reject bad password\n",
+                                   "### TC-2 · Reject bad password\n- allure-id: 12907\n", 1))
+            r = validate(plan, None)
+            self.assertEqual("PASS", r["outcome"])
+            check = _checks(r)["allure-id-valid"]
+            self.assertTrue(check["ok"])
+            self.assertIn("1/3", check["detail"])
+
+    def test_allure_id_is_not_a_required_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, PLAN_BUSINESS_MODE), None)
+            self.assertTrue(_checks(r)["required-fields"]["ok"])
+            self.assertNotIn("allure-id", _checks(r)["required-fields"]["detail"])
 
 
 if __name__ == "__main__":
