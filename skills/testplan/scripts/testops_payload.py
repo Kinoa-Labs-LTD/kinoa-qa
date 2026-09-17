@@ -2,9 +2,12 @@
 identity is the Allure case id assigned on first creation and carried in the plan as
 `allure-id:` — never a value derived from the case's content. stdlib-only, no network."""
 import re
+from plan_parser import E2E_SCOPE, STORY_SCOPE, normalise_scope
 
-# Every created case is a Draft in the manual workflow; `testLayer` is never sent.
+# A created case is a Draft in the manual workflow; an e2e-scoped one goes straight to Review.
+# The test scope changes the status and nothing else in the body.
 STATUS = "Draft"
+E2E_STATUS = "Review"
 WORKFLOW = "Manual Kinoa"
 ISSUE_INTEGRATION = "Kinoa-Allure"
 
@@ -44,25 +47,37 @@ def _description(case, tags, marker):
 TARGET_PREFIX = "Target: "
 # Both halves may be empty: a run with no `--target` emits `Target: service=; capability=`
 # and that marker must still parse, or its cases become invisible to reconciliation.
-_TARGET_RE = re.compile(r"^Target:\s*service=([^;]*);\s*capability=(.*)$", re.M)
+# `scope=` is optional in the pattern: every case written before this field existed carries
+# the two-field marker, and such a case must keep parsing or reconciliation loses it.
+_TARGET_RE = re.compile(
+    r"^Target:\s*service=([^;]*);\s*capability=([^;]*?)(?:;\s*scope=([^;]*))?$", re.M)
 
 
-def target_marker(service, capability):
-    """The description's last line: the `--target` this plan was written for. `issue = "<KEY>"`
-    returns every target's cases, so reconciliation needs this to narrow. Both halves are
-    slugified so the marker is a stable machine key, not free text."""
-    return f"{TARGET_PREFIX}service={slugify(service or '')}; capability={slugify(capability or '')}"
+def target_marker(service, capability, scope=None):
+    """The description's last line: the `--target` and test scope this plan was written for.
+    `issue = "<KEY>"` returns every target's cases, so reconciliation needs this to narrow —
+    and without `scope=` an e2e run and a Story run of one target would claim each other's
+    cases. Every half is slugified so the marker is a stable machine key, not free text."""
+    return (f"{TARGET_PREFIX}service={slugify(service or '')}; "
+            f"capability={slugify(capability or '')}; "
+            f"scope={slugify(normalise_scope(scope) or STORY_SCOPE)}")
 
 
 def parse_target(description):
-    """Read a target marker back out of a case description, as `(service, capability)`.
+    """Read a target marker back out of a case description, as `(service, capability, scope)`.
     Returns None when there is no marker — such a case was not written by this plugin under
     this format and must never be treated as a reconciliation match. An empty half is a
-    value, not an absence: ('', '') is the target of a run invoked without `--target`."""
+    value, not an absence: ('', '') is the target of a run invoked without `--target`. A
+    two-field marker written before this field existed reports `scope` as None, never as
+    `story`: "no scope recorded" and "scope is story" must stay distinguishable."""
     if not description:
         return None
     m = _TARGET_RE.search(description)
-    return (m.group(1).strip(), m.group(2).strip()) if m else None
+    if not m:
+        return None
+    scope = m.group(3)
+    return (m.group(1).strip(), m.group(2).strip(),
+            scope.strip() if scope is not None else None)
 
 
 def _step_payload(step):
@@ -96,7 +111,7 @@ def _custom_fields(custom_fields):
     return out
 
 
-def case_to_payload(case, *, story, service, capability, custom_fields):
+def case_to_payload(case, *, story, service, capability, custom_fields, scope=None):
     """Shared TestOps create/update body. Caller adds projectId (create) or id (update).
     `story` is the Jira key, linked via `issues`; `custom_fields` are the four values from
     the resolver. No `links`, no `testLayer`, no tags beyond `qa-generated` — identity is the
@@ -108,10 +123,10 @@ def case_to_payload(case, *, story, service, capability, custom_fields):
     tags = case["tags"]
     return {
         "name": case["title"],
-        "description": _description(case, tags, target_marker(service, capability)),
+        "description": _description(case, tags, target_marker(service, capability, scope)),
         "precondition": tags.get("preconditions", ""),
         "expectedResult": tags.get("expected", ""),
-        "status": STATUS,
+        "status": E2E_STATUS if normalise_scope(scope) == E2E_SCOPE else STATUS,
         "workflow": WORKFLOW,
         "issues": [{"name": ISSUE_INTEGRATION, "value": story.strip()}],
         "customFields": _custom_fields(custom_fields),

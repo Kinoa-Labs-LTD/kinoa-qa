@@ -689,6 +689,124 @@
           "evidence": ""
         }
       ]
+    },
+    {
+      "id": 14,
+      "name": "e2e-scope-plan-lands-in-the-e2e-scope",
+      "fixture": "e2e-scope",
+      "prompt": "Test scope, e2e. fixtures/e2e-scope/test-plan.md is an approved plan whose header declares `scope: e2e` and whose TC-1 step 1 carries THREE `→ expected:` lines. Allure TestOps is SIMULATED; skills/testplan/scripts/validate_test_plan.py, plan_parser.py, testops_fields.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Validate the plan; read its test scope with plan_parser.parse_header (never guess it from the filename or the content); resolve the custom fields with testops_fields.resolve_custom_fields(story_key='KING-22797', story_title='As a player I want my claimed reward to reach my balance', story_field='In-App Rewards', component='kinoa-in-app', scope=<the header's scope>); then build TC-1's payload with testops_payload.case_to_payload(..., story='KING-22797', service='kinoa-in-app', capability='rewards-claim', scope=<the header's scope>) and read the description's marker back with testops_payload.parse_target. Report the validator's exit code and RESULT line, the resolved custom fields, the full payload, and what Gate 0b would look up. Then state what a `--feature \"Milestones\"` passed alongside this e2e scope does.",
+      "expected_output": "The validator exits 0 with RESULT: PASS — three expected results on one step are allowed because the header says `scope: e2e`. parse_header returns scope 'e2e' (the header is the source of truth). resolve_custom_fields with scope='e2e' returns Feature = 'e2e scope' — set in the resolver, so Gate 0b verifies exactly the value that ships — alongside Suite = '[KING-22797] As a player I want my claimed reward to reach my balance', Story = 'In-App Rewards' and Component = 'kinoa-in-app'. case_to_payload with scope='e2e' returns status 'Review'; TC-1's step 1 carries three expected_body blocks in the plan's order and step 2 carries one; the description's last line is 'Target: service=kinoa-in-app; capability=rewards-claim; scope=e2e' and parse_target returns the 3-tuple ('kinoa-in-app', 'rewards-claim', 'e2e'); tags are exactly ['qa-generated'] and issues carry KING-22797. An explicit --feature under scope e2e is an ERROR naming both values, not a silent discard.",
+      "files": [
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan.md"
+      ],
+      "assertions": [
+        {
+          "text": "validate_test_plan.py is run for real against fixtures/e2e-scope/test-plan.md and exits 0 with RESULT: PASS — the three → expected: lines on TC-1 step 1 are accepted because the header declares scope: e2e",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The run's test scope is read from the plan header with plan_parser.parse_header (run for real), which returns scope 'e2e' — it is never inferred from the filename, the fixture directory or the case text",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "testops_fields.resolve_custom_fields(..., scope='e2e') is run for real and returns Feature = 'e2e scope', and the run states this is the value Gate 0b looks up — the override is in the resolver, before the pre-flight, not inside the payload builder",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The same resolved fields carry Suite = '[KING-22797] As a player I want my claimed reward to reach my balance' — an e2e case still gets its Story's Suite",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "testops_payload.case_to_payload(..., scope='e2e') is run for real and the payload's status is 'Review', not 'Draft'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "TC-1's step 1 emits THREE expected_body blocks, in the plan's order, and step 2 emits one — the extra expected results each become their own block rather than being merged or dropped",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The description's last line is the marker 'Target: service=kinoa-in-app; capability=rewards-claim; scope=e2e', and testops_payload.parse_target run for real on that description returns the 3-tuple ('kinoa-in-app', 'rewards-claim', 'e2e')",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Apart from status and Feature the payload is the ordinary one: tags exactly ['qa-generated'], the Story link issue KING-22797, Story and Component as passed by the caller — no Component is forced by the scope",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Passing --feature alongside scope e2e is reported as an error naming both the passed feature and 'e2e scope', and no payload is built from a silently discarded --feature",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "test-scope-is-honoured-not-guessed",
+      "fixture": "e2e-scope",
+      "prompt": "Test scope, the negative half. Four checks, all against REAL runs of skills/testplan/scripts (validate_test_plan.py, plan_parser.py, testops_fields.py, testops_payload.py, plan_writer.py) — Allure TestOps is SIMULATED and no push happens here. (a) fixtures/e2e-scope/test-plan-story-scope.md is the SAME plan with `scope: story`: validate it. (b) fixtures/e2e-scope/test-plan-unknown-scope.md is the same plan with `scope: integration`: validate it. (c) fixtures/business-only/test-plan.md declares NO scope: report what parse_header says about its scope, then build its TC-1 payload with resolve_custom_fields(story_key='KING-18454', story_title='T', story_field='S', component='C', feature='Milestones') and case_to_payload(..., service='svc', capability='cap') passing the scope the consumer derives. (d) A regeneration: merge fixtures/e2e-scope/regenerated-plan.md (no `scope:` line) onto fixtures/e2e-scope/previous-plan.md (`scope: e2e`, TC-1 carrying allure-id 13401) with plan_writer.merge_allure_ids and report report['scope'] and whether the merged plan still validates. Report every command, exit code and RESULT line.",
+      "expected_output": "(a) Story scope exits 1: required-fields FAILs with \"TC-1: step 1 has 3 expected results (exactly one is allowed)\" — the KING-22795 rule is untouched for Story-scoped plans; scope-valid itself PASSes. (b) `scope: integration` exits 1 with scope-valid FAILing: \"unrecognised scope 'integration' — allowed: e2e, story (or omit the field for Story scope)\" — the value is named with the allowed set and is never silently read as Story. (c) parse_header returns NO 'scope' key at all for a plan that declares none — absent is not defaulted in the parser; the consumer applies absent-means-story, so the payload's status is 'Draft', Feature is the caller's 'Milestones', and the marker still reads scope=story. (d) merge_allure_ids reports scope {previous: 'e2e', new: None, effective: 'e2e', carried_forward: True, changed: False} — the regenerated plan inherits the previous plan's e2e scope instead of being silently demoted, TC-1 keeps allure-id 13401, and the merged plan validates 0/PASS because the carried-forward e2e scope re-admits the multi-expected step (validated on its own, the raw regenerated plan FAILs it).",
+      "files": [
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan-story-scope.md",
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan-unknown-scope.md",
+        "skills/testplan/evals/fixtures/e2e-scope/previous-plan.md",
+        "skills/testplan/evals/fixtures/e2e-scope/regenerated-plan.md",
+        "skills/testplan/evals/fixtures/business-only/test-plan.md"
+      ],
+      "assertions": [
+        {
+          "text": "test-plan-story-scope.md — the same plan marked scope: story — is validated for real and exits 1, with required-fields FAILing and naming the step: 'TC-1: step 1 has 3 expected results (exactly one is allowed)'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "That Story-scoped failure is the multi-expected rule, not the scope value: scope-valid itself PASSes on 'story', so the e2e relaxation is proven not to leak into Story scope",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "test-plan-unknown-scope.md (scope: integration) is validated for real, exits 1, and scope-valid FAILs naming both the offending value and the allowed set: \"unrecognised scope 'integration' — allowed: e2e, story (or omit the field for Story scope)\"",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "An unrecognised scope is never coerced to story or to e2e — the run states it cannot reach Step E at all",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "plan_parser.parse_header run for real on fixtures/business-only/test-plan.md returns a dict with NO 'scope' key — the parser does not default; the run says the absent-means-story default is applied by the consumer",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "That no-scope plan's TC-1 payload, built for real, has status 'Draft', Feature = the caller's 'Milestones' (unchanged by scope), and a marker reading 'scope=story'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "plan_writer.merge_allure_ids(previous, new) is run for real for the regeneration that dropped scope:, and report['scope'] is exactly {previous: 'e2e', new: None, effective: 'e2e', carried_forward: True, changed: False}",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The merged plan text carries 'scope: e2e' in its header and TC-1 keeps '- allure-id: 13401' — the regeneration neither demotes the plan to Story scope nor loses the id",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The merged plan is validated for real and exits 0/PASS, while the raw regenerated-plan.md validated on its own exits 1 on the multi-expected step — showing the carry-forward, not a weakened rule, is what keeps it valid",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
     }
   ]
 }

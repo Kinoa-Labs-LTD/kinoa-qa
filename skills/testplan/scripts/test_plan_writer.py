@@ -5,6 +5,7 @@ import unittest
 import io
 import subprocess
 import tempfile
+from plan_parser import parse_header
 from plan_writer import (merge_allure_ids, insert_allure_id, build_arg_parser,
                          print_report)
 
@@ -302,6 +303,98 @@ class TestCliErrorPath(unittest.TestCase):
         self.assertEqual("", r.stdout)
         self.assertIn("cannot read --new", r.stderr)
         self.assertNotIn("Traceback", r.stderr)
+
+
+def _with_scope(plan_text, scope):
+    """The same plan with `scope: <value>` in its header prologue."""
+    return plan_text.replace("## Cases", "scope: %s\n\n## Cases" % scope, 1)
+
+
+class TestScopeIsCarriedForward(unittest.TestCase):
+    """The merge emits the NEW plan's header verbatim, so a regeneration whose subagent
+    drops `scope:` would silently demote an e2e plan to Story scope and the next push would
+    write Draft over real e2e cases. The previous scope is carried forward, and a scope that
+    really changed is reported at the gate rather than accepted in silence."""
+
+    def test_a_new_plan_with_no_scope_inherits_the_previous_one(self):
+        merged, report = merge_allure_ids(_with_scope(PREVIOUS, "e2e"), REGENERATED)
+        self.assertEqual(parse_header(merged).get("scope"), "e2e")
+        self.assertEqual(report["scope"]["effective"], "e2e")
+        self.assertTrue(report["scope"]["carried_forward"])
+        self.assertFalse(report["scope"]["changed"])
+
+    def test_carrying_the_scope_forward_leaves_the_cases_alone(self):
+        merged, report = merge_allure_ids(_with_scope(PREVIOUS, "e2e"), REGENERATED)
+        self.assertIn("### TC-1 · Dropdown populates with destination projects\n"
+                      "- allure-id: 12907\n- type: functional", merged)
+        self.assertEqual([c["allure_id"] for c in report["carried"]], ["12907"])
+
+    def test_a_changed_scope_is_reported_not_silently_accepted(self):
+        merged, report = merge_allure_ids(_with_scope(PREVIOUS, "e2e"),
+                                          _with_scope(REGENERATED, "story"))
+        self.assertTrue(report["scope"]["changed"])
+        self.assertEqual(report["scope"]["previous"], "e2e")
+        self.assertEqual(report["scope"]["new"], "story")
+        # Reported, not reverted: the merge reports and the human gate decides.
+        self.assertEqual(report["scope"]["effective"], "story")
+        self.assertEqual(parse_header(merged).get("scope"), "story")
+
+    def test_an_unchanged_scope_is_reported_as_unchanged(self):
+        merged, report = merge_allure_ids(_with_scope(PREVIOUS, "e2e"),
+                                          _with_scope(REGENERATED, "e2e"))
+        self.assertFalse(report["scope"]["changed"])
+        self.assertFalse(report["scope"]["carried_forward"])
+        self.assertEqual(report["scope"]["effective"], "e2e")
+        self.assertEqual(parse_header(merged).get("scope"), "e2e")
+
+    def test_no_scope_on_either_side_stays_absent(self):
+        merged, report = merge_allure_ids(PREVIOUS, REGENERATED)
+        self.assertNotIn("scope", parse_header(merged))
+        self.assertEqual(report["scope"], {"previous": None, "new": None, "effective": None,
+                                           "carried_forward": False, "changed": False})
+
+    def test_a_first_run_takes_the_new_plans_scope(self):
+        merged, report = merge_allure_ids("", _with_scope(REGENERATED, "e2e"))
+        self.assertEqual(report["scope"]["effective"], "e2e")
+        self.assertFalse(report["scope"]["changed"])
+        self.assertEqual(parse_header(merged).get("scope"), "e2e")
+
+    def test_a_new_scope_where_the_previous_plan_had_none_is_not_a_change(self):
+        merged, report = merge_allure_ids(PREVIOUS, _with_scope(REGENERATED, "e2e"))
+        self.assertFalse(report["scope"]["changed"])
+        self.assertEqual(report["scope"]["previous"], None)
+        self.assertEqual(report["scope"]["effective"], "e2e")
+
+    def test_the_gate_view_names_a_scope_change(self):
+        _, report = merge_allure_ids(_with_scope(PREVIOUS, "e2e"),
+                                     _with_scope(REGENERATED, "story"))
+        buf = io.StringIO()
+        print_report(report, buf)
+        self.assertIn("SCOPE", buf.getvalue())
+        self.assertIn("e2e", buf.getvalue())
+        self.assertIn("story", buf.getvalue())
+
+
+
+class EmptyScopeTest(unittest.TestCase):
+    """An empty `scope:` is a declared, invalid scope — not an absent one. Carrying the
+    previous value forward there would emit a second `scope:` line, and parse_header is
+    last-wins, so a plan the validator must FAIL would read as the old scope instead."""
+
+    PREVIOUS = "story: KING-1\nscope: e2e\n\n## Cases\n\n### TC-1 · A\n- allure-id: 5\n"
+
+    def test_an_empty_scope_is_not_overwritten(self):
+        new = "story: KING-1\nscope:\n\n## Cases\n\n### TC-1 · A\n"
+        merged, report = merge_allure_ids(self.PREVIOUS, new)
+        self.assertEqual([l for l in merged.split("\n") if l.startswith("scope")], ["scope:"])
+        self.assertFalse(report["scope"]["carried_forward"])
+        self.assertEqual(parse_header(merged).get("scope"), "")
+
+    def test_an_absent_scope_is_still_carried_forward(self):
+        new = "story: KING-1\n\n## Cases\n\n### TC-1 · A\n"
+        merged, report = merge_allure_ids(self.PREVIOUS, new)
+        self.assertTrue(report["scope"]["carried_forward"])
+        self.assertEqual(parse_header(merged).get("scope"), "e2e")
 
 
 if __name__ == "__main__":

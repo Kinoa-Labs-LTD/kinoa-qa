@@ -20,10 +20,23 @@ story: <STORY-KEY> · title: <story title> · target: <service>/<capability>@<re
 prd: <resolved | none (<reason>)>
 openspec: <<capability>@<sha12> | none | none (<reason>)>
 design: <<backend> | none (<reason>)>
+scope: <e2e | story>
 ```
 > `title:` is the Jira Story summary verbatim, on the same logical line as `story:`. It is
 > required: Step E composes the `Suite` custom field as `[<STORY-KEY>] <story title>` by
 > reading it back from this header, so a Step E re-run in a fresh session needs no Jira call.
+> `scope:` is written only when the plan has one; omit the line entirely for a
+> Story-scoped plan. It is the plan's **test scope** — "in-scope set" keeps its own meaning, the
+> reconciliation set. It is optional, written on its own line, and takes exactly two values:
+> `e2e` or `story`. **Absent means `story`**, so every plan written before this field stays
+> valid; the default is applied by the consumer (the validator and Step E), never by the
+> parser, so "this plan says `story`" and "this plan says nothing" stay distinguishable and a
+> regeneration that drops the field is reported rather than silently demoting an e2e plan.
+> Any other value — `E2E`, `integration`, an empty value — FAILs validation (`scope-valid`)
+> naming the value and the allowed set. One run produces one kind of test.
+> `scope:` is **never sent to TestOps as a payload field of its own.** It changes exactly two
+> other values (see the mapping table below) and nothing else: `Suite`, `Story`, `Component`,
+> `issues`, tags and the description are identical in both scopes.
 > The `openspec:` and `design:` lines are informational. `openspec: none` is the ordinary
 > path — a service repo may simply have no OpenSpec files; only a spec the QA engineer
 > explicitly asked for, or a resolver error, carries a `(<reason>)` and warns at the gate.
@@ -90,11 +103,20 @@ Field order is fixed: `allure-id`, `type`, `priority`, `purpose`, `source`, `ope
 
 ### Per-step expected results
 
-`steps` are `  N. <action>` numbered lines. Every step MUST carry **exactly one**
-`     → expected: <result>` line on the line below it — no more and no less. A step with none
-and a step with two both FAIL the validator (`required-fields`), because a TestOps step maps
-to exactly one `expected_body` block. The case-level `expected:` stays: it is the overall pass
-condition, not a repeat of the last step.
+`steps` are `  N. <action>` numbered lines. Every step MUST carry **at least one**
+`     → expected: <result>` line below it; how many more are allowed depends on the plan's
+test scope:
+
+- **Story scope** (`scope: story`, or no `scope:` line) — **exactly one** per step, no more and
+  no less. A step with two FAILs the validator (`required-fields`) naming it:
+  `step N has M expected results (exactly one is allowed)`.
+- **`scope: e2e`** — a step **may carry several** `→ expected:` lines, written one under the
+  other. Each becomes its **own `expected_body` block** in that step's `expectedResultSteps`,
+  in the order written.
+
+A step with **no** expected result FAILs under **both** scopes — `step N has no expected
+result` — because a TestOps step body without an expected block asserts nothing. The
+case-level `expected:` stays: it is the overall pass condition, not a repeat of the last step.
 
 Worked example:
 
@@ -178,12 +200,13 @@ exemption is gone and the scenario needs its case or its Gap line.
 | `type` / `priority` | not pushed — no `type-*` / `priority-*` tags |
 | `source` | not pushed — it is provenance for the reader of the plan only |
 | `preconditions` | `precondition` (newline-separated) |
-| `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped, exactly one `expected_body` per step |
+| `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped; one `expected_body` per `→ expected:` line, in order — exactly one under Story scope, one or more under `scope: e2e` |
 | `expected` | `expectedResult` — the case-level pass condition |
 | `title:` header | `customFields.Suite` = `[<STORY-KEY>] <story title>`, composed from the header — never re-fetched from Jira |
 | — | `customFields`: `Story` / `Component` / `Feature` from `--story-field` / `--component` / `--feature` or their `config.json` defaults (shipped empty) |
 | `story:` header | `issues` = `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array |
-| — | `status` = `"Draft"`, `workflow` = `"Manual Kinoa"`; `testLayer` is never sent |
+| `scope:` header | **not sent as a field.** It changes two values only: under `scope: e2e`, `customFields.Feature` = `"e2e scope"` and `status` = `"Review"`. Under `scope: story` or an absent `scope:`, `Feature` comes from the caller as before and `status` stays `"Draft"` |
+| — | `status` = `"Draft"`, or `"Review"` under `scope: e2e`; `workflow` = `"Manual Kinoa"`; `testLayer` is never sent |
 | — | `tags` = `qa-generated`, and nothing else |
 
 **Tag policy: `qa-generated` only.** It is the only fleet-level handle for finding or

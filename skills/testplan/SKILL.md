@@ -7,7 +7,7 @@ description: Build a validator-checked QA test plan from a Jira Story (+ optiona
 
 `/kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>]
 [--openspec-path <dir>] [--story-field <value>] [--component <value>] [--feature <value>]
-[--allow-unverified-fields] [--dry-run]`
+[--scope e2e|story] [--allow-unverified-fields] [--dry-run]`
 
 "Spec" in this plugin means an OpenSpec `spec.md` file generated from service-repo code;
 a Confluence PRD/HLD is never called a "spec" here.
@@ -50,11 +50,13 @@ is required; PRD, mockups and specs degrade independently. Never write.
 **The plan lives at one stable path per Story and target:**
 
 ```
-~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>.test-plan.md
+~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<scope>.test-plan.md
 ```
 `<service>` and `<capability>` come from `--target`; lowercase them and replace every
-character outside `[a-z0-9]` with `-`. A run with no `--target` uses
-`<STORY-KEY>-no-target.test-plan.md`. The path is **not** the invoking directory and **not**
+character outside `[a-z0-9]` with `-`. `<scope>` is the run's **test scope**, `e2e` or
+`story` — always written, `story` included, so the two scopes of one Story and target are two
+files that never overwrite or reconcile against each other. A run with no `--target` uses
+`<STORY-KEY>-no-target-<scope>.test-plan.md`. The path is **not** the invoking directory and **not**
 a service repo (those are READ-ONLY): a plan written to the cwd is per-run, so the
 `allure-id:` values in it are lost the moment the QA engineer runs from somewhere else.
 The file is a machine-local cache, never committed — one plan per `--target` so two targets
@@ -65,6 +67,16 @@ stable path, so an interrupted or concurrent run never leaves a half-written pla
 the directory is a cache the QA engineer may delete at will, whole or per file — the cost is the
 assigned ids, so the next run for that Story+target reconciles every case at the reconciliation
 gate instead of updating by id. Nothing else is lost; nothing prunes it automatically.
+
+**The test scope of the run.** `--scope` takes `e2e` or `story` and defaults to `story`; the
+plan declares it as a `scope:` header field (`references/test-plan-format.md`), and **the header
+is the source of truth** from then on. Step B writes the scope into the header of the plan it
+generates. When a plan already exists at the stable path, its header wins: a `--scope` that
+**disagrees** with it **aborts** the run, naming both values — flipping an already-pushed plan's
+scope would rewrite every case's `status` and `Feature` in TestOps. To change a plan's scope,
+the QA engineer edits the `scope:` line in the file (or deletes the plan), deliberately. An
+unrecognised value never gets past Step C: `scope-valid` FAILs it naming the value and the
+allowed set.
 
 **Read the previous plan at that path before generating.** If it exists, pass its full text
 to the subagent as `previous_plan`. Dispatch a subagent with the SoT bundle +
@@ -81,6 +93,12 @@ machine-readable report). Capture stdout; that is what gets written to the stabl
 non-zero exit means no merged plan — do **not** write the subagent's plan instead, or every
 assigned id is lost. On a first run there is no previous plan: skip the merge, write the
 subagent's plan as-is, and every case is "new" at the gate.
+
+The merge also **carries the previous plan's `scope:` forward** when the regenerated plan omits
+it, so a subagent that drops the field cannot silently demote an e2e plan to Story scope. A
+scope that genuinely **changed** is reported, never reverted — the report's `scope` entry drives
+a `SCOPE CHANGED <a> → <b>` line shown at the Step D gate with the identity merge, for the QA
+engineer to accept or correct in the file.
 
 The merge re-applies the **mechanical** half — a case whose title is unchanged (ignoring case
 and whitespace runs) keeps its id whether or not the subagent carried it — and reports the
@@ -109,7 +127,7 @@ exempt, and a case citing such an AC is itself a failure), `gap-honesty` (requir
 scenario-level), `conflict-resolution`, `openspec-ref-valid`, `design-ref-valid`.
 
 ## Step D — Human gate
-Present the validated plan from `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>.test-plan.md`
+Present the validated plan from `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<scope>.test-plan.md`
 to the QA engineer, naming that path. **Nothing has touched TestOps yet.**
 
 Read `## Conflicts` out **first** — before anything else — naming each unresolved
@@ -121,7 +139,10 @@ catch a bad merge before Step E writes. List, from `merge_allure_ids`' report:
 - **kept an id** — case, title, `allure-id` (carried forward, or already in the plan);
 - **new** — case and title with no id: Step E will reconcile or create it;
 - **ids in the previous plan no case claimed** — a replaced or deleted case; the TestOps
-  case it points at is left alone.
+  case it points at is left alone;
+- **`SCOPE CHANGED <a> → <b>`**, when the regenerated plan's test scope differs from the
+  previous one's — a push would rewrite every case's `status` and `Feature`, so the QA engineer
+  confirms the change or restores the `scope:` line before Step E.
 
 A case in the "new" list that the QA engineer recognises as a rewording of a kept case is
 corrected **in the file** by hand (`- allure-id: <id>` as the first field) and Step C
@@ -149,7 +170,11 @@ the whole creation silently on an unknown value. Each of `Story`/`Component`/`Fe
 from its flag (`--story-field` / `--component` / `--feature`), else the matching
 `testops.custom_fields.*` default in `config.json`, else the run aborts; the shipped defaults
 are **empty** on purpose, so a default run needs the flags. `Suite` is composed from the plan
-header. The verification is a by-value case lookup, so it proves a value is *in use*, not that
+header. The **test scope** is read from the same header with `plan_parser.parse_header`
+(absent = `story`) and passed to **both** `resolve_custom_fields` and `case_to_payload`: under
+`scope: e2e` the resolver sets `Feature = "e2e scope"` before Gate 0b looks it up — an explicit
+`--feature` there is an error — and the payload's `status` is `"Review"` instead of `"Draft"`.
+Nothing else in the payload differs between the scopes. The verification is a by-value case lookup, so it proves a value is *in use*, not that
 it exists; `--allow-unverified-fields` downgrades that one check to a warning. Details, order
 and the exact calls are in `references/testops-sync.md` (Gate 0).
 Otherwise follow `references/testops-sync.md`. **Identity is the assigned Allure case id, not
@@ -161,7 +186,8 @@ anything derived from the case's content.** Per case, its `- allure-id:` decides
   reconciliation — never re-created silently under the missing id.
 - **id absent** — reconcile, never create blind: one
   `testops_find_testcases(aql='issue = "<STORY-KEY>"')` (the AQL field is `issue`, **singular**)
-  narrowed to this run's target by the `Target:` marker in the description, a proposed mapping
+  narrowed to this run's target **and test scope** by the `Target: service=…; capability=…;
+  scope=…` marker in the description, a proposed mapping
   shown at the **reconciliation gate**, and a create only for what the QA engineer confirms is
   new. **Any** unidentified case against a non-empty in-scope set — a mixed plan included, not
   just a plan with no ids at all — **writes nothing** for any case until a mapping is confirmed;
@@ -187,6 +213,10 @@ are printed; nothing is written and it never refuses.
 | The plan at the stable path is unreadable (permissions, corrupt, not parseable as a plan) | **Never overwrite it.** Stop before generating, name the path and the reason, and let the QA engineer move or repair it — regenerating over it would destroy the only copy of the assigned ids. |
 | Two Step B runs write the same Story+target plan concurrently, or a write is interrupted | Write-to-temp-then-`rename` keeps the file whole — it is either the old plan or the new one, never a partial. The writes are **not** serialised: last writer wins, so a plan merged from a stale read can lose ids added meanwhile. Two engineers on one box, or two terminals, must not run Step B for the same Story+target at once. |
 | `~/.kinoa-qa/plans/` cannot be created or written | Stop before Step B naming the path; nothing is generated, because a plan that cannot be persisted loses its ids again. |
+| `--scope` is neither `e2e` nor `story`, or a plan header carries an unrecognised `scope:` | Step C FAILs (`scope-valid`) naming the value and the allowed set, so the run stops before the gate. An unrecognised scope is never read as Story-scoped. |
+| `--scope` disagrees with the `scope:` already in the plan at the stable path | **Abort before generating**, naming both values. The header is the source of truth; flipping it would rewrite every already-pushed case's `status` and `Feature`. The QA engineer edits the `scope:` line in the file, or deletes the plan, to change it deliberately. |
+| The test scope changed between the previous plan and the regenerated one | The merge **reports** it (`SCOPE CHANGED <a> → <b>`) and never reverts it; a regenerated plan that simply **omits** `scope:` inherits the previous plan's, so an e2e plan is never silently demoted. The change is shown at the Step D gate and Step E proceeds only on approval. |
+| A plan exists at the old three-segment path `<STORY-KEY>-<service>-<capability>.test-plan.md` | It is **not found** — the stable path now carries the scope — so the run generates as a first run and every case comes back with no `allure-id:`. Nothing is overwritten and nothing is lost: Step E reconciles against TestOps at the reconciliation gate. To keep the ids, the QA engineer renames the old file to the four-segment path (adding `-story`, the scope it was written under) before Step B. |
 | Thin spec (requirement, no scenario) | `⚠️ GAP` line, no invented case. |
 | Spec contradicts Story/PRD | `⚠️ CONFLICT:` line (`openspec` vs the business side); the business `expected` is never overridden; HOLD. |
 | Business sources contradict each other (no precedence — HOLD) | Story vs PRD vs mockup: `⚠️ CONFLICT:` naming every side with its artifact; no winner picked; the contradicted AC yields **no case**; HOLD. |
@@ -198,6 +228,7 @@ are printed; nothing is written and it never refuses.
 | A custom-field value is used by no existing case (it may still exist in Allure) | Abort at Step E's Gate 0b naming the field and the value. Re-run with `--allow-unverified-fields` to downgrade it to a warning when the value was just created in Allure and no case uses it yet. |
 | A plan has at least one unidentified case and the target already has in-scope cases (a mixed plan included) | Step E **writes nothing** — no create, no update. It prints the proposed mapping and the orphan list and stops until the QA engineer confirms a mapping; an unattended run aborts non-zero rather than creating blind. |
 | An `allure-id` no longer exists in TestOps | Not a crash: report `allure-id <id> for TC-<n> no longer exists in project KINOA`, treat that case as unidentified and let it reconcile with the rest. Never create silently under the missing id. |
+| A TestOps case carries a two-field `Target:` marker, written before the test scope existed | Its scope reads as unrecorded, never as `story`, so it matches no run and is reported once rather than silently claimed by the first scope that pushes. It is never an orphan the plugin acts on: the QA engineer adopts it by adding its `- allure-id:` to the plan by hand. |
 | An `allure-id` resolves to a case without `qa-generated` or with a different Story | That case is skipped and the mismatch is named; nothing is written for it. The plugin never overwrites a case it cannot prove it wrote. |
 | TestOps write fails mid-batch | No rollback — cases already created have their ids written back into the plan, so a re-run updates them instead of duplicating. |
 | TestOps unreachable | The plan is on disk at the stable path; re-run Step E later. |
@@ -209,6 +240,10 @@ are printed; nothing is written and it never refuses.
   carried forward in the plan as `- allure-id:` — an id present is updated in place after
   the verification read, an id absent is reconciled against the Story and target and
   confirmed by the QA engineer before anything is written. No duplicates on re-run.
+- **The plan header is the source of truth for the test scope.** `--scope` sets it when a
+  plan is first written; afterwards a disagreeing `--scope` aborts rather than flipping cases
+  already in TestOps. Absent means `story`. One run produces one kind of test, and the two
+  scopes of a Story never share a plan file or a reconciliation in-scope set.
 - No fabrication — untestable/scenario-less → `⚠️ GAP`, never an invented case.
 - **A spec never overrides a business expected result; conflicts are surfaced, never
   resolved.**

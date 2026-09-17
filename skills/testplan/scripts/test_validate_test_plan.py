@@ -766,5 +766,172 @@ class TestAllureIdValid(unittest.TestCase):
             self.assertNotIn("allure-id", _checks(r)["required-fields"]["detail"])
 
 
+# A header prologue in front of PLAN_BUSINESS_MODE, so the scope value can be varied.
+def _with_scope(scope):
+    """PLAN_BUSINESS_MODE preceded by a real header; `scope` None means the field is absent."""
+    header = ("story: KING-1 · title: A story title · target: svc/cap@main · "
+              "generated: 2026-09-17\n")
+    if scope is not None:
+        header += f"scope: {scope}\n"
+    return PLAN_BUSINESS_MODE.replace("## Acceptance Criteria",
+                                      header + "\n## Acceptance Criteria", 1)
+
+
+class ScopeValidTest(unittest.TestCase):
+    def _check(self, scope):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, _with_scope(scope)), None)
+            return r, _checks(r)["scope-valid"]
+
+    def test_e2e_passes(self):
+        r, check = self._check("e2e")
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_story_passes(self):
+        r, check = self._check("story")
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_an_absent_scope_passes(self):
+        r, check = self._check(None)
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_a_plan_with_no_header_at_all_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, PLAN_BUSINESS_MODE), None)
+            self.assertTrue(_checks(r)["scope-valid"]["ok"])
+
+    def test_uppercase_e2e_fails_naming_the_value_and_the_allowed_set(self):
+        r, check = self._check("E2E")
+        self.assertFalse(check["ok"])
+        self.assertIn("E2E", check["detail"])
+        self.assertIn("e2e", check["detail"])
+        self.assertIn("story", check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_an_unrecognised_value_fails_naming_it(self):
+        r, check = self._check("integration")
+        self.assertFalse(check["ok"])
+        self.assertIn("integration", check["detail"])
+        self.assertIn("e2e", check["detail"])
+        self.assertIn("story", check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+
+    def test_an_empty_value_fails(self):
+        r, check = self._check("")
+        self.assertFalse(check["ok"])
+        self.assertIn("e2e", check["detail"])
+        self.assertIn("story", check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+
+    def test_scope_is_not_a_required_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, _with_scope(None)), None)
+            self.assertTrue(_checks(r)["required-fields"]["ok"])
+            self.assertNotIn("scope", _checks(r)["required-fields"]["detail"])
+
+
+# --- 2.1 several expected results per step are an e2e-only relaxation -------
+TWO_EXPECTED_STEP = ("  1. sign in\n     \u2192 expected: the session opens\n"
+                     "     \u2192 expected: the dashboard loads\n")
+ONE_EXPECTED_STEP = "  1. sign in\n     \u2192 expected: the session opens\n"
+
+
+def _with_scope_and_steps(scope, steps):
+    """`_with_scope` with TC-1's single step replaced by `steps`."""
+    return _with_scope(scope).replace(ONE_EXPECTED_STEP, steps, 1)
+
+
+class MultiExpectedPerStepTest(unittest.TestCase):
+    def _validate(self, scope, steps=TWO_EXPECTED_STEP):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, _with_scope_and_steps(scope, steps)), None)
+            return r, _checks(r)["required-fields"]
+
+    def test_two_expected_results_pass_under_e2e(self):
+        r, check = self._validate("e2e")
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual("PASS", r["outcome"])
+        self.assertEqual(0, r["exit_code"])
+
+    def test_two_expected_results_fail_under_story_naming_the_step(self):
+        r, check = self._validate("story")
+        self.assertFalse(check["ok"])
+        self.assertEqual("TC-1: step 1 has 2 expected results (exactly one is allowed)",
+                         check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_two_expected_results_fail_with_the_scope_absent(self):
+        r, check = self._validate(None)
+        self.assertFalse(check["ok"])
+        self.assertEqual("TC-1: step 1 has 2 expected results (exactly one is allowed)",
+                         check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_three_expected_results_pass_under_e2e(self):
+        r, check = self._validate(
+            "e2e", TWO_EXPECTED_STEP + "     \u2192 expected: the badge clears\n")
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual(0, r["exit_code"])
+
+    def test_a_step_with_no_expected_result_fails_under_e2e(self):
+        r, check = self._validate("e2e", ONE_EXPECTED_STEP + "  2. open the dashboard\n")
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1: step 2 has no expected result", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_a_step_with_no_expected_result_fails_under_story(self):
+        r, check = self._validate("story", ONE_EXPECTED_STEP + "  2. open the dashboard\n")
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1: step 2 has no expected result", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_a_blank_expected_result_still_fails_under_e2e(self):
+        r, check = self._validate("e2e", "  1. sign in\n     \u2192 expected:\n")
+        self.assertFalse(check["ok"])
+        self.assertIn("step 1 has no expected result", check["detail"])
+
+
+# --- 2.2 the Story-scoped rejection is byte-identical to before -------------
+class StoryScopeMultiExpectedUnchangedTest(unittest.TestCase):
+    """Pins the rule KING-22795 shipped: under Story scope the check name, the message and
+    the exit code of a multi-expected step must survive the e2e relaxation unchanged."""
+
+    EXPECTED_DETAIL = "TC-1: step 1 has 2 expected results (exactly one is allowed)"
+
+    def _report(self, scope):
+        with tempfile.TemporaryDirectory() as tmp:
+            return validate(_write(tmp, _with_scope_and_steps(scope, TWO_EXPECTED_STEP)), None)
+
+    def test_message_and_check_name_unchanged_with_the_scope_absent(self):
+        r = self._report(None)
+        check = _checks(r)["required-fields"]
+        self.assertFalse(check["ok"])
+        self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_message_and_check_name_unchanged_under_story(self):
+        r = self._report("story")
+        check = _checks(r)["required-fields"]
+        self.assertFalse(check["ok"])
+        self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_message_unchanged_on_a_headerless_plan(self):
+        # The pre-scope shape: no header at all, exactly as KING-22795 left it.
+        with tempfile.TemporaryDirectory() as tmp:
+            text = PLAN_BUSINESS_MODE.replace(ONE_EXPECTED_STEP, TWO_EXPECTED_STEP, 1)
+            r = validate(_write(tmp, text), None)
+            check = _checks(r)["required-fields"]
+            self.assertEqual("required-fields", check["name"])
+            self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
+            self.assertEqual(1, r["exit_code"])
+
+
 if __name__ == "__main__":
     unittest.main()
