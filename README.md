@@ -49,7 +49,8 @@ claude plugin install kinoa-qa@kinoa-qa
 ```
 
 Either route writes to `~/.claude/settings.json`. The result looks like this — the same shape
-the sibling `kinoa-pm` and `kinoa-dev` plugins use, and you can equally well write it by hand:
+the sibling `kinoa-pm` and `kinoa-dev` plugins use, though those point at local directories
+rather than GitHub — and you can equally well write it by hand:
 
 ```json
 {
@@ -74,12 +75,13 @@ run inherits another team's values by accident:
 "custom_fields": { "story": "", "component": "", "feature": "" }
 ```
 
-Leave them empty and every run must pass `--story-field`, `--component` and `--feature`;
-otherwise Step E stops before writing anything, naming each missing field. Fill them in and
-those flags become optional overrides. **This is the most common reason a first run stops.**
+Leave them empty and every run must pass `--story-field` and `--component`, plus
+`--feature` under Story scope; otherwise Step E stops before writing anything, naming each
+missing field. Fill them in and those flags become optional overrides. **This is the most
+common reason a first run stops.**
 
-Under `--scope e2e` the Feature is fixed to `e2e scope`, so passing `--feature` there is an
-error rather than a silent discard.
+Under `--scope e2e` the Feature is set for you to `e2e scope`, so `--feature` there is an
+**error** rather than a silent discard — pass only the other two.
 
 `services.json` maps a service name to the repo its OpenSpec files live in. A service that
 isn't listed is fine — OpenSpec input is optional throughout.
@@ -96,8 +98,11 @@ isn't listed is fine — OpenSpec input is optional throughout.
 `e2e scope`, cases created for `Review`, several expected results allowed per step), and
 `story` — the default when the flag and the plan header are both absent — keeps the caller's
 Feature and creates cases as `Draft`. One run produces one kind of test. The scope is written
-into the plan header, and from then on the header is the source of truth: a later `--scope`
-that disagrees with it aborts rather than flipping cases that were already pushed.
+into the plan header and carried forward by `plan_writer.py` when a regeneration drops it; a
+scope that changed is *reported* at the Step D gate rather than applied silently. Treating the
+header as the source of truth from then on — aborting when a later `--scope` disagrees with it
+instead of flipping cases that were already pushed — is an orchestrator rule in `SKILL.md`
+Step B, not a check any script performs.
 
 `--dry-run` prints the intended TestOps actions and writes nothing.
 
