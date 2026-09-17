@@ -4,6 +4,32 @@ Input: the SoT bundle — authoritative `{ story, acceptance, prd?, designs[] }`
 contextual `{ openspecs[] }` — assembled in Step A.
 Output: exactly one `test-plan.md` (per `references/test-plan-format.md`) + nothing else.
 
+## Carrying `allure-id:` forward (a regeneration is a merge, not a fresh write)
+
+Step B may hand you a **`previous_plan`** — the plan this Story and target produced last
+time, read from its stable path. When it is present, you are revising that plan, not
+writing a new one:
+
+- A case you **keep** — the same behaviour under test, however its title, `type:`,
+  `source:` AC number or steps have been reworded or renumbered — MUST come back carrying
+  the **same `- allure-id: <id>`, copied verbatim** from the previous plan, as the first
+  field under its heading. That id is the TestOps case's assigned identity; dropping it
+  creates a duplicate case on the next sync.
+- A case you **genuinely replace** — a different behaviour under test, not a rewording —
+  comes back with **no** `allure-id:`. Step E reconciles or creates it.
+- **Never invent, guess, derive or renumber an id.** An id may only be copied from the
+  case it belonged to in `previous_plan`. A case that had none in `previous_plan` gets
+  none from you. If you cannot tell which previous case a new case corresponds to, omit
+  the id — the human gate resolves it. A wrong id silently overwrites the wrong TestOps
+  case, which is worse than a duplicate.
+- Do not reorder or renumber `TC-<n>` handles to "match" the previous plan; the
+  `allure-id:` is the identity, `TC-<n>` is only a plan-local handle.
+- No `previous_plan` means the first run for this Story and target: no case carries an id.
+
+Step B re-applies the unambiguous part of this mechanically (`plan_writer.merge_allure_ids`
+matches identical titles), and the Step D gate shows the QA engineer which cases kept an id
+and which are new. Your judgement is needed exactly where the title changed.
+
 ## Precedence (read this first)
 
 The Jira Story, the Confluence PRD and any Figma mockup linked from the Story **decide**
@@ -56,6 +82,7 @@ grammar — this section owns the content that goes in it.
 
 | Field | Convention |
 |---|---|
+| `allure-id:` | Never authored and never invented. Copied verbatim from the same case in `previous_plan`, or absent. See "Carrying `allure-id:` forward". |
 | title (`### TC-<n> · <title>`) | A clean behavioural statement of what the system does — `Project selection dropdown populates with all accessible destination projects`. Never a `TC-` prefix inside the title, never a bare feature name, never an imperative ("Check the dropdown"). |
 | `purpose:` | **One** sentence beginning "Verify", stating what the case proves — `Verify that the Destination Project dropdown excludes the source project.` Not a restatement of the title and not a summary of the steps. |
 | `preconditions:` | The state that must hold before step 1, as statements, one per line. Several statements are newline-separated continuation lines, not a comma list. |
@@ -159,6 +186,10 @@ report `RESULT: PASS` **or** `RESULT: HOLD` on your output, and say which one an
 - Wrote any `## Conflicts` line → expect **HOLD (exit 2), and that is the correct outcome**.
   A HOLD here means the plan did its job. It is never a reason to resolve, reword, merge or
   drop a conflict line, or to pre-fill `→ resolved:`, in order to reach PASS.
+
+Also state, when a `previous_plan` was given, how many of its cases you kept with their
+`allure-id:` copied forward and which cases you replaced (and therefore returned without an
+id). A kept case that came back without its id is a defect in your output.
 
 `RESULT: FAIL` is the only outcome you must go back and fix. This is a self-check, not a
 substitute for Step C actually running the validator.
