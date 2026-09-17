@@ -15,3 +15,7 @@ on a direct run, so the file reports a false green.
 A fenced command in a skill doc is an instruction an agent will run. Before
 writing one, check the script has a `__main__` entry point — a module without
 one exits 0 and does nothing, so the step silently never happens.
+
+When you split a delimited line, a value may legitimately contain the delimiter — rejoin
+parts that do not start a new field, and prove it with a test whose value contains one.
+Two silent truncations have now shipped from this.

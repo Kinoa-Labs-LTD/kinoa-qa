@@ -30,6 +30,49 @@ Step B re-applies the unambiguous part of this mechanically (`plan_writer.merge_
 matches identical titles), and the Step D gate shows the QA engineer which cases kept an id
 and which are new. Your judgement is needed exactly where the title changed.
 
+## The test scope of the run (given, never invented)
+
+The plan carries a **test scope** in its header — `scope: e2e | story`, absent meaning `story`
+(`references/test-plan-format.md`). It is a property of the **run**, handed to you by Step B,
+not something you decide, and never something you vary per case: one run produces one kind of
+test, and every case in the plan you return belongs to that one scope. Do not add, change or
+remove the `scope:` line to suit the cases you wrote; if a `previous_plan` carries one, copy it
+through verbatim — Step B carries it forward and reports any change at the human gate. ("Test
+scope" is this field; the reconciliation *in-scope set* in `testops-sync.md` is a different
+thing.)
+
+`type: e2e` on a single case is unrelated: it is one of the six case types of the QA-lens rules
+below and says nothing about the plan's test scope.
+
+What the scope changes for you is exactly one authoring rule: **under `scope: e2e` a step may
+carry more than one `→ expected:` line**, each becoming its own `expected_body` block in
+TestOps, in order. Under `scope: story` — and with the field absent — a step carries **exactly
+one**, and a second one FAILs the validator naming the step. Under either scope a step with
+**no** expected result FAILs.
+
+### What this plugin does NOT know about e2e authoring
+
+This is a deliberate, recorded boundary, not an omission, and not something to fill in with
+judgement. The e2e suite's own authoring conventions — its **case-naming grammar**, its
+**stepper structure**, and its **publish-flow and WS/InBox blocks** — live outside this
+repository and are **not taught here**. Nothing in this file, `test-plan-format.md` or
+`SKILL.md` describes them.
+
+Therefore:
+
+- **An e2e plan is authored by the QA engineer**, who knows those conventions. Under
+  `scope: e2e` you still write what the rules in this file say: titles as clean behavioural
+  statements, `purpose:` beginning "Verify", every case grounded in an AC, one `## Conflicts`
+  and one `## Gaps` section. What this repo validates is what you must produce.
+- **Do not invent the e2e conventions.** Do not reach for a naming grammar, a four-step
+  stepper, a publish block or a WS/InBox block you have seen elsewhere or can imagine. They
+  contradict rules this repo enforces — a stepper-derived case has no acceptance criterion, and
+  `ac-coverage` is a hard fail, so following them would mean either failing validation or
+  fabricating an AC, which "No fabrication" below forbids.
+- A case you cannot ground in an AC is a `- ⚠️ GAP:` line, in an e2e plan exactly as in a
+  Story-scoped one. Porting the e2e conventions into this plugin is a separate ticket; until it
+  lands, the honest output is the plan these rules produce.
+
 ## Precedence (read this first)
 
 The Jira Story, the Confluence PRD and any Figma mockup linked from the Story **decide**

@@ -1,7 +1,8 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
-from plan_parser import parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts
+from plan_parser import (parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts,
+                         parse_header)
 
 SPEC = """## capability
 ### Requirement: Sign-in
@@ -358,6 +359,119 @@ class TestAllureIdParses(unittest.TestCase):
 
     def test_a_case_without_an_allure_id_has_no_such_tag(self):
         self.assertNotIn("allure-id", parse_cases(PLAN_WITH_ALLURE_ID)[1]["tags"])
+
+
+PLAN_HEADER = """# QA Test Plan — svc / cap
+> AUTO-GENERATED DRAFT — review, then approve to sync into Allure TestOps.
+> System of record: Allure TestOps · project KINOA. This file is a reviewable intermediate.
+
+story: KING-1 · title: A story title · target: svc/cap@main · generated: 2026-09-17
+prd: resolved
+openspec: none
+design: none
+scope: e2e
+
+## Acceptance Criteria
+- AC-1: Users can sign in
+
+## Cases
+
+### TC-1 · Happy path sign-in
+- type: functional
+- priority: P1
+- purpose: Verify a user with valid credentials is signed in.
+- source: ac: AC-1
+- preconditions: a user exists
+- steps:
+  1. enter valid credentials
+     → expected: the session opens
+- expected: the user is signed in
+"""
+
+PLAN_HEADER_NO_SCOPE = PLAN_HEADER.replace("scope: e2e\n", "")
+
+# A plan whose case body contains a `story:`-looking line. Only the prologue is the header.
+PLAN_HEADER_DECOY = """# QA Test Plan — svc / cap
+
+story: KING-1 · title: A story title · target: svc/cap@main · generated: 2026-09-17
+
+## Cases
+
+### TC-1 · Happy path sign-in
+- type: functional
+- preconditions: a user exists
+  story: KING-999
+  scope: integration
+- steps:
+  1. do it
+     → expected: done
+- expected: ok
+"""
+
+# A plan that opens straight on a `##` heading: there is no prologue, so there is no header.
+PLAN_NO_HEADER = """## Cases
+
+### TC-1 · Happy path sign-in
+- type: functional
+- steps:
+  1. do it
+     → expected: done
+- expected: ok
+"""
+
+
+class ParseHeaderTest(unittest.TestCase):
+    def test_the_dot_separated_line_parses_into_a_dict(self):
+        h = parse_header(PLAN_HEADER)
+        self.assertEqual("KING-1", h["story"])
+        self.assertEqual("A story title", h["title"])
+        self.assertEqual("svc/cap@main", h["target"])
+        self.assertEqual("2026-09-17", h["generated"])
+
+    def test_own_line_fields_parse_alongside_them(self):
+        h = parse_header(PLAN_HEADER)
+        self.assertEqual("none", h["openspec"])
+        self.assertEqual("none", h["design"])
+        self.assertEqual("resolved", h["prd"])
+
+    def test_scope_on_its_own_line_parses(self):
+        self.assertEqual("e2e", parse_header(PLAN_HEADER)["scope"])
+
+    def test_an_absent_scope_is_absent_not_defaulted(self):
+        h = parse_header(PLAN_HEADER_NO_SCOPE)
+        self.assertNotIn("scope", h)
+        self.assertEqual("KING-1", h["story"])
+
+    def test_a_plan_with_no_header_returns_an_empty_dict(self):
+        self.assertEqual({}, parse_header(PLAN_NO_HEADER))
+
+    def test_only_the_prologue_before_the_first_heading_is_read(self):
+        h = parse_header(PLAN_HEADER_DECOY)
+        self.assertEqual("KING-1", h["story"])
+        self.assertNotIn("scope", h)
+
+    def test_the_title_line_and_blockquotes_are_not_fields(self):
+        h = parse_header(PLAN_HEADER)
+        self.assertNotIn("system of record", h)
+        self.assertEqual({"story", "title", "target", "generated",
+                          "prd", "openspec", "design", "scope"}, set(h))
+
+
+
+class HeaderSeparatorTest(unittest.TestCase):
+    """A `·` inside a value is part of the value: `title:` holds a Jira summary verbatim,
+    and Step E composes `Suite` from it, so a truncation here ships a wrong Suite silently."""
+
+    def test_title_keeps_an_interpunct(self):
+        header = parse_header(
+            "story: KING-1 · title: Dashboard · Phase 2 · target: a/b@main\n\n## Cases\n")
+        self.assertEqual(header["title"], "Dashboard · Phase 2")
+        self.assertEqual(header["story"], "KING-1")
+        self.assertEqual(header["target"], "a/b@main")
+
+    def test_a_trailing_continuation_is_kept(self):
+        header = parse_header("story: KING-1 · title: A · B · C\n\n## Cases\n")
+        self.assertEqual(header["title"], "A · B · C")
 
 
 if __name__ == "__main__":

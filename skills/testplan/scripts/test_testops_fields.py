@@ -56,6 +56,50 @@ class TestResolve(unittest.TestCase):
         self.assertEqual(sorted(VERIFIED_FIELDS), ["Component", "Feature", "Story"])
 
 
+class TestE2eScopeOverridesFeature(unittest.TestCase):
+    """Under `scope: e2e` the Feature is the scope's own value, decided in the resolver so the
+    pre-flight verifies what actually ships. An explicitly passed --feature states a different
+    intent from the scope, so it is reported as an error rather than silently discarded."""
+
+    def test_e2e_scope_sets_the_feature(self):
+        r = _resolve(scope="e2e")
+        self.assertEqual(r["fields"]["Feature"], "e2e scope")
+        self.assertEqual(r["errors"], [])
+        self.assertEqual(r["missing"], [])
+
+    def test_e2e_feature_is_the_value_gate_0b_checks(self):
+        r = _resolve(scope="e2e")
+        check = check_field_values(r["fields"], {"Story": 1, "Component": 1, "Feature": 0},
+                                   project_name="KINOA")
+        self.assertFalse(check["ok"])
+        self.assertIn("Feature", check["checked"])
+        self.assertIn("e2e scope", " ".join(check["errors"]))
+
+    def test_e2e_overrides_the_config_default_without_complaint(self):
+        r = _resolve(scope="e2e")            # CONFIG defaults Feature to "Sign-in"
+        self.assertEqual(r["fields"]["Feature"], "e2e scope")
+        self.assertNotIn("Sign-in", " ".join(r["errors"]))
+
+    def test_explicit_feature_under_e2e_is_an_error_naming_both_values(self):
+        r = _resolve(scope="e2e", feature="Deeplinks")
+        joined = " ".join(r["errors"])
+        self.assertTrue(r["errors"])
+        self.assertIn("Deeplinks", joined)
+        self.assertIn("e2e scope", joined)
+        self.assertIn("--feature", joined)
+
+    def test_story_scope_and_absent_scope_resolve_identically_to_today(self):
+        baseline = _resolve()
+        for scope in ("story", None):
+            self.assertEqual(_resolve(scope=scope), baseline)
+
+    def test_story_scope_keeps_an_explicit_feature(self):
+        for scope in ("story", None):
+            self.assertEqual(_resolve(scope=scope, feature="Deeplinks")["fields"]["Feature"],
+                             "Deeplinks")
+            self.assertEqual(_resolve(scope=scope, feature="Deeplinks")["errors"], [])
+
+
 FIELDS = {"Suite": "[KING-1] Sign-in rework", "Story": "Template",
           "Component": "In-App", "Feature": "Sign-in"}
 

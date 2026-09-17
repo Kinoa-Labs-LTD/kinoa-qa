@@ -5,8 +5,9 @@ Checks a generated QA test-plan.md. The Jira Story, the PRD and any linked mocku
 source of truth; OpenSpec files (`--openspec`, optional) are context only. Checks:
 
   1. required-fields — every `### TC-` case has type, priority, purpose, source,
-     preconditions, non-empty steps, non-empty expected, and every step carries exactly
-     one `\u2192 expected:` result (the offending step is named by number);
+     preconditions, non-empty steps, non-empty expected, and every step carries an
+     `\u2192 expected:` result — exactly one under Story scope, one or more under
+     `scope: e2e` (the offending step is named by number);
   2. source-valid — every `source:` is `ac: AC-<n>` (must exist in `## Acceptance
      Criteria`) or `QA-added: <reason>`; there is no `scenario:` source;
   3. openspec-ref-valid — every `openspec-ref:` names a real scenario of a supplied
@@ -27,7 +28,10 @@ source of truth; OpenSpec files (`--openspec`, optional) are context only. Check
      annotation written in the documented grammar;
   9. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
      enriches is named in a `## Gaps` line, unless an unresolved `## Conflicts` line already
-     names it; spec coverage is advisory, dishonesty is not.
+     names it; spec coverage is advisory, dishonesty is not;
+ 10. scope-valid — the header's optional `scope:` is `e2e` or `story`. Absent is the
+     ordinary state and passes (the Story-scope default is applied by the consumer, not
+     here); any other value FAILs naming the value and the allowed set.
 
 Exit 0 = PASS, 1 = FAIL, 2 = HOLD (structurally valid, but an unresolved conflict blocks
 the TestOps upsert until the QA engineer annotates `→ resolved: …`).
@@ -38,7 +42,9 @@ import os
 import re
 import sys
 
-from plan_parser import parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts
+from plan_parser import (SCOPES, E2E_SCOPE, normalise_scope,
+                         parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts,
+                         parse_header)
 
 def _capability_of(spec_path):
     """The capability a spec file belongs to: its parent directory, per the OpenSpec layout
@@ -53,6 +59,9 @@ AC_SECTION_RE = re.compile(r"^##\s+Acceptance Criteria\s*$", re.M)
 # TestOps whether the id exists.
 ALLURE_ID_RE = re.compile(r"^[1-9][0-9]*$")
 DESIGN_REF_RE = re.compile(r"^[^/\s]+/[^/\s]+\s+—\s+\S.*$")
+# The two test scopes a plan may declare. The field is optional — absent means Story scope,
+# and that default lives in the consumer, not here: this check only rejects a value that is
+# neither, so an unrecognised scope cannot reach Step E and be silently read as Story-scoped.
 CONFLICT_SOURCES = ("story", "prd", "design", "openspec")
 CONFLICT_AC_RE = re.compile(r"^(AC-\d+)\s*·")
 CONFLICT_BODY_RE = re.compile(r"·\s*(.*)$")
@@ -81,16 +90,17 @@ def conflict_sides(claim):
     return sides if len(sides) >= 2 else []
 
 
-def _step_problems(steps):
-    """Every step must carry exactly one `\u2192 expected:` result, because a TestOps step maps
-    to exactly one expected_body. Returns one message per offending step, naming its 1-based
-    number so the QA engineer knows which line to fix. A blank `\u2192 expected:` counts as
-    missing, matching the payload builder, which omits an empty expected result entirely."""
+def _step_problems(steps, scope):
+    """Every step must carry at least one `\u2192 expected:` result under either scope; only an
+    e2e plan may carry more than one on a step, each becoming its own expected_body. Returns
+    one message per offending step, naming its 1-based number so the QA engineer knows which
+    line to fix. A blank `\u2192 expected:` counts as missing, matching the payload builder,
+    which omits an empty expected result entirely."""
     problems = []
     for n, step in enumerate(steps, 1):
         if not step.get("expected"):
             problems.append(f"step {n} has no expected result")
-        elif step.get("extra_expected"):
+        elif step.get("extra_expected") and normalise_scope(scope) != E2E_SCOPE:
             problems.append(f"step {n} has {1 + len(step['extra_expected'])} expected results "
                             f"(exactly one is allowed)")
     return problems
@@ -115,6 +125,7 @@ def validate(plan_path, openspec_path=None):
     acs = parse_acs(plan_text)
     has_conflicts_section, conflicts, unparsed_conflicts = parse_conflicts(plan_text)
     has_ac_section = bool(AC_SECTION_RE.search(plan_text))
+    header = parse_header(plan_text)
     checks = []
 
     # 1. required-fields
@@ -127,7 +138,9 @@ def validate(plan_path, openspec_path=None):
         if not c["steps"]:
             missing.append("steps")
         problems = [f"missing {', '.join(missing)}"] if missing else []
-        problems += _step_problems(c["steps"])
+        # Absent means Story scope: the default lives here, in the consumer, never in the
+        # parser, so "the plan said story" and "the plan said nothing" stay distinguishable.
+        problems += _step_problems(c["steps"], header.get("scope") or "story")
         if problems:
             bad.append(f"{c['id']}: {'; '.join(problems)}")
     checks.append({"name": "required-fields", "ok": not bad,
@@ -287,6 +300,18 @@ def validate(plan_path, openspec_path=None):
                        "detail": "ok" if not unmarked else "uncovered & unmarked: " + "; ".join(unmarked)})
     else:
         checks.append({"name": "gap-honesty", "ok": True, "detail": "n/a (no OpenSpec file)"})
+
+    # 10. scope-valid — the declared test scope, value only. Absent is the ordinary state of
+    # every plan on disk and passes; anything but `e2e` or `story` fails naming the value.
+    if "scope" not in header:
+        scope_detail, scope_ok = "ok: no scope declared (Story-scoped)", True
+    elif header["scope"] in SCOPES:
+        scope_detail, scope_ok = f"ok: scope '{header['scope']}'", True
+    else:
+        scope_ok = False
+        scope_detail = (f"unrecognised scope '{header['scope']}' — allowed: "
+                        + ", ".join(SCOPES) + " (or omit the field for Story scope)")
+    checks.append({"name": "scope-valid", "ok": scope_ok, "detail": scope_detail})
 
     report = {
         "plan": plan_path, "openspec": spec_paths or None,

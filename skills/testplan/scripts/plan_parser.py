@@ -201,3 +201,54 @@ def parse_conflicts(plan_text):
     unrecognised = [line.strip() for j, line in enumerate(section)
                     if line.strip() and j not in consumed and not CONFLICT_LINE_RE.match(line)]
     return has_section, conflicts, unrecognised
+
+
+# The scope vocabulary lives here because every consumer — the validator, the payload
+# builder, the field resolver and the merge — already imports this module. Four modules
+# owning the same two strings is how one of them drifts.
+E2E_SCOPE = "e2e"
+STORY_SCOPE = "story"
+SCOPES = (E2E_SCOPE, STORY_SCOPE)
+
+
+def normalise_scope(scope):
+    """One spelling of "is this e2e?" for every caller. Case and surrounding space are not
+    meaningful in a scope, and `target_marker` already slugifies it, so comparing the raw
+    string let a marker say `scope=e2e` while the status stayed `Draft`."""
+    return (scope or "").strip().casefold()
+
+
+# A header field: a lowercase key, a colon, a value. `·` separates several fields written
+# on one logical line, so `story:` and `title:` parse the same way as `scope:` on its own.
+HEADER_FIELD_RE = re.compile(r"^([a-z][a-z0-9-]*):\s*(.*?)\s*$")
+
+
+def parse_header(plan_text):
+    """Return the header fields of the prologue before the first `##` heading, as {key: value}.
+
+    Only that prologue is the header, so a `story:`- or `scope:`-looking line inside a case
+    body is never mistaken for one. An absent field is absent from the dict — never defaulted:
+    the default lives in the consumer, so "the plan says nothing" stays distinguishable from
+    "the plan says story".
+    """
+    header = {}
+    for line in plan_text.splitlines():
+        if line.startswith("## "):
+            break
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith(">"):
+            continue
+        # `·` separates fields, but a value may legitimately contain one: a Jira summary
+        # is copied into `title:` verbatim. A part that does not itself start a field is a
+        # continuation of the previous value, not a new field, so it is rejoined rather than
+        # dropped — Step E composes `Suite` from `title:`, and a truncation there is silent.
+        pending = None
+        for part in stripped.split("\u00b7"):
+            piece = part.strip()
+            m = HEADER_FIELD_RE.match(piece)
+            if m:
+                pending = m.group(1)
+                header[pending] = m.group(2)
+            elif piece and pending is not None:
+                header[pending] = (header[pending] + " · " + piece).strip()
+    return header
