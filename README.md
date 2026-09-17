@@ -21,11 +21,90 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 OpenSpec specs are read with the `gh` CLI, not an MCP server; a repo with no OpenSpec file
 is the ordinary path, not a degradation.
 
+## Install
+
+The plugin is a Claude Code plugin served from this repository, which is its own marketplace
+(`.claude-plugin/marketplace.json`). Two routes, both ending in the same place:
+
+**From GitHub — for anyone using the plugin.** In Claude Code:
+
+```
+/plugin marketplace add Kinoa-Labs-LTD/kinoa-qa
+/plugin install kinoa-qa@kinoa-qa
+```
+
+**From a local checkout — for working ON the plugin.** Point the marketplace at the directory
+instead, so your edits are live without a reinstall:
+
+```
+/plugin marketplace add /path/to/kinoa-qa
+/plugin install kinoa-qa@kinoa-qa
+```
+
+The same two steps work from a terminal, outside a Claude Code session:
+
+```
+claude plugin marketplace add Kinoa-Labs-LTD/kinoa-qa
+claude plugin install kinoa-qa@kinoa-qa
+```
+
+Either route writes to `~/.claude/settings.json`. The result looks like this — the same shape
+the sibling `kinoa-pm` and `kinoa-dev` plugins use, though those point at local directories
+rather than GitHub — and you can equally well write it by hand:
+
+```json
+{
+  "enabledPlugins": { "kinoa-qa@kinoa-qa": true },
+  "extraKnownMarketplaces": {
+    "kinoa-qa": { "source": { "source": "github", "repo": "Kinoa-Labs-LTD/kinoa-qa" } }
+  }
+}
+```
+
+For a local checkout the source is `{ "source": "directory", "path": "/path/to/kinoa-qa" }`.
+
+Verify with `/plugin` — `kinoa-qa` should be listed as enabled, and `/kinoa-qa:testplan`
+should complete as a command.
+
+## Configure
+
+`config.json` ships with the three Allure custom-field defaults **empty on purpose**, so no
+run inherits another team's values by accident:
+
+```json
+"custom_fields": { "story": "", "component": "", "feature": "" }
+```
+
+Leave them empty and every run must pass `--story-field` and `--component`, plus
+`--feature` under Story scope; otherwise Step E stops before writing anything, naming each
+missing field. Fill them in and those flags become optional overrides. **This is the most
+common reason a first run stops.**
+
+Under `--scope e2e` the Feature is set for you to `e2e scope`, so `--feature` there is an
+**error** rather than a silent discard — pass only the other two.
+
+`services.json` maps a service name to the repo its OpenSpec files live in. A service that
+isn't listed is fine — OpenSpec input is optional throughout.
+
 ## Usage
 
 ```
-/kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>] [--openspec-path <dir>] [--dry-run]
+/kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>]
+[--openspec-path <dir>] [--story-field <value>] [--component <value>] [--feature <value>]
+[--scope e2e|story] [--allow-unverified-fields] [--dry-run]
 ```
+
+`--scope` sets the plan's **test scope**: `e2e` marks a cross-component journey (Feature
+`e2e scope`, cases created for `Review`, several expected results allowed per step), and
+`story` — the default when the flag and the plan header are both absent — keeps the caller's
+Feature and creates cases as `Draft`. One run produces one kind of test. The scope is written
+into the plan header and carried forward by `plan_writer.py` when a regeneration drops it; a
+scope that changed is *reported* at the Step D gate rather than applied silently. Treating the
+header as the source of truth from then on — aborting when a later `--scope` disagrees with it
+instead of flipping cases that were already pushed — is an orchestrator rule in `SKILL.md`
+Step B, not a check any script performs.
+
+`--dry-run` prints the intended TestOps actions and writes nothing.
 
 See `skills/testplan/SKILL.md` for the flow and `skills/testplan/references/` for the current
 format and vocabulary. `docs/superpowers/` holds the original design and plan as dated historical
