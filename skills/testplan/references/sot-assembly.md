@@ -86,15 +86,28 @@ Never a hard stop — Figma degrades exactly like the PRD.
 An image attached to the Story is a **business requirement**, in the authoritative tier
 with Story, PRD and mockups.
 
-Selection and retrieval are implemented in `scripts/jira_attachments.py`:
-`select_image_attachments(issue_json, base_url=...)` returns `(kept, skipped)`, then
-`fetch_attachment(...)` is called per kept record. **Every** image attachment on the Story
+Selection and retrieval are implemented in `scripts/jira_attachments.py`: first
+`resolve_cloud_id(base_url)`, then `select_image_attachments(issue_json, base_url=...,
+cloud_id=...)` returns `(kept, skipped)`, then `fetch_attachment(...)` is called per kept
+record. **Every** image attachment on the Story
 is read, not only those the description embeds — an inline media placeholder's id does not
 map onto an attachment id, so filtering by embedding would silently drop images.
 
 Credentials are `JIRA_EMAIL` + `JIRA_API_TOKEN` from the environment (`credentials()`); the
 base URL is `jira_base_url` from `config.json`. The plugin owns no credentials of its own,
-exactly as it owns no MCP configuration. Images above the 10 MB cap (`MAX_BYTES`) are
+exactly as it owns no MCP configuration.
+
+**Which host serves the attachment.** An Atlassian **scoped** API token — the kind Atlassian
+issues today — cannot address the site host at all: `<site>.atlassian.net/rest/...` answers
+**403** whatever the token's scopes are, and only
+`api.atlassian.com/ex/jira/<cloudId>/rest/...` works. `resolve_cloud_id(base_url)` therefore
+derives the id from `<site>/_edge/tenant_info`, which answers **unauthenticated** — no
+credentials, no scope — and `content_url` routes through the API host when it has one. The id
+is derived rather than configured because `jira_base_url` is also the human-facing site URL,
+and a hand-copied UUID buys a silent 403 the first time it is mistyped. When resolution fails
+the reader falls back to the site host, which a classic unscoped token can still reach; if
+that then 403s, it is the ordinary `images: none (<reason>)` degradation and warns at the
+gate. Images above the 10 MB cap (`MAX_BYTES`) are
 skipped with their reason; a non-image attachment is ignored, silently.
 
 `select_image_attachments` returns each kept record as `{ id, filename, mimeType, size,

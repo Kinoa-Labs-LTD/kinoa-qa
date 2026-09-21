@@ -3,7 +3,8 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
 from jira_attachments import (MAX_BYTES, AttachmentError, content_url,
-                              credentials, fetch_attachment, select_image_attachments)
+                              credentials, fetch_attachment, resolve_cloud_id,
+                              select_image_attachments)
 
 BASE = "https://kinoadev.atlassian.net"
 
@@ -93,6 +94,66 @@ class FetchAttachment(unittest.TestCase):
         with self.assertRaises(AttachmentError) as ctx:
             fetch_attachment(f"{BASE}/x", email="a@b.c", token="t", opener=opener)
         self.assertIn("404", str(ctx.exception))
+
+
+class ResolveCloudId(unittest.TestCase):
+    """A scoped Jira API token cannot use the site host at all — only
+    api.atlassian.com/ex/jira/<cloudId> — so the cloud id is derived rather than configured."""
+
+    def _opener(self, payload, status=200):
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return payload
+
+        def opener(req):
+            self.seen = req.full_url
+            return Resp()
+        return opener
+
+    def test_reads_the_cloud_id_from_tenant_info(self):
+        opener = self._opener(b'{"cloudId":"d1d385cd-174f-488e-a86f-f70f777a885a"}')
+        self.assertEqual("d1d385cd-174f-488e-a86f-f70f777a885a",
+                         resolve_cloud_id(BASE, opener=opener))
+        self.assertEqual(f"{BASE}/_edge/tenant_info", self.seen)
+
+    def test_trailing_slash_on_the_base_url_is_tolerated(self):
+        opener = self._opener(b'{"cloudId":"abc"}')
+        self.assertEqual("abc", resolve_cloud_id(BASE + "/", opener=opener))
+        self.assertEqual(f"{BASE}/_edge/tenant_info", self.seen)
+
+    def test_returns_none_when_the_lookup_fails(self):
+        import urllib.error
+
+        def opener(req):
+            raise urllib.error.URLError("unreachable")
+
+        self.assertIsNone(resolve_cloud_id(BASE, opener=opener))
+
+    def test_returns_none_when_the_payload_has_no_cloud_id(self):
+        self.assertIsNone(resolve_cloud_id(BASE, opener=self._opener(b'{"other":1}')))
+
+    def test_returns_none_on_unparseable_payload(self):
+        self.assertIsNone(resolve_cloud_id(BASE, opener=self._opener(b'<html>nope')))
+
+
+class ContentUrlWithCloudId(unittest.TestCase):
+    def test_cloud_id_routes_through_the_api_host(self):
+        self.assertEqual(
+            "https://api.atlassian.com/ex/jira/CID/rest/api/3/attachment/content/26143",
+            content_url(BASE, 26143, cloud_id="CID"))
+
+    def test_without_a_cloud_id_the_site_host_is_kept(self):
+        self.assertEqual(f"{BASE}/rest/api/3/attachment/content/26143",
+                         content_url(BASE, 26143))
+
+    def test_selection_threads_the_cloud_id_into_each_record(self):
+        kept, _ = select_image_attachments(issue([
+            {"id": 26143, "filename": "a.png", "mimeType": "image/png", "size": 5},
+        ]), base_url=BASE, cloud_id="CID")
+        self.assertEqual(
+            "https://api.atlassian.com/ex/jira/CID/rest/api/3/attachment/content/26143",
+            kept[0]["content_url"])
 
 
 if __name__ == "__main__":
