@@ -86,6 +86,35 @@ Under `--scope e2e` the Feature is set for you to `e2e scope`, so `--feature` th
 `services.json` maps a service name to the repo its OpenSpec files live in. A service that
 isn't listed is fine — OpenSpec input is optional throughout.
 
+### Jira API token
+
+Two environment variables let Step A read files attached to the Story — today that means
+**image attachments**, so a requirement that lives in a pasted screenshot becomes an
+acceptance criterion instead of a gap:
+
+```bash
+export JIRA_EMAIL="you@kinoa.io"
+export JIRA_API_TOKEN="<token>"
+```
+
+Create the token at **id.atlassian.com → Security → API tokens**. The plugin owns no
+credentials, exactly as it owns no MCP configuration: it reads these two variables and
+nothing else.
+
+**Required scopes.** A token created *with* scopes needs `read:jira-work` — that is what
+covers issues and their attachments. `write:jira-work` is not used. A classic token created
+*without* scopes works too and needs nothing configured.
+
+**Note for scoped tokens.** A scoped token cannot call `https://<site>.atlassian.net/rest/...`
+at all — that host answers **403** no matter which scopes the token holds. Only
+`https://api.atlassian.com/ex/jira/<cloudId>/rest/...` works. You do **not** configure that:
+`jira_base_url` stays the ordinary site URL and the cloud id is looked up automatically. It is
+worth knowing when a token looks correct and a call still returns 403.
+
+**If the variables are unset** the run continues — the header records
+`images: none (jira credentials not set)` and the gate warns. Missing credentials are never a
+hard stop; they only mean no image-derived acceptance criteria.
+
 ## Usage
 
 ```
