@@ -154,8 +154,9 @@ Worked example:
 - **`image-ref:`** points at the Story image attachment behind an image-derived AC. Like a
   mockup and unlike a spec, an image **may ground an `expected:`**. It is validated
   **syntactically only** — the validator never calls Jira — and it may only accompany an
-  `ac:` source. The attachment id is a positive integer and the filename may itself contain
-  an em dash, so the value is matched, never split.
+  `ac:` source. The attachment id is one or more digits (leading zeros and `0` itself parse,
+  unlike `allure-id`) and the filename may itself contain an em dash, so the value is
+  matched, never split.
 
 ## `## Conflicts` (required section header; may be empty)
 
@@ -208,6 +209,7 @@ exemption is gone and the scenario needs its case or its Gap line.
 | `purpose` | `description` (plus a one-line provenance suffix naming `openspec-ref:` / `design-ref:` / `image-ref:` when present) |
 | `type` / `priority` | not pushed — no `type-*` / `priority-*` tags |
 | `source` | not pushed — it is provenance for the reader of the plan only |
+| `design-ref` | not pushed as its own field — rides the provenance suffix on `description`, exactly as `image-ref` does |
 | `image-ref` | not pushed as its own field — rides the provenance suffix on `description`, exactly as `design-ref` does |
 | `preconditions` | `precondition` (newline-separated) |
 | `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped; one `expected_body` per `→ expected:` line, in order — exactly one under Story scope, one or more under `scope: e2e` |
