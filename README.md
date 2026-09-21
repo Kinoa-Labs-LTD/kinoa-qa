@@ -142,3 +142,36 @@ Step B, not a check any script performs.
 See `skills/testplan/SKILL.md` for the flow and `skills/testplan/references/` for the current
 format and vocabulary. `docs/superpowers/` holds the original design and plan as dated historical
 records — they predate later vocabulary changes and are not authoritative.
+
+## Versions and updating
+
+Which version you have:
+
+```
+claude plugin list
+```
+
+Compare it with the top entry in [CHANGELOG.md](CHANGELOG.md). If yours is older, update:
+
+```
+/plugin marketplace update kinoa-qa
+/plugin update kinoa-qa@kinoa-qa
+```
+
+(The same two commands work outside a session as `claude plugin marketplace update …` /
+`claude plugin update …`.) Updates are **not** automatic unless you turn on auto-update for
+this marketplace yourself, in `/plugin` → Marketplaces.
+
+### For contributors
+
+The version lives in `.claude-plugin/plugin.json` and **nowhere else** — deliberately. Claude
+Code resolves a plugin's version from `plugin.json` first and the marketplace entry second, and
+silently ignores the loser when both are set, so the marketplace entry carries no `version` at
+all.
+
+**A PR that changes behaviour bumps that version and adds a `CHANGELOG.md` entry, in the same
+PR.** This is not bookkeeping: Claude Code updates an installed plugin only when the version
+*string changes*, so merging a feature without a bump ships it to nobody — the people who
+already installed the plugin keep running the old code and have no way to tell. Semver:
+patch for a fix, minor for a feature, major for a change that breaks an existing plan or
+workflow.
