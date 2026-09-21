@@ -1,7 +1,7 @@
 # generation.md — deriving cases from the SoT bundle
 
-Input: the SoT bundle — authoritative `{ story, acceptance, prd?, designs[] }` plus
-contextual `{ openspecs[] }` — assembled in Step A.
+Input: the SoT bundle — authoritative `{ story, acceptance, prd?, designs[], images[] }`
+plus contextual `{ openspecs[] }` — assembled in Step A.
 Output: exactly one `test-plan.md` (per `references/test-plan-format.md`) + nothing else.
 
 ## Carrying `allure-id:` forward (a regeneration is a merge, not a fresh write)
@@ -75,9 +75,9 @@ Therefore:
 
 ## Precedence (read this first)
 
-The Jira Story, the Confluence PRD and any Figma mockup linked from the Story **decide**
-what a case asserts. OpenSpec `spec.md` files only **enrich** — they carry no authority
-over an outcome. Concretely:
+The Jira Story, the Confluence PRD, any Figma mockup linked from the Story and any Story
+image attachment **decide** what a case asserts. OpenSpec `spec.md` files only **enrich** —
+they carry no authority over an outcome. Concretely:
 
 - Every case is derived from an acceptance criterion. `source:` is `ac: AC-<n>` or
   `QA-added: <reason>`; there is no `scenario:` source and no `design:` source.
@@ -167,6 +167,24 @@ error variant. There is no separate "design AC" list and no `design:` source kin
 - No mockup read (`design: none (<reason>)`) simply means no mockup-derived ACs. It is not
   an excuse to guess what a screen looks like.
 
+## Images — deriving ACs from `images[]`
+
+Each bundle entry `images[{ id, filename, mimeType, bytes }]` is a **business
+requirement**, equal to the Story, the PRD and a mockup. Read what the image *shows* and
+write it into `## Acceptance Criteria` like any other criterion.
+
+- The case stays `source: ac: AC-<n>` and additionally carries
+  `image-ref: <id> — <filename>`, taken verbatim from the bundle entry.
+- An image showing detail the Story simply **omits** is an **additional AC**, not a
+  conflict — add it and test it.
+- An image that **contradicts** the Story, the PRD or a mockup is a `## Conflicts` line
+  with `image` as one side, and that AC yields **no case** until it is annotated (see
+  below).
+- **No fabrication still applies.** An image with no testable state — a logo, a colour
+  study, an unreadable screenshot — produces a `- ⚠️ GAP:` line, never an invented case. Do
+  not assert pixel values, spacing or colours; assert observable behaviour and content.
+- `images: none (<reason>)` simply means no image-derived ACs. It is not licence to guess.
+
 ## Conflicts (detect them; never resolve them)
 
 A **conflict** is a direct contradiction: two sources state outcomes that cannot both be
@@ -175,7 +193,7 @@ true of the same behaviour. Emit one `## Conflicts` line per contradiction:
 ```
 - ⚠️ CONFLICT: <AC-n | —> · <source>: <claim> vs <source>: <claim>[ vs <source>: <claim> …] — <what was not done>
 ```
-Each `<source>` is one of `story` / `prd` / `design` / `openspec`. Use `—` in the first
+Each `<source>` is one of `story` / `prd` / `design` / `openspec` / `image`. Use `—` in the first
 field when the contradiction belongs to no listed AC. The `vs <source>: <claim>` segment
 repeats — **two or more** sides, every disagreeing source named on the SAME line. Three
 sources contradicting one another is one line with three segments, not two lines and not a
@@ -191,9 +209,10 @@ Rules:
   either side, and **never pre-fill `→ resolved:`** — that annotation is the QA engineer's
   alone. Your job is to surface, not to arbitrate. The validator accepts only
   `business wins` or `spec wins, AC updated` there, so an invented annotation FAILs.
-- **Inside the authoritative tier there is no precedence.** Story, PRD and mockup are
-  equal; the plugin never arbitrates between them. Story vs PRD, Story vs mockup and PRD
-  vs mockup are all conflict lines naming both sides with their artifact.
+- **Inside the authoritative tier there is no precedence.** Story, PRD, mockup and image are
+  equal; the plugin never arbitrates between them. Story vs PRD, Story vs mockup, Story vs
+  image and any other pairing within the tier are all conflict lines naming both sides with
+  their artifact.
 - **Spec vs business is also a conflict**, not a silent loss: write
   `openspec: <claim> vs <ac-side>: <claim>` rather than quietly dropping the spec text.
 - **An ADDITION is not a conflict.** A PRD or mockup that states detail the Story simply

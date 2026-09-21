@@ -20,6 +20,7 @@ story: <STORY-KEY> · title: <story title> · target: <service>/<capability>@<re
 prd: <resolved | none (<reason>)>
 openspec: <<capability>@<sha12> | none | none (<reason>)>
 design: <<backend> | none (<reason>)>
+images: <<n> read | none | none (<reason>)>
 scope: <e2e | story>
 ```
 > `title:` is the Jira Story summary verbatim, on the same logical line as `story:`. It is
@@ -37,12 +38,14 @@ scope: <e2e | story>
 > `scope:` is **never sent to TestOps as a payload field of its own.** It changes exactly two
 > other values (see the mapping table below) and nothing else: `Suite`, `Story`, `Component`,
 > `issues`, tags and the description are identical in both scopes.
-> The `openspec:` and `design:` lines are informational. `openspec: none` is the ordinary
-> path — a service repo may simply have no OpenSpec files; only a spec the QA engineer
-> explicitly asked for, or a resolver error, carries a `(<reason>)` and warns at the gate.
-> The validator decides its OpenSpec-grounded checks purely from the `--openspec` arguments it is
-> given, not from these lines. `design:` records which Figma backend answered (remote or
-> the local desktop server), or why none did.
+> The `openspec:`, `design:` and `images:` lines are informational. `openspec: none` is the
+> ordinary path — a service repo may simply have no OpenSpec files; only a spec the QA
+> engineer explicitly asked for, or a resolver error, carries a `(<reason>)` and warns at the
+> gate. The validator decides its OpenSpec-grounded checks purely from the `--openspec`
+> arguments it is given, not from these lines. `design:` records which Figma backend
+> answered (remote or the local desktop server), or why none did. `images: none` is
+> likewise the ordinary path for a Story with no image attachment; only an
+> attempted-and-failed retrieval carries a `(<reason>)` and warns at the gate.
 
 ## `## Acceptance Criteria` (required — both modes)
 
@@ -68,6 +71,7 @@ line is exempt and MUST carry no case at all.
 - source: ac: AC-<n>          # OR  QA-added: <reason>   — business grounding ONLY
 - openspec-ref: <capability>#<Requirement>/<Scenario>   # optional, context enrichment
 - design-ref: <fileKey>/<nodeId> — <frame name>         # optional, authoritative traceability
+- image-ref: <attachment-id> — <filename>   # optional, authoritative traceability
 - preconditions: <state that must hold>
   <a second state statement on its own line>
 - steps:
@@ -78,9 +82,9 @@ line is exempt and MUST carry no case at all.
 - expected: <the overall pass condition>
 ```
 Field order is fixed: `allure-id`, `type`, `priority`, `purpose`, `source`, `openspec-ref`,
-`design-ref`, `preconditions`, `steps`, `expected`. `type`, `priority`, `purpose`, `source`,
-`preconditions`, `steps` and `expected` are required (validator `required-fields`);
-`allure-id`, `openspec-ref` and `design-ref` are optional.
+`design-ref`, `image-ref`, `preconditions`, `steps`, `expected`. `type`, `priority`,
+`purpose`, `source`, `preconditions`, `steps` and `expected` are required (validator
+`required-fields`); `allure-id`, `openspec-ref`, `design-ref` and `image-ref` are optional.
 
 - **`allure-id:`** is the **assigned** TestOps case identity and the **first** field under the
   case heading. It is written back by **Step E** after it creates the case, and by nothing
@@ -147,6 +151,11 @@ Worked example:
   mockup IS a business requirement, so a `design-ref` case may assert what the frame shows.
   It is validated **syntactically only** — the validator is offline and never calls Figma —
   and it may only accompany an `ac:` source.
+- **`image-ref:`** points at the Story image attachment behind an image-derived AC. Like a
+  mockup and unlike a spec, an image **may ground an `expected:`**. It is validated
+  **syntactically only** — the validator never calls Jira — and it may only accompany an
+  `ac:` source. The attachment id is a positive integer and the filename may itself contain
+  an em dash, so the value is matched, never split.
 
 ## `## Conflicts` (required section header; may be empty)
 
@@ -162,7 +171,7 @@ across lines, never trimmed to two sides. Worked three-way example:
 - ⚠️ CONFLICT: AC-2 · story: a download link is valid for 7 days vs prd: an export file is retained for 24 hours vs design: the "Export · Ready" frame reads "This link expires in 30 days." — no case was generated for AC-2; Story, PRD and mockup are equal business sources and the plugin picks no winner
 ```
 
-Each `<source>` is one of `story` / `prd` / `design` / `openspec`, each named at most once
+Each `<source>` is one of `story` / `prd` / `design` / `openspec` / `image`, each named at most once
 per line (em dash U+2014 before the consequence). The plugin **surfaces** a contradiction,
 it never resolves one: it picks no winner and never pre-fills `→ resolved:`. Story, PRD and
 mockup have no precedence between one another; a source that merely ADDS detail the others
@@ -196,9 +205,10 @@ exemption is gone and the scenario needs its case or its Gap line.
 |---|---|
 | `allure-id` | **not sent in the body** — it is the update key: Step E calls `testops_update_testcase(id=<allure-id>)`. Absent → Step E reconciles, creates, and writes the assigned id back into this file |
 | `### TC-n · <title>` | `name` = `"<title>"` — the `TC-n` prefix is **stripped** |
-| `purpose` | `description` (plus a one-line provenance suffix naming `openspec-ref:` / `design-ref:` when present) |
+| `purpose` | `description` (plus a one-line provenance suffix naming `openspec-ref:` / `design-ref:` / `image-ref:` when present) |
 | `type` / `priority` | not pushed — no `type-*` / `priority-*` tags |
 | `source` | not pushed — it is provenance for the reader of the plan only |
+| `image-ref` | not pushed as its own field — rides the provenance suffix on `description`, exactly as `design-ref` does |
 | `preconditions` | `precondition` (newline-separated) |
 | `steps` | `scenario.steps[]` — each step `{"type": "body", "body": "<action>", "expectedResultSteps": [{"type": "expected_body", "body": "<expected>"}]}`, numbering stripped; one `expected_body` per `→ expected:` line, in order — exactly one under Story scope, one or more under `scope: e2e` |
 | `expected` | `expectedResult` — the case-level pass condition |
