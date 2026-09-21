@@ -1,0 +1,64 @@
+name: checks
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+
+jobs:
+  tests:
+    name: test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The scripts are stdlib-only by design, so there is nothing to install.
+      - name: Run the plugin's unit tests
+        working-directory: skills/testplan/scripts
+        run: python3 -m unittest discover -p "test_*.py" -v
+
+  version-bump:
+    name: version bumped when the plugin changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a version bump for user-visible changes
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=0 origin "$BASE"
+          merge_base=$(git merge-base "origin/$BASE" HEAD)
+
+          # Paths that reach an installed user. Docs and the design history do not.
+          changed=$(git diff --name-only "$merge_base"..HEAD -- 'skills/**' '.claude-plugin/**')
+          if [ -z "$changed" ]; then
+            echo "No user-visible change (skills/, .claude-plugin/) — no bump required."
+            exit 0
+          fi
+
+          read_version() { git show "$1:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])'; }
+          base_version=$(read_version "$merge_base")
+          head_version=$(read_version HEAD)
+
+          echo "changed files:"
+          echo "$changed" | sed 's/^/  /'
+          echo "plugin.json version: $base_version (base) -> $head_version (head)"
+
+          if [ "$base_version" = "$head_version" ]; then
+            echo
+            echo "::error::This PR changes the plugin but leaves plugin.json at $base_version."
+            echo "Claude Code refreshes an installed plugin only when that version STRING changes,"
+            echo "so merging this as-is ships nothing to anyone who already installed the plugin."
+            echo "Bump .claude-plugin/plugin.json and add a CHANGELOG.md entry for the new version."
+            echo "(patch = fix, minor = feature, major = breaks an existing plan or workflow)"
+            exit 1
+          fi
+
+          echo "Version bumped — installed users will receive this change."
