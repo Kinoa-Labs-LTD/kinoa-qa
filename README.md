@@ -17,9 +17,16 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 | **Atlassian** | Required | Jira Story (Step A, the one required input) and the Confluence PRD | No Story → hard stop at Step A. PRD only → header `prd: none (<reason>)`, warn at the gate, continue. |
 | **Allure TestOps** | Required for Step E | Finding and upserting cases in project KINOA | Steps A–D still run and `test-plan.md` is on disk; the upsert is deferred until the server is back. `--dry-run` needs it only to print intended actions. |
 | **Figma** | Optional | Reading mockup frames linked from the Story (`get_screenshot`, `get_design_context`) — **remote server preferred** (works headless), with the **local desktop server** as fallback | Header `design: none (<reason>)`, warn at the gate, continue — never a hard stop. Mockup-derived acceptance criteria are simply absent. |
+| **Jira REST (attachments)** | Optional, Step A | Reading image attachments on the Story | Without `JIRA_EMAIL` + `JIRA_API_TOKEN` the run continues and the header records `images: none (jira credentials not set)`. |
 
 OpenSpec specs are read with the `gh` CLI, not an MCP server; a repo with no OpenSpec file
 is the ordinary path, not a degradation.
+
+Reading Story image attachments needs two environment variables: `JIRA_EMAIL` (your
+Atlassian account email) and `JIRA_API_TOKEN` (a token from
+https://id.atlassian.com/manage-profile/security/api-tokens). Neither is read from
+`config.json` — the plugin owns no credentials, exactly as it owns no MCP configuration.
+Each image is capped at 10 MB; a larger attachment is skipped with its reason.
 
 ## Usage
 

@@ -15,11 +15,11 @@ a Confluence PRD/HLD is never called a "spec" here.
 ## Source of truth
 
 The **authoritative tier** is the Jira Story + the Confluence PRD + any Figma mockup
-linked from the Story. Those three decide what a case asserts, and they have **no
-precedence between one another**. OpenSpec `spec.md` files are **supporting context
-only**: they may shape a case's `preconditions` and `steps`, never its `expected`. A
-mockup, unlike a spec, IS a business requirement — what a frame shows becomes an
-acceptance criterion.
+linked from the Story + any image attached to the Story. Those sources decide what a case
+asserts, and they have **no precedence between one another**. OpenSpec `spec.md` files are
+**supporting context only**: they may shape a case's `preconditions` and `steps`, never its
+`expected`. A mockup or a Story image, unlike a spec, IS a business requirement — what a
+frame or an image shows becomes an acceptance criterion.
 
 Every case is therefore grounded in an acceptance criterion (`source: ac: AC-<n>` or
 `QA-added: <reason>`); spec provenance rides along as an optional `openspec-ref:` and
@@ -35,6 +35,7 @@ not read the whole spec/PRD itself.
 | What | Reference |
 |---|---|
 | Assemble the SoT; adapters (Jira, Confluence, Figma, `gh`) | `references/sot-assembly.md` |
+| Story image attachments (ImageReader) | `references/sot-assembly.md` |
 | QA-lens derivation rules, conflicts, no-fabrication | `references/generation.md` |
 | Exact `test-plan.md` shape + TestOps mapping | `references/test-plan-format.md` |
 | Idempotent TestOps upsert, custom-field pre-flight, `--dry-run` | `references/testops-sync.md` |
@@ -42,8 +43,8 @@ not read the whole spec/PRD itself.
 
 ## Step A — Assemble the SoT (read-only)
 Follow `references/sot-assembly.md`. Result: the SoT bundle — authoritative
-`{ story, acceptance, prd?, designs[] }` plus contextual `{ openspecs[] }`. Only the Story
-is required; PRD, mockups and specs degrade independently. Never write.
+`{ story, acceptance, prd?, designs[], images[] }` plus contextual `{ openspecs[] }`. Only
+the Story is required; PRD, mockups, images and specs degrade independently. Never write.
 
 ## Step B — Generate (fresh-context subagent)
 
@@ -209,6 +210,10 @@ are printed; nothing is written and it never refuses.
 | No OpenSpec files exist (normal) | Ordinary path, not a degradation; header `openspec: none`; **no** gate warning. |
 | A requested OpenSpec file failed (`--target`/`--repo`/`--openspec-path`, `gh` unauthed, resolver error) | Continue; header `openspec: none (<reason>)`; warn at the gate. |
 | Figma unreachable (no MCP, both backends down) or no frame linked | Continue; header `design: none (<reason>)`; warn at the gate; never a hard stop. |
+| Story has no image attachment | Ordinary path, not a degradation; header `images: none`; **no** gate warning. |
+| Jira credentials unset (`JIRA_EMAIL`/`JIRA_API_TOKEN`) | Continue; header `images: none (jira credentials not set)`; warn at the gate; never a hard stop. |
+| An image fetch fails (404, rejected) | Continue; header `images: none (<reason>)`; warn at the gate; never a hard stop. |
+| An image exceeds the 10 MB cap | Continue; header `images: none (<reason>)`; warn at the gate; never a hard stop. |
 | No plan at the stable path (first run for this Story+target) | Ordinary path, not a degradation; generate without `previous_plan`; every case is "new" at the gate. |
 | The plan at the stable path is unreadable (permissions, corrupt, not parseable as a plan) | **Never overwrite it.** Stop before generating, name the path and the reason, and let the QA engineer move or repair it — regenerating over it would destroy the only copy of the assigned ids. |
 | Two Step B runs write the same Story+target plan concurrently, or a write is interrupted | Write-to-temp-then-`rename` keeps the file whole — it is either the old plan or the new one, never a partial. The writes are **not** serialised: last writer wins, so a plan merged from a stale read can lose ids added meanwhile. Two engineers on one box, or two terminals, must not run Step B for the same Story+target at once. |

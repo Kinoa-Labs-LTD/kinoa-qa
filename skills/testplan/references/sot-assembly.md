@@ -4,7 +4,7 @@ Assemble the SoT bundle. It has two tiers, and the difference is enforced downst
 
 | Tier | Members | Authority |
 |---|---|---|
-| **Authoritative** | `{ story, acceptance, prd?, designs[] }` | Decides what a case asserts; may ground an `expected:`. |
+| **Authoritative** | `{ story, acceptance, prd?, designs[], images[] }` | Decides what a case asserts; may ground an `expected:`. |
 | **Contextual** | `{ openspecs[] }` | Enriches `preconditions`/`steps` only; may never own an `expected:`. |
 
 Only the Story is required. The PRD, the mockups and the OpenSpec files each degrade
@@ -79,7 +79,44 @@ record the reason instead — `design: none (no figma link on story)`,
 
 Never a hard stop — Figma degrades exactly like the PRD.
 
-## 4. OpenSpecReader — service-repo `spec.md` files (contextual, optional by design)
+## 4. ImageReader — Story image attachments (Jira REST, authoritative)
+
+An image attached to the Story is a **business requirement**, in the authoritative tier
+with Story, PRD and mockups.
+
+Selection and retrieval are implemented in `scripts/jira_attachments.py`:
+`select_image_attachments(issue_json, base_url=...)` returns `(kept, skipped)`, then
+`fetch_attachment(...)` is called per kept record. **Every** image attachment on the Story
+is read, not only those the description embeds — an inline media placeholder's id does not
+map onto an attachment id, so filtering by embedding would silently drop images.
+
+Credentials are `JIRA_EMAIL` + `JIRA_API_TOKEN` from the environment (`credentials()`); the
+base URL is `jira_base_url` from `config.json`. The plugin owns no credentials of its own,
+exactly as it owns no MCP configuration. Images above the 10 MB cap (`MAX_BYTES`) are
+skipped with their reason; a non-image attachment is ignored, silently.
+
+`select_image_attachments` returns each kept record as `{ id, filename, mimeType, size,
+content_url }` — it carries no image bytes. Step A composes the bundle entry itself: take
+each kept record and add `bytes` from `fetch_attachment(record["content_url"], email=...,
+token=...)`, giving `images[ { id, filename, mimeType, bytes } ]`. Each entry is handed to
+the Step B subagent as an actual image, not a description of one.
+
+### The `images:` header line
+Record `images: <n> read` when at least one image was fetched, `images: none` when the
+Story has no image attachment, or `images: none (<reason>)` for a degraded case.
+
+### Degradation
+| Situation | Behavior |
+|---|---|
+| No image attachment on the Story | `images: none`; no gate warning. |
+| Credentials unset (`JIRA_EMAIL`/`JIRA_API_TOKEN` missing) | `images: none (jira credentials not set)`; continue; warn at the gate. |
+| A fetch 404s or is rejected | that file's reason; the rest continue; warn at the gate. |
+| An image exceeds the 10 MB cap | skipped with its reason; warn at the gate. |
+| A non-image attachment | ignored silently — not a degradation. |
+
+Never a hard stop — images degrade exactly like the PRD and Figma.
+
+## 5. OpenSpecReader — service-repo `spec.md` files (contextual, optional by design)
 
 **Affected-repo + capability discovery** — validated on KING-20951, implemented in
 `scripts/openspec_resolver.py` (gh-only, no Jira dev-status needed):
