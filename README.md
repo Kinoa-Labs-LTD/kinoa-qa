@@ -17,6 +17,7 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 | **Atlassian** | Required | Jira Story (Step A, the one required input) and the Confluence PRD | No Story → hard stop at Step A. PRD only → header `prd: none (<reason>)`, warn at the gate, continue. |
 | **Allure TestOps** | Required for Step E | Finding and upserting cases in project KINOA | Steps A–D still run and `test-plan.md` is on disk; the upsert is deferred until the server is back. `--dry-run` needs it only to print intended actions. |
 | **Figma** | Optional | Reading mockup frames linked from the Story (`get_screenshot`, `get_design_context`) — **remote server preferred** (works headless), with the **local desktop server** as fallback | Header `design: none (<reason>)`, warn at the gate, continue — never a hard stop. Mockup-derived acceptance criteria are simply absent. |
+| **Jira REST (attachments)** | Optional, Step A | Reading image attachments on the Story | Without `JIRA_EMAIL` + `JIRA_API_TOKEN` the run continues and the header records `images: none (jira credentials not set)`. |
 
 OpenSpec specs are read with the `gh` CLI, not an MCP server; a repo with no OpenSpec file
 is the ordinary path, not a degradation.
@@ -110,6 +111,9 @@ at all — that host answers **403** no matter which scopes the token holds. Onl
 `https://api.atlassian.com/ex/jira/<cloudId>/rest/...` works. You do **not** configure that:
 `jira_base_url` stays the ordinary site URL and the cloud id is looked up automatically. It is
 worth knowing when a token looks correct and a call still returns 403.
+
+Each image is capped at 10 MB; a larger attachment is skipped with its reason and the others
+are still read.
 
 **If the variables are unset** the run continues — the header records
 `images: none (jira credentials not set)` and the gate warns. Missing credentials are never a

@@ -128,6 +128,20 @@ class TestTagVocabulary(unittest.TestCase):
         self.assertEqual(d.splitlines()[-1],
                          "Target: service=svc; capability=cap; scope=story")
 
+    def test_description_carries_image_provenance(self):
+        d = _payload(_case(**{"image-ref": "10001 — hero.png"}))["description"]
+        self.assertIn("image-ref: 10001 — hero.png", d)
+
+    def test_description_carries_all_three_refs_in_order(self):
+        d = _payload(_case(**{"openspec-ref": "auth#Sign-in/Happy path",
+                              "design-ref": "abc123/1:2 — Sign-in",
+                              "image-ref": "10001 — hero.png"}))["description"]
+        provenance_line = d.splitlines()[1]
+        self.assertEqual(
+            provenance_line,
+            "Provenance: openspec-ref: auth#Sign-in/Happy path; "
+            "design-ref: abc123/1:2 — Sign-in; image-ref: 10001 — hero.png")
+
     def test_description_omits_absent_refs(self):
         d = _payload(_case())["description"]
         self.assertEqual(d, "Verify sign-in works.\n"
