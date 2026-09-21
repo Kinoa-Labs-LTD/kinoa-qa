@@ -33,8 +33,10 @@ jobs:
           BASE: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=0 origin "$BASE"
-          merge_base=$(git merge-base "origin/$BASE" HEAD)
+          # checkout ran with fetch-depth: 0, but only the PR ref is present — fetch the base
+          # branch itself (no --depth: the full history is what merge-base needs).
+          git fetch --no-tags origin "$BASE"
+          merge_base=$(git merge-base FETCH_HEAD HEAD)
 
           # Paths that reach an installed user. Docs and the design history do not.
           changed=$(git diff --name-only "$merge_base"..HEAD -- 'skills/**' '.claude-plugin/**')
