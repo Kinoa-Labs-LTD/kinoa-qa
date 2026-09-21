@@ -63,7 +63,7 @@ ALLURE_ID_RE = re.compile(r"^[1-9][0-9]*$")
 DESIGN_REF_RE = re.compile(r"^[^/\s]+/[^/\s]+\s+—\s+\S.*$")
 # `<attachment-id> — <filename>`. Matched, never split: a filename may legitimately contain
 # an em dash, and splitting on it would truncate the value silently.
-IMAGE_REF_RE = re.compile(r"^\d+\s+—\s+\S.*$")
+IMAGE_REF_RE = re.compile(r"^[0-9]+\s+—\s+\S.*$")
 # The two test scopes a plan may declare. The field is optional — absent means Story scope,
 # and that default lives in the consumer, not here: this check only rejects a value that is
 # neither, so an unrecognised scope cannot reach Step E and be silently read as Story-scoped.

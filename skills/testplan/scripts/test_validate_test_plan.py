@@ -998,6 +998,11 @@ class ImageRefValid(unittest.TestCase):
         self.assertEqual(1, r["exit_code"])
         self.assertIn("ac:", _checks(r)["image-ref-valid"]["detail"])
 
+    def test_non_ascii_digit_attachment_id_fails(self):
+        r = self._run(PLAN_IMAGE_REF.replace("10231 —", "٣ —"))
+        self.assertEqual(1, r["exit_code"])
+        self.assertFalse(_checks(r)["image-ref-valid"]["ok"])
+
     def test_absent_image_ref_is_valid(self):
         r = self._run(PLAN_IMAGE_REF.replace(
             "- image-ref: 10231 — milestone-eligibility.png\n", ""))

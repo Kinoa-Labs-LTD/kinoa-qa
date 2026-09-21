@@ -7,13 +7,15 @@ Assemble the SoT bundle. It has two tiers, and the difference is enforced downst
 | **Authoritative** | `{ story, acceptance, prd?, designs[], images[] }` | Decides what a case asserts; may ground an `expected:`. |
 | **Contextual** | `{ openspecs[] }` | Enriches `preconditions`/`steps` only; may never own an `expected:`. |
 
-Only the Story is required. The PRD, the mockups and the OpenSpec files each degrade
-independently, and none of them is a hard stop. Story, PRD and mockup have no precedence
-between one another — a direct contradiction between them is a `## Conflicts` line, not
-something Step A arbitrates.
+Only the Story is required. The PRD, the mockups, the Story images and the OpenSpec files
+each degrade independently, and none of them is a hard stop. Story, PRD, mockup and image
+have no precedence between one another — a direct contradiction between them is a
+`## Conflicts` line, not something Step A arbitrates.
 
 ## 1. RequirementsReader — the Story (Atlassian MCP, required)
-`getJiraIssue(<STORY-KEY>)` → description + acceptance criteria + subtasks.
+`getJiraIssue(<STORY-KEY>)` → description + acceptance criteria + subtasks. Keep its raw
+JSON response as `issue_json` — including `fields.attachment` — for the ImageReader
+(section 4) to consume; it is not re-fetched there.
 Missing Story / MCP down → HARD STOP (the one required input).
 
 ## 2. PRDReader — the Confluence PRD (Atlassian MCP, authoritative)
@@ -96,22 +98,35 @@ exactly as it owns no MCP configuration. Images above the 10 MB cap (`MAX_BYTES`
 skipped with their reason; a non-image attachment is ignored, silently.
 
 `select_image_attachments` returns each kept record as `{ id, filename, mimeType, size,
-content_url }` — it carries no image bytes. Step A composes the bundle entry itself: take
-each kept record and add `bytes` from `fetch_attachment(record["content_url"], email=...,
-token=...)`, giving `images[ { id, filename, mimeType, bytes } ]`. Each entry is handed to
-the Step B subagent as an actual image, not a description of one.
+content_url }` — it carries no image bytes. A Step B subagent cannot be handed raw bytes in
+a text prompt, so Step A writes each image to disk and hands over a path instead:
+
+1. Create a run-scoped temporary directory (e.g. `mkdtemp`).
+2. Per kept record, call `fetch_attachment(record["content_url"], email=..., token=...)`
+   and write the returned bytes to `<tmpdir>/<attachment-id>-<filename>`.
+3. The bundle entry is that file's absolute path: `images[ { id, filename, mimeType, path
+   } ]` — `path` replaces `bytes`.
+
+Step B is then given those image paths (alongside the SoT bundle and the references) so its
+subagent can read each file directly, as an actual image, not a description of one.
 
 ### The `images:` header line
-Record `images: <n> read` when at least one image was fetched, `images: none` when the
-Story has no image attachment, or `images: none (<reason>)` for a degraded case.
+- `images: <n> read` — every image attachment was read successfully.
+- `images: <n> read (<k> failed: <reason>)` — some were read and some failed or were
+  skipped (e.g. one exceeded the 10 MB cap while the rest were fetched).
+- `images: none` — the Story has no image attachment. Not a degradation, no gate warning.
+- `images: none (<reason>)` — nothing at all could be read (credentials unset, every fetch
+  failed, etc.).
+The header is informational only; the validator does not parse it.
 
 ### Degradation
 | Situation | Behavior |
 |---|---|
 | No image attachment on the Story | `images: none`; no gate warning. |
 | Credentials unset (`JIRA_EMAIL`/`JIRA_API_TOKEN` missing) | `images: none (jira credentials not set)`; continue; warn at the gate. |
-| A fetch 404s or is rejected | that file's reason; the rest continue; warn at the gate. |
-| An image exceeds the 10 MB cap | skipped with its reason; warn at the gate. |
+| A fetch 404s or is rejected, and it is the only image | `images: none (<reason>)`; continue; warn at the gate. |
+| A fetch 404s or is rejected, but at least one other image succeeded | `images: <n> read (<k> failed: <reason>)`; continue; warn at the gate. |
+| An image exceeds the 10 MB cap | skipped with its reason, folded into the same partial-failure count as above; warn at the gate. |
 | A non-image attachment | ignored silently — not a degradation. |
 
 Never a hard stop — images degrade exactly like the PRD and Figma.

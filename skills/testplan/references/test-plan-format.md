@@ -20,7 +20,7 @@ story: <STORY-KEY> · title: <story title> · target: <service>/<capability>@<re
 prd: <resolved | none (<reason>)>
 openspec: <<capability>@<sha12> | none | none (<reason>)>
 design: <<backend> | none (<reason>)>
-images: <<n> read | none | none (<reason>)>
+images: <<n> read | <n> read (<k> failed: <reason>) | none | none (<reason>)>
 scope: <e2e | story>
 ```
 > `title:` is the Jira Story summary verbatim, on the same logical line as `story:`. It is
@@ -44,8 +44,12 @@ scope: <e2e | story>
 > gate. The validator decides its OpenSpec-grounded checks purely from the `--openspec`
 > arguments it is given, not from these lines. `design:` records which Figma backend
 > answered (remote or the local desktop server), or why none did. `images: none` is
-> likewise the ordinary path for a Story with no image attachment; only an
-> attempted-and-failed retrieval carries a `(<reason>)` and warns at the gate.
+> likewise the ordinary path for a Story with no image attachment. `images: <n> read`
+> means every image attachment was read; `images: <n> read (<k> failed: <reason>)` means
+> some were read and some failed or were skipped — it never claims none were read when
+> some were; `images: none (<reason>)` is reserved for when nothing at all could be
+> read. Only the last two carry a `(<reason>)` and warn at the gate. The header is
+> informational only — the validator does not parse it.
 
 ## `## Acceptance Criteria` (required — both modes)
 

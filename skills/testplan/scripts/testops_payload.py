@@ -35,10 +35,10 @@ def _dedupe(items):
 
 def _description(case, tags, marker):
     """The case's one-sentence purpose, plus a one-line provenance suffix when the plan
-    carries an `openspec-ref:` or `design-ref:`. The tags that used to carry provenance are
+    carries an `openspec-ref:`, `design-ref:` or `image-ref:`. The tags that used to carry provenance are
     retired, so this line is their only route into TestOps. The target marker is always last."""
     purpose = (case.get("tags", {}).get("purpose") or "").strip()
-    refs = [f"{k}: {tags[k].strip()}" for k in ("openspec-ref", "design-ref")
+    refs = [f"{k}: {tags[k].strip()}" for k in ("openspec-ref", "design-ref", "image-ref")
             if (tags.get(k) or "").strip()]
     lines = [l for l in (purpose, "Provenance: " + "; ".join(refs) if refs else "", marker) if l]
     return "\n".join(lines)

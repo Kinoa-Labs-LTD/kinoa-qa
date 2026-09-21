@@ -169,9 +169,10 @@ error variant. There is no separate "design AC" list and no `design:` source kin
 
 ## Images — deriving ACs from `images[]`
 
-Each bundle entry `images[{ id, filename, mimeType, bytes }]` is a **business
-requirement**, equal to the Story, the PRD and a mockup. Read what the image *shows* and
-write it into `## Acceptance Criteria` like any other criterion.
+Each bundle entry `images[{ id, filename, mimeType, path }]` is a **business
+requirement**, equal to the Story, the PRD and a mockup. `path` is the absolute path of the
+file Step A wrote the image's bytes to; read that file directly as an image. Read what the
+image *shows* and write it into `## Acceptance Criteria` like any other criterion.
 
 - The case stays `source: ac: AC-<n>` and additionally carries
   `image-ref: <id> — <filename>`, taken verbatim from the bundle entry.

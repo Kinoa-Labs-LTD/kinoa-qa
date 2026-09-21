@@ -34,8 +34,7 @@ not read the whole spec/PRD itself.
 
 | What | Reference |
 |---|---|
-| Assemble the SoT; adapters (Jira, Confluence, Figma, `gh`) | `references/sot-assembly.md` |
-| Story image attachments (ImageReader) | `references/sot-assembly.md` |
+| Assemble the SoT; adapters (Jira, Confluence, Figma, `gh`) incl. Story image attachments (ImageReader) | `references/sot-assembly.md` |
 | QA-lens derivation rules, conflicts, no-fabrication | `references/generation.md` |
 | Exact `test-plan.md` shape + TestOps mapping | `references/test-plan-format.md` |
 | Idempotent TestOps upsert, custom-field pre-flight, `--dry-run` | `references/testops-sync.md` |
@@ -43,8 +42,11 @@ not read the whole spec/PRD itself.
 
 ## Step A — Assemble the SoT (read-only)
 Follow `references/sot-assembly.md`. Result: the SoT bundle — authoritative
-`{ story, acceptance, prd?, designs[], images[] }` plus contextual `{ openspecs[] }`. Only
-the Story is required; PRD, mockups, images and specs degrade independently. Never write.
+`{ story, acceptance, prd?, designs[], images[] }` (each `images[]` entry is `{ id,
+filename, mimeType, path }`, where `path` is the absolute path of a file Step A wrote to a
+run-scoped temporary directory) plus contextual `{ openspecs[] }`. Only the Story is
+required; PRD, mockups, images and specs degrade independently. Step A creates the
+temporary directory and writes each fetched image to it; it otherwise never writes.
 
 ## Step B — Generate (fresh-context subagent)
 
@@ -82,7 +84,8 @@ allowed set.
 **Read the previous plan at that path before generating.** If it exists, pass its full text
 to the subagent as `previous_plan`. Dispatch a subagent with the SoT bundle +
 `previous_plan` (when present) + `references/generation.md` +
-`references/test-plan-format.md`. It returns exactly one artifact: the `test-plan.md`
+`references/test-plan-format.md` + the `images[].path` files for the subagent to read
+directly as images alongside the bundle. It returns exactly one artifact: the `test-plan.md`
 content, carrying `allure-id:` forward for every case it keeps (see
 `references/generation.md`, "Carrying `allure-id:` forward"). Then, before writing:
 
@@ -116,16 +119,18 @@ no spec.) The validator has **three outcomes**:
 | Exit | Outcome | Meaning | What happens next |
 |---|---|---|---|
 | 0 | PASS | Structurally valid, no unresolved conflict. | Proceed to the Step D gate. |
-| 1 | FAIL | Structurally invalid (missing field, bad `source:`, uncited AC, dishonest gap, unknown `openspec-ref`, malformed `design-ref`, **missing `## Conflicts` header**). | One regeneration retry with the validator detail → still FAIL → **STOP before the human gate**; never ships. |
+| 1 | FAIL | Structurally invalid (missing field, bad `source:`, uncited AC, dishonest gap, unknown `openspec-ref`, malformed `design-ref`, malformed `image-ref`, **missing `## Conflicts` header**). | One regeneration retry with the validator detail → still FAIL → **STOP before the human gate**; never ships. |
 | 2 | HOLD | Structurally valid, but ≥1 `## Conflicts` line has no `→ resolved: …`. | **Proceeds to the Step D gate** (conflicts shown first). Step E refuses to upsert. |
 
 FAIL stops before the gate. HOLD does not — a HOLD plan is exactly the thing the QA
 engineer must see.
 
-Checks run: `required-fields`, `source-valid`, `scenario-coverage` (**advisory** — reports
-a count, never fails), `ac-coverage` (hard fail; an AC named by an unresolved conflict is
-exempt, and a case citing such an AC is itself a failure), `gap-honesty` (requirement- and
-scenario-level), `conflict-resolution`, `openspec-ref-valid`, `design-ref-valid`.
+Checks run, in order: `required-fields`, `source-valid`, `openspec-ref-valid`,
+`design-ref-valid`, `image-ref-valid`, `allure-id-valid` (shape and uniqueness of a present
+`allure-id:` only — never checked against TestOps), `scenario-coverage` (**advisory** —
+reports a count, never fails), `ac-coverage` (hard fail; an AC named by an unresolved
+conflict is exempt, and a case citing such an AC is itself a failure), `gap-honesty`
+(requirement- and scenario-level), `conflict-resolution`, `scope-valid`.
 
 ## Step D — Human gate
 Present the validated plan from `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<scope>.test-plan.md`
@@ -199,8 +204,9 @@ After a create, write the returned id back into the plan at the stable path as
 are printed; nothing is written and it never refuses.
 
 **Tag policy: `qa-generated` only.** The content-derived identity tag, `type-*`, `priority-*`, `openspec-context`,
-`design-backed` and `spec-derived` are retired; OpenSpec and mockup provenance rides as a
-`Provenance:` line on the payload `description`, and the target marker as its last line.
+`design-backed` and `spec-derived` are retired; OpenSpec, mockup and Story-image provenance
+rides as a `Provenance:` line on the payload `description`, and the target marker as its
+last line.
 
 ## Degradation
 | Failure | Behavior |
@@ -212,8 +218,9 @@ are printed; nothing is written and it never refuses.
 | Figma unreachable (no MCP, both backends down) or no frame linked | Continue; header `design: none (<reason>)`; warn at the gate; never a hard stop. |
 | Story has no image attachment | Ordinary path, not a degradation; header `images: none`; **no** gate warning. |
 | Jira credentials unset (`JIRA_EMAIL`/`JIRA_API_TOKEN`) | Continue; header `images: none (jira credentials not set)`; warn at the gate; never a hard stop. |
-| An image fetch fails (404, rejected) | Continue; header `images: none (<reason>)`; warn at the gate; never a hard stop. |
-| An image exceeds the 10 MB cap | Continue; header `images: none (<reason>)`; warn at the gate; never a hard stop. |
+| An image fetch fails (404, rejected) and it was the only image | Continue; header `images: none (<reason>)`; warn at the gate; never a hard stop. |
+| An image fetch fails (404, rejected) but at least one other image was read | Continue; header `images: <n> read (<k> failed: <reason>)`; warn at the gate; never a hard stop. |
+| An image exceeds the 10 MB cap | Continue; folded into the same partial-failure count as a failed fetch (`images: <n> read (<k> failed: <reason>)`, or `images: none (<reason>)` if it was the only image); warn at the gate; never a hard stop. |
 | No plan at the stable path (first run for this Story+target) | Ordinary path, not a degradation; generate without `previous_plan`; every case is "new" at the gate. |
 | The plan at the stable path is unreadable (permissions, corrupt, not parseable as a plan) | **Never overwrite it.** Stop before generating, name the path and the reason, and let the QA engineer move or repair it — regenerating over it would destroy the only copy of the assigned ids. |
 | Two Step B runs write the same Story+target plan concurrently, or a write is interrupted | Write-to-temp-then-`rename` keeps the file whole — it is either the old plan or the new one, never a partial. The writes are **not** serialised: last writer wins, so a plan merged from a stale read can lose ids added meanwhile. Two engineers on one box, or two terminals, must not run Step B for the same Story+target at once. |

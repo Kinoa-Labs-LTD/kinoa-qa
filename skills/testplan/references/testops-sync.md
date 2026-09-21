@@ -162,7 +162,7 @@ derived from its content.
 | payload key | value |
 |---|---|
 | `name` | the case title — the `TC-<n>` prefix is stripped |
-| `description` | the case `purpose:` sentence, plus a `Provenance: openspec-ref: …; design-ref: …` line when either is present, plus the target marker as the last line |
+| `description` | the case `purpose:` sentence, plus a `Provenance: openspec-ref: …; design-ref: …; image-ref: …` line naming whichever of the three are present, in that field order, plus the target marker as the last line |
 | `precondition` | `preconditions:`, newline-separated |
 | `expectedResult` | the case-level `expected:` |
 | `status` / `workflow` | `"Review"` under `scope: e2e`, `"Draft"` under `scope: story` or an absent scope / `"Manual Kinoa"`; `testLayer` is never sent |
@@ -183,7 +183,7 @@ marker's `scope=` field), `precondition`, `expectedResult`, `Suite`, `Story`, `C
 {
   "projectId": 1,
   "name": "Project selection dropdown populates with all accessible destination projects",
-  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal\nTarget: service=in-app-templates; capability=export; scope=story",
+  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal; image-ref: 10001 — export-modal.png\nTarget: service=in-app-templates; capability=export; scope=story",
   "precondition": "The user has access to 5 destination projects.\nThe user is on the In-App Template list page.",
   "expectedResult": "All 5 destination projects are listed and the source project is not.",
   "status": "Draft",
