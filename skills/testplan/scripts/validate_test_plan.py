@@ -15,21 +15,23 @@ source of truth; OpenSpec files (`--openspec`, optional) are context only. Check
      file is supplied;
   4. design-ref-valid — every `design-ref:` reads `<fileKey>/<nodeId> — <frame name>` and
      accompanies an `ac:` source; checked syntactically, the validator never calls Figma;
-  5. allure-id-valid — a present `allure-id:` is a positive integer and no two cases carry
+  5. image-ref-valid — every `image-ref:` reads `<attachment-id> — <filename>` and
+     accompanies an `ac:` source; checked syntactically, the validator never calls Jira;
+  6. allure-id-valid — a present `allure-id:` is a positive integer and no two cases carry
      the same one (shape and uniqueness only; the validator is offline and never asks
      TestOps whether the id exists). The field is optional: its absence is the ordinary
      first-run state;
-  6. scenario-coverage — advisory only: how many OpenSpec scenarios a case enriches;
-  7. ac-coverage — `## Acceptance Criteria` is required and every AC listed there is cited
+  7. scenario-coverage — advisory only: how many OpenSpec scenarios a case enriches;
+  8. ac-coverage — `## Acceptance Criteria` is required and every AC listed there is cited
      by >=1 case;
-  8. conflict-resolution — `## Conflicts` header present, no unrecognised line in the
+  9. conflict-resolution — `## Conflicts` header present, no unrecognised line in the
      section, every side of each conflict (two or more) named with a known artifact, and no
      case citing an AC a still-unresolved conflict contradicts, and every `→ resolved:`
      annotation written in the documented grammar;
-  9. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
+ 10. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
      enriches is named in a `## Gaps` line, unless an unresolved `## Conflicts` line already
      names it; spec coverage is advisory, dishonesty is not;
- 10. scope-valid — the header's optional `scope:` is `e2e` or `story`. Absent is the
+ 11. scope-valid — the header's optional `scope:` is `e2e` or `story`. Absent is the
      ordinary state and passes (the Story-scope default is applied by the consumer, not
      here); any other value FAILs naming the value and the allowed set.
 
@@ -59,10 +61,13 @@ AC_SECTION_RE = re.compile(r"^##\s+Acceptance Criteria\s*$", re.M)
 # TestOps whether the id exists.
 ALLURE_ID_RE = re.compile(r"^[1-9][0-9]*$")
 DESIGN_REF_RE = re.compile(r"^[^/\s]+/[^/\s]+\s+—\s+\S.*$")
+# `<attachment-id> — <filename>`. Matched, never split: a filename may legitimately contain
+# an em dash, and splitting on it would truncate the value silently.
+IMAGE_REF_RE = re.compile(r"^\d+\s+—\s+\S.*$")
 # The two test scopes a plan may declare. The field is optional — absent means Story scope,
 # and that default lives in the consumer, not here: this check only rejects a value that is
 # neither, so an unrecognised scope cannot reach Step E and be silently read as Story-scoped.
-CONFLICT_SOURCES = ("story", "prd", "design", "openspec")
+CONFLICT_SOURCES = ("story", "prd", "design", "openspec", "image")
 CONFLICT_AC_RE = re.compile(r"^(AC-\d+)\s*·")
 CONFLICT_BODY_RE = re.compile(r"·\s*(.*)$")
 CONFLICT_SIDE_RE = re.compile(r"^([A-Za-z-]+):\s*\S")
@@ -205,7 +210,22 @@ def validate(plan_path, openspec_path=None):
     checks.append({"name": "design-ref-valid", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
-    # 5. allure-id-valid — shape, plus uniqueness across the plan; existence in TestOps is
+    # 5. image-ref-valid — syntax and source pairing only; never a Jira call
+    bad = []
+    for c in cases:
+        ref = (c["tags"].get("image-ref") or "").strip()
+        if not ref:
+            continue
+        if not IMAGE_REF_RE.match(ref):
+            bad.append(f"{c['id']}: malformed image-ref '{ref}' "
+                       f"(expected '<attachment-id> — <filename>')")
+        if not c["tags"].get("source", "").startswith("ac:"):
+            bad.append(f"{c['id']}: image-ref requires an 'ac:' source — an image enters "
+                       f"through the acceptance criteria, not as a source kind")
+    checks.append({"name": "image-ref-valid", "ok": not bad,
+                   "detail": "ok" if not bad else "; ".join(bad)})
+
+    # 6. allure-id-valid — shape, plus uniqueness across the plan; existence in TestOps is
     # Step E's business. Two cases sharing an id would make Step E update one TestOps case
     # twice and never create the other, so a duplicate is a failure here, before any write.
     bad, present = [], 0
@@ -230,7 +250,7 @@ def validate(plan_path, openspec_path=None):
                               if present else
                               "ok: no case carries an allure-id (the first-run state)")})
 
-    # 6. scenario-coverage — advisory, never a failure
+    # 7. scenario-coverage — advisory, never a failure
     if spec_paths:
         uncovered = sorted(scenarios - covered_scn)
         detail = f"advisory: {len(scenarios) - len(uncovered)}/{len(scenarios)} scenarios enriched a case"
@@ -250,7 +270,7 @@ def validate(plan_path, openspec_path=None):
         if m:
             contradicted.add(m.group(1))
 
-    # 7. ac-coverage — required in both modes
+    # 8. ac-coverage — required in both modes
     if not has_ac_section or not acs:
         checks.append({"name": "ac-coverage", "ok": False,
                        "detail": "missing '## Acceptance Criteria' — every case must be "
@@ -260,7 +280,7 @@ def validate(plan_path, openspec_path=None):
         checks.append({"name": "ac-coverage", "ok": not uncovered_ac,
                        "detail": "ok" if not uncovered_ac else "uncovered: " + "; ".join(uncovered_ac)})
 
-    # 8. conflict-resolution
+    # 9. conflict-resolution
     bad = []
     if not has_conflicts_section:
         bad.append("missing '## Conflicts' section header (may be empty, but it is required)")
@@ -287,7 +307,7 @@ def validate(plan_path, openspec_path=None):
     checks.append({"name": "conflict-resolution", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
-    # 9. gap-honesty
+    # 10. gap-honesty
     if spec_paths:
         # An OpenSpec scenario (or requirement) named in an unresolved conflict line is
         # exempt: the contradiction is already surfaced, exactly as its AC is exempt from
@@ -301,7 +321,7 @@ def validate(plan_path, openspec_path=None):
     else:
         checks.append({"name": "gap-honesty", "ok": True, "detail": "n/a (no OpenSpec file)"})
 
-    # 10. scope-valid — the declared test scope, value only. Absent is the ordinary state of
+    # 11. scope-valid — the declared test scope, value only. Absent is the ordinary state of
     # every plan on disk and passes; anything but `e2e` or `story` fails naming the value.
     if "scope" not in header:
         scope_detail, scope_ok = "ok: no scope declared (Story-scoped)", True

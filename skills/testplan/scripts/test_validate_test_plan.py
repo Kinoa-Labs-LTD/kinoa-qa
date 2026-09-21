@@ -933,5 +933,101 @@ class StoryScopeMultiExpectedUnchangedTest(unittest.TestCase):
             self.assertEqual(1, r["exit_code"])
 
 
+PLAN_IMAGE_REF = """# QA Test Plan — KING-1 · svc / cap
+story: KING-1 · title: T · generated: 2026-09-21
+images: 1 read
+
+## Acceptance Criteria
+
+- AC-1: The eligibility checkbox is disabled while a progression is active.
+
+## Cases
+
+### TC-1 · Eligibility checkbox is disabled during a progression
+- type: functional
+- priority: P1
+- purpose: Verify that the checkbox is disabled while a progression is active.
+- source: ac: AC-1
+- image-ref: 10231 — milestone-eligibility.png
+- preconditions: An operator is on the in-app configuration screen.
+- steps:
+  1. Open the in-app configuration screen.
+     → expected: The eligibility checkbox is visible and disabled.
+- expected: The checkbox cannot be toggled during a progression.
+
+## Conflicts
+
+## Gaps
+"""
+
+
+class ImageRefValid(unittest.TestCase):
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            return validate(_write(tmp, plan_text), None)
+
+    def test_well_formed_image_ref_passes(self):
+        r = self._run(PLAN_IMAGE_REF)
+        self.assertEqual(0, r["exit_code"], r["checks"])
+        self.assertTrue(_checks(r)["image-ref-valid"]["ok"])
+
+    def test_filename_containing_an_em_dash_is_not_truncated(self):
+        r = self._run(PLAN_IMAGE_REF.replace("milestone-eligibility.png",
+                                             "milestone — eligibility.png"))
+        self.assertEqual(0, r["exit_code"], r["checks"])
+        self.assertTrue(_checks(r)["image-ref-valid"]["ok"])
+
+    def test_malformed_image_ref_fails_naming_the_case(self):
+        r = self._run(PLAN_IMAGE_REF.replace(
+            "- image-ref: 10231 — milestone-eligibility.png",
+            "- image-ref: milestone-eligibility.png"))
+        self.assertEqual(1, r["exit_code"])
+        self.assertIn("TC-1", _checks(r)["image-ref-valid"]["detail"])
+
+    def test_non_numeric_attachment_id_fails(self):
+        r = self._run(PLAN_IMAGE_REF.replace("10231 —", "abc —"))
+        self.assertEqual(1, r["exit_code"])
+        self.assertFalse(_checks(r)["image-ref-valid"]["ok"])
+
+    def test_image_ref_requires_an_ac_source(self):
+        r = self._run(PLAN_IMAGE_REF
+                      .replace("- source: ac: AC-1",
+                               "- source: QA-added: operator sanity check")
+                      .replace("- AC-1: The eligibility checkbox is disabled while a "
+                               "progression is active.\n", ""))
+        self.assertEqual(1, r["exit_code"])
+        self.assertIn("ac:", _checks(r)["image-ref-valid"]["detail"])
+
+    def test_absent_image_ref_is_valid(self):
+        r = self._run(PLAN_IMAGE_REF.replace(
+            "- image-ref: 10231 — milestone-eligibility.png\n", ""))
+        self.assertEqual(0, r["exit_code"], r["checks"])
+        self.assertTrue(_checks(r)["image-ref-valid"]["ok"])
+
+
+class ImageConflictSource(unittest.TestCase):
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            return validate(_write(tmp, plan_text), None)
+
+    def test_image_is_an_accepted_conflict_source(self):
+        plan = PLAN_IMAGE_REF.replace(
+            "- AC-1: The eligibility checkbox is disabled while a progression is active.",
+            "- AC-1: The eligibility checkbox is disabled while a progression is active.\n"
+            "- AC-2: The eligibility checkbox is required.").replace(
+            "## Conflicts\n",
+            "## Conflicts\n\n- ⚠️ CONFLICT: AC-2 · story: the checkbox is optional vs "
+            "image: the frame shows it required — no case was generated for AC-2\n")
+        r = self._run(plan)
+        # An unannotated conflict is HOLD, not FAIL: the source vocabulary accepted `image`.
+        self.assertEqual(2, r["exit_code"], r["checks"])
+
+    def test_unknown_conflict_source_is_still_rejected(self):
+        r = self._run(PLAN_IMAGE_REF.replace(
+            "## Conflicts\n",
+            "## Conflicts\n\n- ⚠️ CONFLICT: AC-1 · story: a vs screenshot: b — none\n"))
+        self.assertEqual(1, r["exit_code"])
+
+
 if __name__ == "__main__":
     unittest.main()
