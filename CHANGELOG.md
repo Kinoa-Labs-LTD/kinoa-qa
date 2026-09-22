@@ -9,6 +9,15 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.2.1 — 2026-09-22
+
+Documentation correctness only; no behaviour change.
+
+- `sot-assembly.md` described a `--continue-on-missing` flag that the skill never accepted and
+  that appears in no usage line. The sentence is gone, replaced by what actually happens when
+  one OpenSpec target of several fails: the rest resolve and the failure is reported at the
+  human gate.
+
 ## 0.2.0 — 2026-09-21
 
 **Step A now reads image attachments on the Jira Story.** A requirement that lives in a
