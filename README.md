@@ -139,6 +139,26 @@ Step B, not a check any script performs.
 
 `--dry-run` prints the intended TestOps actions and writes nothing.
 
+### Every argument, and whether you must pass it
+
+| Argument | Required? | What it is for |
+|---|---|---|
+| `<STORY-KEY>` | **Always** | The Jira Story to build the plan from — the one genuinely mandatory input. No Story, no run: Step A hard-stops. Everything else in the bundle (PRD, mockups, images, specs) degrades without stopping the run. |
+| `--story-field <value>` | **For Step E**, unless `testops.custom_fields.story` is filled in | The Allure `Story` custom field. Checked before any write: the value must already be in use in the project, because Allure rejects an unknown value *silently* and fails the whole creation. |
+| `--component <value>` | **For Step E**, unless `testops.custom_fields.component` is filled in | The Allure `Component` custom field. Same pre-flight check. |
+| `--feature <value>` | **For Step E** under Story scope, unless `testops.custom_fields.feature` is filled in — and an **error** under `--scope e2e` | The Allure `Feature` custom field. Under `--scope e2e` the Feature is `e2e scope`, decided by the plugin, so passing this flag there is rejected rather than silently discarded. |
+| `--scope e2e\|story` | Optional — defaults to `story` | The plan's **test scope** (see below). Written into the plan header on the first run; afterwards the header wins, and a `--scope` that disagrees **aborts** rather than flipping cases already pushed. |
+| `--target <service>/<capability>` | Optional | Names which service capability the plan covers. It decides the plan's filename, is written into each case's `Target:` marker — which is how a re-run finds its own cases — and tells the OpenSpec resolver which `spec.md` to look for. Without it the plan is `<STORY-KEY>-no-target-<scope>.test-plan.md`. |
+| `--repo <owner>/<name>` | Optional | Overrides which GitHub repo the OpenSpec spec is read from, when the Story's PRs don't identify it and `services.json` has no mapping. |
+| `--openspec-path <dir>` | Optional | Reads the spec from a local checkout (`<dir>/openspec/specs/<capability>/spec.md`) instead of GitHub. Useful when the spec isn't pushed yet. |
+| `--allow-unverified-fields` | Optional | Downgrades one pre-flight check to a warning: the check proves a custom-field value is *in use*, never that it exists, so a value you just created in Allure that no case uses yet would otherwise abort the run. Use it when you know the value is real. |
+| `--dry-run` | Optional | Writes nothing to Allure TestOps and never refuses. Steps A–D run in full; Step E performs only its read-only lookups and prints the create/update it would do per case. |
+
+Only `<STORY-KEY>` is unconditionally required. The three custom-field flags are the usual
+reason a first run stops — `config.json` ships their defaults **empty on purpose**, so that no
+run inherits another team's values by accident. Fill them in once and the flags become
+optional overrides.
+
 ### Three runs you will actually type
 
 ```bash
