@@ -178,8 +178,8 @@ Interface: `(service, capability[, ref]) -> spec text`. Backends:
 - **A spec the QA engineer explicitly requested failed**, or the resolver errored
   (`--target` / `--repo` / `--openspec-path` given but unresolvable, `gh` unauthed, one
   target of several fails): still non-fatal, but header `openspec: none (<reason>)` and a
-  **warning at the human gate**. `--continue-on-missing` opts into partial multi-target
-  runs; the default aborts a multi-target run only if the QA engineer asks.
+  **warning at the human gate**. One target of several failing never aborts the run: the
+  remaining targets resolve and the failure is reported at the gate.
 
 ### The `openspec:` header line
 When an OpenSpec file is resolved, record `openspec: <capability>@<first 12 of sha256(spec
