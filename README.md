@@ -139,6 +139,60 @@ Step B, not a check any script performs.
 
 `--dry-run` prints the intended TestOps actions and writes nothing.
 
+### Three runs you will actually type
+
+```bash
+# a dry run — writes nothing to Allure TestOps
+/kinoa-qa:testplan KING-1234 --dry-run
+
+# a real run, Story-scoped
+/kinoa-qa:testplan KING-1234 --story-field Template --component Game-Settings --feature In-Apps
+
+# an end-to-end journey plan
+/kinoa-qa:testplan KING-1234 --scope e2e --story-field Template --component Game-Settings
+```
+
+**A dry run** does everything except write. Steps A–D run in full — the Story is read, the plan
+is generated to its stable path, the validator gates it — and Step E performs only its
+read-only lookups, printing the create/update it *would* do per case. It still needs the
+custom-field values (Gate 0b runs, so a preview cannot promise a batch that could not land),
+and it never writes an `allure-id:` back into the plan. Use it to see what a first push would
+do to a project you share with other people.
+
+**A real run, Story-scoped** is the ordinary run and the default — `--scope story` is what you
+get when neither the flag nor the plan header says otherwise. It produces the test cases for
+*one Story's own behaviours*: each case asserts one acceptance criterion, each step carries
+**exactly one** `→ expected:` (a second one fails validation, naming the step), and the cases
+arrive in TestOps as **`Draft`** under the `Feature` you passed. This is the run to reach for
+when you are covering a ticket.
+
+**An end-to-end journey plan** is the same Story read with a different question: not "does this
+criterion hold?" but "does the whole cross-component path work?". Under `--scope e2e` three
+things change and nothing else does:
+
+- a step may carry **several** `→ expected:` lines, each becoming its own expected-result block
+  in TestOps, in the order written — that is what makes a long journey expressible;
+- `Feature` is set for you to **`e2e scope`**, so passing `--feature` there is an **error**
+  rather than a silently discarded value;
+- cases are created as **`Review`** instead of `Draft`.
+
+`Suite`, `Story`, `Component`, the Jira link, the tags and the description are identical in
+both scopes.
+
+The two scopes never collide: each writes its own plan file (`…-story.test-plan.md` /
+`…-e2e.test-plan.md`) and reconciles against its own set of cases in TestOps, so one Story can
+have both without either run rewriting the other's cases. The scope is recorded in the plan
+header, and from then on **the header wins** — a later `--scope` that disagrees aborts the run
+rather than flipping the status and Feature of cases already pushed. To change it, edit the
+`scope:` line in the plan yourself, or delete the plan.
+
+One limitation worth knowing before you choose `e2e`: this repo does **not** encode your e2e
+suite's authoring conventions — its naming grammar, stepper structure and publish/WS blocks
+live outside it. An e2e plan generated here follows the same rules as any other plan
+(every case grounded in an acceptance criterion, `purpose:` beginning "Verify"), and the QA
+engineer supplies the house style. See `skills/testplan/references/generation.md`, "What this
+plugin does NOT know about e2e authoring".
+
 See `skills/testplan/SKILL.md` for the flow and `skills/testplan/references/` for the current
 format and vocabulary. `docs/superpowers/` holds the original design and plan as dated historical
 records — they predate later vocabulary changes and are not authoritative.
