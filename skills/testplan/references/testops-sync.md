@@ -6,44 +6,44 @@ once via `testops_get_project` on `project_name` "KINOA" and cache it).
 Step E runs in this order and stops at the first refusal:
 
 ```
-re-run the validator  →  read the test scope from the plan header  →  resolve the custom
-   fields (the scope decides Feature)  →  abort if anything is missing
+re-run the validator  →  read the format from the plan header  →  resolve the custom
+   fields (flag, else config default)  →  abort if anything is missing
 →  three by-value lookups  →  check_field_values  →  abort if not ok (unverified values
    pass as warnings under --allow-unverified-fields)
 →  build payloads  →  update by verified id | reconcile by Story + target
 ```
 
-## The test scope of the run
+## The format of the run
 
-Before anything is resolved, read the plan's **test scope** from its header — the plan on disk
-at the stable path
-`~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<scope>.test-plan.md`, the same text
-Gate 0a just validated:
+Before anything is resolved, read the plan's **format** — its `scope:` header field, `smoke`
+or `e2e` — from the plan on disk at the stable path
+`~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<format>.test-plan.md`, the same text
+Gate 0a just validated. `testplan` writes only `-e2e` plans; the fourth segment keeps a smoke
+plan of the same target in its own file.
 
 ```python
 from plan_parser import parse_header
-scope = parse_header(plan_text).get("scope") or "story"   # absent means Story scope
+scope = parse_header(plan_text).get("scope") or "e2e"   # absent means e2e
 ```
 
 `parse_header` reads only the prologue before the first `## ` heading, so a `scope:`-looking
 line inside a case body is never mistaken for the header field. An **absent** field is absent
-from the returned dict — the `or "story"` default is applied here, by the consumer, so "the
-plan says nothing" and "the plan says `story`" stay distinguishable upstream. The header is the
-source of truth: a `--scope` flag that disagrees with an existing header aborts (see `SKILL.md`,
-Step B), and Step E never takes the scope from the flag, from Step A's memory or from a case's
-`type: e2e`.
+from the returned dict — the `or "e2e"` default is applied here, by the consumer, so "the plan
+says nothing" and "the plan says `e2e`" stay distinguishable upstream. The header is the source
+of truth: Step E never takes the format from Step A's memory, from the filename or from a
+case's `type:`. Any value other than `smoke` or `e2e` never gets here — Gate 0a's validator
+fails it (`scope-valid`).
 
-That one value is then passed to **both** builders, and to nothing else:
+That one value is passed to the payload builder, and to nothing else:
 
 ```python
-resolve_custom_fields(config, story_key=…, story_title=…, …, scope=scope)   # Gate 0b
 case_to_payload(case, story=…, service=…, capability=…, custom_fields=…, scope=scope)
 ```
 
-Pass it to both or the scope reaches no payload: the resolver owns `Feature`, the payload
-builder owns `status`, and neither infers the other's value. "Test scope" here is the plan's
-`scope:` field; the reconciliation **in-scope set** below is a different thing and keeps its
-own name.
+It decides the payload's `status` and the `scope=` field of the target marker. The custom-field
+resolver takes no scope: `Feature`, like `Story` and `Component`, is the caller's in both
+formats. "Format" here is the plan's `scope:` field; the reconciliation **in-scope set** below
+is a different thing and keeps its own name.
 
 ## Gate 0 — nothing is written until both pre-flights pass
 
@@ -78,20 +78,12 @@ from a typo. The gate therefore aborts by default and says what it actually chec
 
    ```python
    resolve_custom_fields(config, *, story_key, story_title,
-                         story_field=None, component=None, feature=None, scope=None)
+                         story_field=None, component=None, feature=None)
    # -> {"fields": {"Suite","Story","Component","Feature"}, "missing": [...], "errors": [...]}
    ```
-   **Under `scope="e2e"` the resolver sets `Feature = "e2e scope"` itself**, before this gate's
-   value lookup, so step 3 verifies the value that actually ships rather than the one the flags
-   asked for. Applying the override later, inside the payload builder, would be verified by
-   nothing. `Feature = "e2e scope"` is already carried by hundreds of cases in project KINOA, so
-   the by-value lookup finds it and Gate 0b passes without `--allow-unverified-fields`.
-   An explicitly passed `--feature` under `scope: e2e` is an **error**, not a silent discard —
-   `--feature 'Deeplinks' conflicts with scope 'e2e', which sets Feature 'e2e scope' — drop
-   --feature or change the scope` — because the flag and the scope state different intents and
-   guessing which wins produces a silent defect. A `testops.custom_fields.feature` default in
-   `config.json` is overridden silently; only the explicit flag is a conflict. Under
-   `scope="story"` or with no scope, resolution is exactly as it was.
+   The resolver takes **no scope** and never sets a value itself: `Feature` is the caller's
+   for every plan, e2e and smoke alike, so `--feature` is honoured under e2e exactly as
+   `--story-field` and `--component` are.
    A `--story-field` / `--component` / `--feature` flag beats the `testops.custom_fields.*`
    default in `config.json`; those defaults ship **empty** on purpose, so a run with no flags
    reaches step 2 and aborts. `story_title` is the `title:` field of the plan header (see
@@ -165,28 +157,28 @@ derived from its content.
 | `description` | the case `purpose:` sentence, plus a `Provenance: openspec-ref: …; design-ref: …; image-ref: …` line naming whichever of the three are present, in that field order, plus the target marker as the last line |
 | `precondition` | `preconditions:`, newline-separated |
 | `expectedResult` | the case-level `expected:` |
-| `status` / `workflow` | `"Review"` under `scope: e2e`, `"Draft"` under `scope: story` or an absent scope / `"Manual Kinoa"`; `testLayer` is never sent |
+| `status` / `workflow` | `"Review"` for an e2e plan (`scope: e2e`, or the scope absent), `"Draft"` under `scope: smoke` / `"Manual Kinoa"`; `testLayer` is never sent |
 | `issues` | `[{"name": "Kinoa-Allure", "value": "<STORY-KEY>"}]` — there is **no** `links` array. **Load-bearing**: it is the only way to find a case whose assigned id was lost, so the builder raises on a blank or missing `story` rather than emitting an unfindable case |
-| `customFields` | `Suite`, `Story`, `Component`, `Feature` in that order, each `{name, value}`. Under `scope: e2e` the `Feature` value is `"e2e scope"`, set upstream by the resolver (Gate 0b), never here |
-| `scenario.steps[]` | one `{"type": "body", "body": …}` per step; each of the step's `→ expected:` results becomes its own `expected_body` block in `expectedResultSteps`, in plan order. A Story-scoped plan can only ever have one per step — the validator rejects more; a `scope: e2e` plan may carry several |
+| `customFields` | `Suite`, `Story`, `Component`, `Feature` in that order, each `{name, value}` — the values Gate 0b checked, the caller's in both formats |
+| `scenario.steps[]` | one `{"type": "body", "body": …}` per step; each of the step's `→ expected:` results becomes its own `expected_body` block in `expectedResultSteps`, in plan order. A `scope: smoke` plan can only ever have one per step — the validator rejects more; an e2e plan may carry several |
 | `tags[]` | `qa-generated`, nothing else |
 
 A missing or blank custom-field value raises at build time rather than producing a half
 payload — the builder is handed the four verified values or it is not called.
 
-**`status` is the only payload key `case_to_payload`'s `scope` argument changes.** `Feature`
-changes too, but upstream, in the resolver. Everything else — `name`, `description` (bar the
-marker's `scope=` field), `precondition`, `expectedResult`, `Suite`, `Story`, `Component`,
-`issues`, `workflow` and `tags` — is byte-identical in both scopes.
+**`status` is the only payload key `case_to_payload`'s `scope` argument changes**, besides the
+marker's `scope=` field inside `description`. Everything else — `name`, the rest of
+`description`, `precondition`, `expectedResult`, `Suite`, `Story`, `Component`, `Feature`,
+`issues`, `workflow` and `tags` — is byte-identical in both formats.
 
 ```json
 {
   "projectId": 1,
   "name": "Project selection dropdown populates with all accessible destination projects",
-  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal; image-ref: 10001 — export-modal.png\nTarget: service=in-app-templates; capability=export; scope=story",
+  "description": "Verify that the Destination Project dropdown lists every accessible project.\nProvenance: openspec-ref: export#Export/Project list; design-ref: aB3/12:44 — Export modal; image-ref: 10001 — export-modal.png\nTarget: service=in-app-templates; capability=export; scope=e2e",
   "precondition": "The user has access to 5 destination projects.\nThe user is on the In-App Template list page.",
   "expectedResult": "All 5 destination projects are listed and the source project is not.",
-  "status": "Draft",
+  "status": "Review",
   "workflow": "Manual Kinoa",
   "issues": [{ "name": "Kinoa-Allure", "value": "KING-20326" }],
   "customFields": [
@@ -208,22 +200,17 @@ marker's `scope=` field), `precondition`, `expectedResult`, `Suite`, `Story`, `C
 }
 ```
 
-The same case under `scope: e2e` differs in exactly three places — two payload values and the
+The same case in a `scope: smoke` plan differs in exactly two places — the status and the
 marker's own field:
 
 ```json
-  "description": "… \nTarget: service=in-app-templates; capability=export; scope=e2e",
-  "status": "Review",
-  "customFields": [
-    { "name": "Suite",     "value": "[KING-20326] Export of In-App template to a different project" },
-    { "name": "Story",     "value": "Template" },
-    { "name": "Component", "value": "Game-Settings" },
-    { "name": "Feature",   "value": "e2e scope" }
-  ]
+  "description": "… \nTarget: service=in-app-templates; capability=export; scope=smoke",
+  "status": "Draft",
 ```
 
-`Suite`, `Story`, `Component`, `issues` and `tags` are unchanged: an e2e case is still linked to
-its Jira Story and still carries `Suite = [<STORY-KEY>] <story title>`.
+`Suite`, `Story`, `Component`, `Feature`, `issues` and `tags` are unchanged: a case of either
+format is linked to its Jira Story, carries `Suite = [<STORY-KEY>] <story title>` and the
+caller's `Feature`.
 
 ## The target marker
 
@@ -232,26 +219,25 @@ its Jira Story and still carries `Suite = [<STORY-KEY>] <story title>`.
 last line of `description`:
 
 ```
-Target: service=<service>; capability=<capability>; scope=<e2e|story>
+Target: service=<service>; capability=<capability>; scope=<e2e|smoke>
 ```
 
 All three values are slugified (lower-case, non-alphanumerics collapsed to `-`), so
-`--target "In App Templates/Export / Import"` on a Story-scoped plan writes
-`Target: service=in-app-templates; capability=export-import; scope=story`. Build it with
+`--target "In App Templates/Export / Import"` on an e2e plan writes
+`Target: service=in-app-templates; capability=export-import; scope=e2e`. Build it with
 `testops_payload.target_marker(service, capability, scope)` and read it back with
 `testops_payload.parse_target(description)`, which returns the **3-tuple**
 `(service, capability, scope)` or `None` when the description carries no marker.
 Reconciliation slugifies its own target the same way and compares the tuple — never the raw
 strings.
 
-The `scope=` field is **always written**, `story` included: the marker is a machine key, and a
-key that is sometimes absent cannot be compared. `target_marker` called with no scope therefore
-writes `scope=story` — the absent-means-story rule is applied once, when the header is read (see
-"The test scope of the run"), not again here.
+The `scope=` field is **always written**: the marker is a machine key, and a key that is
+sometimes absent cannot be compared. `target_marker` called with no scope writes `scope=e2e`,
+the same absent-means-e2e rule applied when the header is read (see "The format of the run").
 
 Reading is the asymmetric half. A **legacy two-field marker** — `Target: service=…;
 capability=…`, written before this field existed — still parses, and reports `scope` as `None`,
-never as `"story"`: "no scope was recorded" and "the scope is story" are different facts, and
+never as `"e2e"`: "no scope was recorded" and "the scope is e2e" are different facts, and
 guessing the second would let an e2e run adopt a case it did not write.
 
 A case with no marker is a case this plugin did not write, or wrote before this format: it is
@@ -308,8 +294,9 @@ case Step B could not carry forward, so it must not mean "create". See
 ### After a create
 
 Take the returned case id and write it back into the plan at the stable path
-`~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<scope>.test-plan.md` — the
-fourth segment is the test scope, so the two scopes of one target are two files — with
+`~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<format>.test-plan.md` — the
+fourth segment is the format (`e2e` for every plan `testplan` writes), so the two formats of
+one target are two files — with
 `scripts/plan_writer.py`:
 
 ```python
@@ -344,21 +331,30 @@ the payload key and an `expand` option. One call per Step E, never one per case.
 
 The Story's cases span every `--target` ever pushed for it. Keep only the cases whose
 `description` carries this run's target marker — `parse_target(description)` equal to this run's
-slugified `(service, capability, scope)`, the test scope included — and which carry the
-`qa-generated` tag. Everything else belongs to another target, another test scope or to a human,
+slugified `(service, capability, scope)`, the format included — and which carry the
+`qa-generated` tag. Everything else belongs to another target, another format or to a human,
 and is out of scope: not a match candidate, not an orphan, not reported as either.
 
-Narrowing by the third field is what keeps the two test scopes of one Story apart. Without it an
-e2e run and a Story run of the same target reconcile against each other and flip real cases
-between `Draft`/the caller's `Feature` and `Review`/`e2e scope`. This is the reconciliation
-**in-scope set**; the value narrowing it is the plan's **test scope**.
+Narrowing by the third field is what keeps the two formats of one Story apart. Without it an
+e2e push would claim the smoke cases of the same target and flip real cases between `Review`
+and `Draft`. `testplan` itself pushes e2e plans only (a `scope: smoke` plan stops at Step C);
+the smoke cases it must not claim come from outside this skill. This is the reconciliation **in-scope set**; the value narrowing
+it is the plan's **format**.
 
 A case whose marker carries **no** `scope=` at all (`parse_target` → `scope is None`) is a case
 written before this field existed. It matches no run: it is treated exactly like a case with no
 marker — reported once to the QA engineer and left alone, never a match candidate and never an
-orphan. Adopting it into either scope would mean guessing which run wrote it. If it should be
+orphan. Adopting it into either format would mean guessing which run wrote it. If it should be
 updated, the QA engineer removes the `allure-id:`-less ambiguity by hand in Allure, or lets the
 next push create the case afresh under its marker.
+
+A case whose marker carries **the old Story scope value** (written by 0.2.x) is outside the
+e2e in-scope set too, because the format is compared: it is not a match candidate, not an
+orphan and **not reported**. So a plan renamed from `…-story.test-plan.md` to
+`…-e2e.test-plan.md` keeps its cases only through its `allure-id:` lines — Step E updates
+those by id. Reconciliation will not find them, and a case with no id would be created again.
+Project KINOA has no such case (checked 2026-09-24: no plugin-authored case existed before
+0.3.0).
 
 ### 3. The reconciliation gate — propose a mapping (inside Step E)
 
@@ -456,13 +452,11 @@ inserted. It reports the mapping the QA engineer would be asked to confirm and e
 - A Story case carries no target marker → out of scope for this run: not a match candidate and
   not an orphan. It is reported once, and left alone.
 - A Story case carries a **two-field** marker with no `scope=` → same treatment: out of scope
-  for either test scope, reported once, left alone. The scope is reported absent, never guessed
-  to be `story`.
-- The plan header carries no `scope:` → not a degradation: the run is Story-scoped, exactly as
-  every plan written before this field. An unrecognised value never reaches Step E — Gate 0a's
-  validator fails it (`scope-valid`) naming the value and the allowed set.
-- `--feature` was passed on a `scope: e2e` plan → abort in the resolver, before any lookup,
-  naming both the flag value and `"e2e scope"`. Nothing is looked up and nothing is written.
+  for either format, reported once, left alone. The scope is reported absent, never guessed
+  to be `e2e`.
+- The plan header carries no `scope:` → not a degradation: the plan is e2e (`Review`, marker
+  `scope=e2e`). An unrecognised value — the retired `story` included — never reaches Step E:
+  Gate 0a's validator fails it (`scope-valid`) naming the value and the allowed set.
 - `priority` has no first-class TestOps field and no longer rides as a tag. It stays in
   `test-plan.md` only; do not invent a `Severity` custom field for it — the four fields in
   `CUSTOM_FIELD_ORDER` are the whole set this plugin writes.

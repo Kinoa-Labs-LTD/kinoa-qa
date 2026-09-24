@@ -431,8 +431,8 @@
       "id": 10,
       "name": "payload-matches-reference-shape",
       "fixture": "reference-shape",
-      "prompt": "fixtures/reference-shape/test-plan.md holds one case whose content is Allure TestOps case 12684 (project 1, KING-18454) written in the new test-plan.md grammar. TestOps is SIMULATED, but skills/testplan/scripts/plan_parser.py and skills/testplan/scripts/testops_payload.py are pure stdlib Python and must be RUN FOR REAL: parse the plan with parse_cases, build the body with case_to_payload(case, story='KING-18454', service='kinoa-in-app', capability='milestones-eligibility', custom_fields={'Suite': '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app', 'Story': 'Template', 'Component': 'In-Apps', 'Feature': 'Milestones'}), and compare the resulting dict key by key with fixtures/reference-shape/expected-payload.json. Report any extra, missing or differing key. NOTE: expected-payload.json was produced by case_to_payload and then hand-verified literal by literal against references/allure-push.md and Allure TestOps case 12684, so it is a checked reference, not merely the builder's own output; never regenerate it from the builder without repeating that hand verification.",
-      "expected_output": "The built payload equals fixtures/reference-shape/expected-payload.json exactly — same set of top-level keys, same values: name without a TC-n prefix, description = the purpose sentence, precondition = both precondition statements newline-separated, expectedResult = the case-level expected, status 'Draft', workflow 'Manual Kinoa', issues = [{name: 'Kinoa-Allure', value: 'KING-18454'}], customFields = Suite/Story/Component/Feature in that order with Suite composed as '[KING-18454] <story title>' and Story a project category value, one expectedResultSteps entry per step, and tags = exactly ['qa-generated']. No links key and no testLayer key anywhere.",
+      "prompt": "fixtures/reference-shape/test-plan.md holds one case whose content is Allure TestOps case 12684 (project 1, KING-18454) written in the new test-plan.md grammar. TestOps is SIMULATED, but skills/testplan/scripts/plan_parser.py and skills/testplan/scripts/testops_payload.py are pure stdlib Python and must be RUN FOR REAL: parse the plan with parse_cases, build the body with case_to_payload(case, story='KING-18454', service='kinoa-in-app', capability='milestones-eligibility', custom_fields={'Suite': '[KING-18454] As an operator I want to have Eligibility checkboxes for Milestones in-app', 'Story': 'Template', 'Component': 'In-Apps', 'Feature': 'Milestones'}), and compare the resulting dict key by key with fixtures/reference-shape/expected-payload.json. Report any extra, missing or differing key. NOTE: expected-payload.json was produced by case_to_payload and then hand-verified literal by literal against references/allure-push.md and Allure TestOps case 12684, so it is a checked reference, not merely the builder's own output; never regenerate it from the builder without repeating that hand verification. Two keys deliberately differ from the captured case: `status` is 'Review' although case 12684 is a Draft, because e2e cases are created as Review, and `description` ends with the `Target: service=…; capability=…; scope=e2e` marker line the builder always appends.",
+      "expected_output": "The built payload equals fixtures/reference-shape/expected-payload.json exactly — same set of top-level keys, same values: name without a TC-n prefix, description = the purpose sentence then the target marker line 'Target: service=kinoa-in-app; capability=milestones-eligibility; scope=e2e', precondition = both precondition statements newline-separated, expectedResult = the case-level expected, status 'Review' (the plan declares no scope:, and an absent scope means e2e), workflow 'Manual Kinoa', issues = [{name: 'Kinoa-Allure', value: 'KING-18454'}], customFields = Suite/Story/Component/Feature in that order with Suite composed as '[KING-18454] <story title>' and Story a project category value, one expectedResultSteps entry per step, and tags = exactly ['qa-generated']. No links key and no testLayer key anywhere.",
       "files": [
         "skills/testplan/evals/fixtures/reference-shape/test-plan.md",
         "skills/testplan/evals/fixtures/reference-shape/expected-payload.json"
@@ -454,7 +454,7 @@
           "evidence": ""
         },
         {
-          "text": "payload['description'] == the case's purpose sentence ('Verify eligibility is untouched while the player progresses through milestones before the last one.') and contains no source:/traceability:/story: machine dump",
+          "text": "payload['description'] == the case's purpose sentence ('Verify eligibility is untouched while the player progresses through milestones before the last one.') followed by exactly one line 'Target: service=kinoa-in-app; capability=milestones-eligibility; scope=e2e', and contains no source:/traceability:/story: machine dump",
           "passed": false,
           "evidence": ""
         },
@@ -469,7 +469,7 @@
           "evidence": ""
         },
         {
-          "text": "payload['status'] == 'Draft' and payload['workflow'] == 'Manual Kinoa'",
+          "text": "payload['status'] == 'Review' (no scope: in the plan header means e2e) and payload['workflow'] == 'Manual Kinoa'",
           "passed": false,
           "evidence": ""
         },
@@ -554,8 +554,8 @@
       "id": 12,
       "name": "regenerated-plan-updates-never-duplicates",
       "fixture": "regenerated-plan",
-      "prompt": "The re-run case, end to end. fixtures/regenerated-plan/previous-plan.md is the plan from the last run, living at the stable path ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-admin-authentication.test-plan.md; its three cases carry assigned ids 12901, 12902 and 12903. fixtures/regenerated-plan/regenerated-plan.md is what Step B's generation returned this time, with every drift the ticket names: an acceptance criterion inserted at the top so AC numbers shift by one, a case whose title is reworded, a case whose title differs only in letter case, a case whose type changed from negative to edge, and one brand-new case. It carries no ids — the generator never invents one. Atlassian and Allure TestOps are SIMULATED, but skills/testplan/scripts/plan_writer.py, plan_parser.py, validate_test_plan.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Step B: call plan_writer.merge_allure_ids(previous_plan_text, new_plan_text) for real and report the merged plan and the full report dict (carried / retained / unmatched / orphaned). Run validate_test_plan.py on the merged plan for real (no --openspec). Then carry out Step E over the merged plan per references/testops-sync.md, story 'KING-22737', service 'kinoa-client-support-tool', capability 'admin-authentication', reporting every simulated TestOps call — each find with its aql, each update with its id, each create.",
-      "expected_output": "merge_allure_ids carries an id only on an exact title match (whitespace-collapsed, case-folded) that is unique in the previous plan: report['carried'] is TC-3 'The Break-Glass credentials grant Super admin' -> 12902 and TC-4 'Break-glass sign-in with invalid credentials is refused' -> 12903 — the shifted AC numbers, the letter-case change and the negative->edge type change all cost nothing. report['unmatched'] is TC-1 (the new case) and TC-2 (the reworded one) — a reworded title is REPORTED, never guessed onto an id — and report['orphaned'] is the previous TC-1 carrying 12901. The merged plan validates: exit 0, RESULT: PASS. Step E then updates 12902 and 12903 by id after reading each back and verifying qa-generated + KING-22737, and for the two unmatched cases runs ONE reconciliation lookup testops_find_testcases(aql='issue = \"KING-22737\"') narrowed by the target marker Target: service=kinoa-client-support-tool; capability=admin-authentication, proposes the mapping at the gate (TC-2 -> #12901 by title is NOT auto-resolved; it is proposed and confirmed), and lists #12901 under 'in TestOps, not in this plan' if it is not mapped. Nothing is written for an unconfirmed case. With the mapping confirmed, ZERO testops_create_testcase calls are issued for the two cases that already exist, and the one genuinely new case is the only create.",
+      "prompt": "The re-run case, end to end. fixtures/regenerated-plan/previous-plan.md is the plan from the last run, living at the stable path ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-admin-authentication-e2e.test-plan.md; its three cases carry assigned ids 12901, 12902 and 12903. fixtures/regenerated-plan/regenerated-plan.md is what Step B's generation returned this time, with every drift the ticket names: an acceptance criterion inserted at the top so AC numbers shift by one, a case whose title is reworded, a case whose title differs only in letter case, a case whose type changed from negative to edge, and one brand-new case. It carries no ids — the generator never invents one. Atlassian and Allure TestOps are SIMULATED, but skills/testplan/scripts/plan_writer.py, plan_parser.py, validate_test_plan.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Step B: call plan_writer.merge_allure_ids(previous_plan_text, new_plan_text) for real and report the merged plan and the full report dict (carried / retained / unmatched / orphaned). Run validate_test_plan.py on the merged plan for real (no --openspec). Then carry out Step E over the merged plan per references/testops-sync.md, story 'KING-22737', service 'kinoa-client-support-tool', capability 'admin-authentication', reporting every simulated TestOps call — each find with its aql, each update with its id, each create.",
+      "expected_output": "merge_allure_ids carries an id only on an exact title match (whitespace-collapsed, case-folded) that is unique in the previous plan: report['carried'] is TC-3 'The Break-Glass credentials grant Super admin' -> 12902 and TC-4 'Break-glass sign-in with invalid credentials is refused' -> 12903 — the shifted AC numbers, the letter-case change and the negative->edge type change all cost nothing. report['unmatched'] is TC-1 (the new case) and TC-2 (the reworded one) — a reworded title is REPORTED, never guessed onto an id — and report['orphaned'] is the previous TC-1 carrying 12901. The merged plan validates: exit 0, RESULT: PASS. Step E then updates 12902 and 12903 by id after reading each back and verifying qa-generated + KING-22737, and for the two unmatched cases runs ONE reconciliation lookup testops_find_testcases(aql='issue = \"KING-22737\"') narrowed by the target marker Target: service=kinoa-client-support-tool; capability=admin-authentication; scope=e2e, proposes the mapping at the gate (TC-2 -> #12901 by title is NOT auto-resolved; it is proposed and confirmed), and lists #12901 under 'in TestOps, not in this plan' if it is not mapped. Nothing is written for an unconfirmed case. With the mapping confirmed, ZERO testops_create_testcase calls are issued for the two cases that already exist, and the one genuinely new case is the only create.",
       "files": [
         "skills/testplan/evals/fixtures/regenerated-plan/previous-plan.md",
         "skills/testplan/evals/fixtures/regenerated-plan/regenerated-plan.md"
@@ -602,7 +602,7 @@
           "evidence": ""
         },
         {
-          "text": "The reconciliation set is narrowed by the target marker parsed with testops_payload.parse_target — only cases whose description carries Target: service=kinoa-client-support-tool; capability=admin-authentication and the qa-generated tag are candidates",
+          "text": "The reconciliation set is narrowed by the target marker parsed with testops_payload.parse_target — only cases whose description carries Target: service=kinoa-client-support-tool; capability=admin-authentication; scope=e2e and the qa-generated tag are candidates",
           "passed": false,
           "evidence": ""
         },
@@ -627,8 +627,8 @@
       "id": 13,
       "name": "no-ids-no-blind-write-reconciliation",
       "fixture": "openspec-grounded",
-      "prompt": "Reconciliation. fixtures/openspec-grounded/test-plan.md is an approved plan whose three cases carry NO allure-id: — the state a first run and a failed carry-forward both leave behind. Allure TestOps is SIMULATED; skills/testplan/scripts/testops_payload.py and plan_writer.py are pure stdlib Python and must be RUN FOR REAL (build each payload with case_to_payload, read markers back with parse_target, write ids back with insert_allure_id). Story 'KING-22737'. RUN 1 — target kinoa-client-support-tool/admin-authentication. The simulated testops_find_testcases(aql='issue = \"KING-22737\"') returns five cases: #12901 'A first Workspace sign-in provisions an Author account', tags [qa-generated], description ending 'Target: service=kinoa-client-support-tool; capability=admin-authentication'; #12907 'Break-glass sign-in', tags [qa-generated], same target marker; #12899 'Session cookie is cleared on sign-out', tags [qa-generated], same target marker; #12950 'Export modal lists projects', tags [qa-generated], description ending 'Target: service=in-app-templates; capability=export'; #12960 'Manual smoke: admin login', tags [regression], description with NO Target: line. Carry out Step E per references/testops-sync.md and report every TestOps call and the full gate output. Then report what an UNATTENDED run in exactly this state does. RUN 2 — the same plan under target kinoa-client-support-tool/audit-log, where the same scoping lookup returns only #12950 and #12960 (nothing in this target). Report the calls for run 2 too.",
-      "expected_output": "Run 1: exactly one scoping lookup, aql 'issue = \"KING-22737\"' (issue, SINGULAR), narrowed by the target marker to #12901, #12907 and #12899 — #12950 belongs to another target and #12960 has no marker and is not qa-generated, so neither is a candidate, an orphan, or touched. The gate is shown a proposed mapping: TC-1 -> update #12901 (exact title match); TC-2 and TC-3 both plausibly match #12907 -> AMBIGUOUS, reported for the human to choose, never collapsed onto the one case and never merged into each other; #12899 is listed under 'in TestOps, not in this plan' and is never deleted or muted. Because no plan case carries an allure-id and the in-scope set is non-empty, Step E writes NOTHING before confirmation: ZERO testops_create_testcase and ZERO testops_update_testcase calls. An unattended run in this state aborts, prints the same mapping and orphan list, exits non-zero and writes nothing. Run 2: the lookup returns no in-scope case, so this is the ordinary first run — three creates, one per case, and each returned id is written back into the plan with plan_writer.insert_allure_id; no refusal.",
+      "prompt": "Reconciliation. fixtures/openspec-grounded/test-plan.md is an approved plan (no scope: line, so e2e) whose three cases carry NO allure-id: — the state a first run and a failed carry-forward both leave behind. Allure TestOps is SIMULATED; skills/testplan/scripts/testops_payload.py and plan_writer.py are pure stdlib Python and must be RUN FOR REAL (build each payload with case_to_payload, read markers back with parse_target, write ids back with insert_allure_id). Story 'KING-22737'. RUN 1 — target kinoa-client-support-tool/admin-authentication. The simulated testops_find_testcases(aql='issue = \"KING-22737\"') returns five cases: #12901 'A first Workspace sign-in provisions an Author account', tags [qa-generated], description ending 'Target: service=kinoa-client-support-tool; capability=admin-authentication; scope=e2e'; #12907 'Break-glass sign-in', tags [qa-generated], same target marker; #12899 'Session cookie is cleared on sign-out', tags [qa-generated], same target marker; #12950 'Export modal lists projects', tags [qa-generated], description ending 'Target: service=in-app-templates; capability=export; scope=e2e'; #12960 'Manual smoke: admin login', tags [regression], description with NO Target: line. Carry out Step E per references/testops-sync.md and report every TestOps call and the full gate output. Then report what an UNATTENDED run in exactly this state does. RUN 2 — the same plan under target kinoa-client-support-tool/audit-log, where the same scoping lookup returns only #12950 and #12960 (nothing in this target). Report the calls for run 2 too.",
+      "expected_output": "Run 1: exactly one scoping lookup, aql 'issue = \"KING-22737\"' (issue, SINGULAR), narrowed by the three-field target marker (service, capability, scope=e2e) to #12901, #12907 and #12899 — #12950 belongs to another target and #12960 has no marker and is not qa-generated, so neither is a candidate, an orphan, or touched. The gate is shown a proposed mapping: TC-1 -> update #12901 (exact title match); TC-2 and TC-3 both plausibly match #12907 -> AMBIGUOUS, reported for the human to choose, never collapsed onto the one case and never merged into each other; #12899 is listed under 'in TestOps, not in this plan' and is never deleted or muted. Because no plan case carries an allure-id and the in-scope set is non-empty, Step E writes NOTHING before confirmation: ZERO testops_create_testcase and ZERO testops_update_testcase calls. An unattended run in this state aborts, prints the same mapping and orphan list, exits non-zero and writes nothing. Run 2: the lookup returns no in-scope case, so this is the ordinary first run — three creates, one per case, and each returned id is written back into the plan with plan_writer.insert_allure_id; no refusal.",
       "files": [
         "skills/testplan/evals/fixtures/openspec-grounded/test-plan.md"
       ],
@@ -639,7 +639,7 @@
           "evidence": ""
         },
         {
-          "text": "The in-scope set is exactly #12901, #12907 and #12899: the target marker is parsed back with testops_payload.parse_target (run for real) and #12950 (target in-app-templates/export) is excluded as another target's case",
+          "text": "The in-scope set is exactly #12901, #12907 and #12899: the target marker is parsed back with testops_payload.parse_target (run for real) as the 3-tuple (service, capability, 'e2e') and #12950 (target in-app-templates/export) is excluded as another target's case",
           "passed": false,
           "evidence": ""
         },
@@ -679,7 +679,7 @@
           "evidence": ""
         },
         {
-          "text": "After each create in run 2 the returned id is written back into the plan at ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-audit-log.test-plan.md with plan_writer.insert_allure_id executed for real, as '- allure-id: <id>' first under its case heading",
+          "text": "After each create in run 2 the returned id is written back into the plan at ~/.kinoa-qa/plans/KING-22737-kinoa-client-support-tool-audit-log-e2e.test-plan.md with plan_writer.insert_allure_id executed for real, as '- allure-id: <id>' first under its case heading",
           "passed": false,
           "evidence": ""
         },
@@ -692,31 +692,31 @@
     },
     {
       "id": 14,
-      "name": "e2e-scope-plan-lands-in-the-e2e-scope",
+      "name": "e2e-plan-lands-as-review-with-the-callers-feature",
       "fixture": "e2e-scope",
-      "prompt": "Test scope, e2e. fixtures/e2e-scope/test-plan.md is an approved plan whose header declares `scope: e2e` and whose TC-1 step 1 carries THREE `→ expected:` lines. Allure TestOps is SIMULATED; skills/testplan/scripts/validate_test_plan.py, plan_parser.py, testops_fields.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Validate the plan; read its test scope with plan_parser.parse_header (never guess it from the filename or the content); resolve the custom fields with testops_fields.resolve_custom_fields(story_key='KING-22797', story_title='As a player I want my claimed reward to reach my balance', story_field='In-App Rewards', component='kinoa-in-app', scope=<the header's scope>); then build TC-1's payload with testops_payload.case_to_payload(..., story='KING-22797', service='kinoa-in-app', capability='rewards-claim', scope=<the header's scope>) and read the description's marker back with testops_payload.parse_target. Report the validator's exit code and RESULT line, the resolved custom fields, the full payload, and what Gate 0b would look up. Then state what a `--feature \"Milestones\"` passed alongside this e2e scope does.",
-      "expected_output": "The validator exits 0 with RESULT: PASS — three expected results on one step are allowed because the header says `scope: e2e`. parse_header returns scope 'e2e' (the header is the source of truth). resolve_custom_fields with scope='e2e' returns Feature = 'e2e scope' — set in the resolver, so Gate 0b verifies exactly the value that ships — alongside Suite = '[KING-22797] As a player I want my claimed reward to reach my balance', Story = 'In-App Rewards' and Component = 'kinoa-in-app'. case_to_payload with scope='e2e' returns status 'Review'; TC-1's step 1 carries three expected_body blocks in the plan's order and step 2 carries one; the description's last line is 'Target: service=kinoa-in-app; capability=rewards-claim; scope=e2e' and parse_target returns the 3-tuple ('kinoa-in-app', 'rewards-claim', 'e2e'); tags are exactly ['qa-generated'] and issues carry KING-22797. An explicit --feature under scope e2e is an ERROR naming both values, not a silent discard.",
+      "prompt": "Format, e2e. fixtures/e2e-scope/test-plan.md is an approved plan whose header declares `scope: e2e` and whose TC-1 step 1 carries THREE `→ expected:` lines. Allure TestOps is SIMULATED; skills/testplan/scripts/validate_test_plan.py, plan_parser.py, testops_fields.py and testops_payload.py are pure stdlib Python and must be RUN FOR REAL. Validate the plan; read its format with plan_parser.parse_header (never guess it from the filename or the content); resolve the custom fields with testops_fields.resolve_custom_fields({}, story_key='KING-22797', story_title='As a player I want my claimed reward to reach my balance', story_field='In-App Rewards', component='kinoa-in-app', feature='Milestones'); then build TC-1's payload with testops_payload.case_to_payload(..., story='KING-22797', service='kinoa-in-app', capability='rewards-claim', custom_fields=<the resolved fields>, scope=<the header's scope>) and read the description's marker back with testops_payload.parse_target. Report the validator's exit code and RESULT line, the resolved custom fields, the full payload, and what Gate 0b would look up.",
+      "expected_output": "The validator exits 0 with RESULT: PASS — three expected results on one step are allowed because the plan is e2e. parse_header returns scope 'e2e' (the header is the source of truth). resolve_custom_fields takes no scope and returns the caller's values: Suite = '[KING-22797] As a player I want my claimed reward to reach my balance', Story = 'In-App Rewards', Component = 'kinoa-in-app' and Feature = 'Milestones' — the plugin sets no Feature of its own, and Gate 0b looks up exactly these three values. case_to_payload with scope='e2e' returns status 'Review'; TC-1's step 1 carries three expected_body blocks in the plan's order and step 2 carries one; the description's last line is 'Target: service=kinoa-in-app; capability=rewards-claim; scope=e2e' and parse_target returns the 3-tuple ('kinoa-in-app', 'rewards-claim', 'e2e'); tags are exactly ['qa-generated'] and issues carry KING-22797.",
       "files": [
         "skills/testplan/evals/fixtures/e2e-scope/test-plan.md"
       ],
       "assertions": [
         {
-          "text": "validate_test_plan.py is run for real against fixtures/e2e-scope/test-plan.md and exits 0 with RESULT: PASS — the three → expected: lines on TC-1 step 1 are accepted because the header declares scope: e2e",
+          "text": "validate_test_plan.py is run for real against fixtures/e2e-scope/test-plan.md and exits 0 with RESULT: PASS — the three → expected: lines on TC-1 step 1 are accepted because the plan is e2e",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "The run's test scope is read from the plan header with plan_parser.parse_header (run for real), which returns scope 'e2e' — it is never inferred from the filename, the fixture directory or the case text",
+          "text": "The run's format is read from the plan header with plan_parser.parse_header (run for real), which returns scope 'e2e' — it is never inferred from the filename, the fixture directory or the case text",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "testops_fields.resolve_custom_fields(..., scope='e2e') is run for real and returns Feature = 'e2e scope', and the run states this is the value Gate 0b looks up — the override is in the resolver, before the pre-flight, not inside the payload builder",
+          "text": "testops_fields.resolve_custom_fields is run for real WITHOUT any scope argument and returns Feature = 'Milestones', the caller's value — the plugin forces no Feature for an e2e plan, and passing --feature is not an error",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "The same resolved fields carry Suite = '[KING-22797] As a player I want my claimed reward to reach my balance' — an e2e case still gets its Story's Suite",
+          "text": "The same resolved fields carry Suite = '[KING-22797] As a player I want my claimed reward to reach my balance', Story = 'In-App Rewards' and Component = 'kinoa-in-app', and the run states Gate 0b looks up Story, Component and Feature with exactly these values (Suite is never looked up)",
           "passed": false,
           "evidence": ""
         },
@@ -736,12 +736,7 @@
           "evidence": ""
         },
         {
-          "text": "Apart from status and Feature the payload is the ordinary one: tags exactly ['qa-generated'], the Story link issue KING-22797, Story and Component as passed by the caller — no Component is forced by the scope",
-          "passed": false,
-          "evidence": ""
-        },
-        {
-          "text": "Passing --feature alongside scope e2e is reported as an error naming both the passed feature and 'e2e scope', and no payload is built from a silently discarded --feature",
+          "text": "Apart from status and the marker's scope= field the payload is the ordinary one: tags exactly ['qa-generated'], the Story link issue KING-22797, and Story, Component and Feature as passed by the caller in customFields",
           "passed": false,
           "evidence": ""
         }
@@ -749,60 +744,130 @@
     },
     {
       "id": 15,
-      "name": "test-scope-is-honoured-not-guessed",
+      "name": "format-is-honoured-not-guessed",
       "fixture": "e2e-scope",
-      "prompt": "Test scope, the negative half. Four checks, all against REAL runs of skills/testplan/scripts (validate_test_plan.py, plan_parser.py, testops_fields.py, testops_payload.py, plan_writer.py) — Allure TestOps is SIMULATED and no push happens here. (a) fixtures/e2e-scope/test-plan-story-scope.md is the SAME plan with `scope: story`: validate it. (b) fixtures/e2e-scope/test-plan-unknown-scope.md is the same plan with `scope: integration`: validate it. (c) fixtures/business-only/test-plan.md declares NO scope: report what parse_header says about its scope, then build its TC-1 payload with resolve_custom_fields(story_key='KING-18454', story_title='T', story_field='S', component='C', feature='Milestones') and case_to_payload(..., service='svc', capability='cap') passing the scope the consumer derives. (d) A regeneration: merge fixtures/e2e-scope/regenerated-plan.md (no `scope:` line) onto fixtures/e2e-scope/previous-plan.md (`scope: e2e`, TC-1 carrying allure-id 13401) with plan_writer.merge_allure_ids and report report['scope'] and whether the merged plan still validates. Report every command, exit code and RESULT line.",
-      "expected_output": "(a) Story scope exits 1: required-fields FAILs with \"TC-1: step 1 has 3 expected results (exactly one is allowed)\" — the KING-22795 rule is untouched for Story-scoped plans; scope-valid itself PASSes. (b) `scope: integration` exits 1 with scope-valid FAILing: \"unrecognised scope 'integration' — allowed: e2e, story (or omit the field for Story scope)\" — the value is named with the allowed set and is never silently read as Story. (c) parse_header returns NO 'scope' key at all for a plan that declares none — absent is not defaulted in the parser; the consumer applies absent-means-story, so the payload's status is 'Draft', Feature is the caller's 'Milestones', and the marker still reads scope=story. (d) merge_allure_ids reports scope {previous: 'e2e', new: None, effective: 'e2e', carried_forward: True, changed: False} — the regenerated plan inherits the previous plan's e2e scope instead of being silently demoted, TC-1 keeps allure-id 13401, and the merged plan validates 0/PASS because the carried-forward e2e scope re-admits the multi-expected step (validated on its own, the raw regenerated plan FAILs it).",
+      "prompt": "Format, the other half. Five checks, all against REAL runs of skills/testplan/scripts (validate_test_plan.py, plan_parser.py, testops_fields.py, testops_payload.py, plan_writer.py) — Allure TestOps is SIMULATED and no push happens here. (a) fixtures/e2e-scope/test-plan-smoke.md is a smoke plan (`scope: smoke`, one functional case, one expected result per step, AC-2 cited by no case): validate it, then build its TC-1 payload with case_to_payload(..., story='KING-22797', service='kinoa-in-app', capability='rewards-claim', custom_fields={'Suite': '[KING-22797] T', 'Story': 'S', 'Component': 'C', 'Feature': 'Milestones'}, scope=<the header's scope>). (b) fixtures/e2e-scope/test-plan-unknown-scope.md is the e2e fixture with `scope: integration`: validate it. (c) Copy fixtures/e2e-scope/test-plan.md to a temporary file with its `scope: e2e` line changed to the retired value `scope: story`, and validate the copy. (d) fixtures/business-only/test-plan.md declares NO scope: report what parse_header says about its scope, then build its TC-1 payload with resolve_custom_fields({}, story_key='KING-18454', story_title='T', story_field='S', component='C', feature='Milestones') and case_to_payload(..., story='KING-18454', service='svc', capability='cap') passing the scope the consumer derives. (e) A regeneration: merge fixtures/e2e-scope/regenerated-plan.md (no `scope:` line) onto fixtures/e2e-scope/previous-plan.md (`scope: e2e`, TC-1 carrying allure-id 13401) with plan_writer.merge_allure_ids, report the report dict and the merged header, and validate the merged plan. Report every command, exit code and RESULT line.",
+      "expected_output": "(a) The smoke plan exits 0 with RESULT: PASS: smoke-shape PASSes (exactly one case, type functional), and ac-coverage PASSes with the detail 'advisory: uncovered: AC-2' — under smoke an uncovered AC is reported, not failed. Its payload has status 'Draft', Feature the caller's 'Milestones', and a marker ending 'scope=smoke'. (b) `scope: integration` exits 1 with scope-valid FAILing: \"unrecognised scope 'integration' — allowed: e2e, smoke (or omit the field for e2e)\" — the value is named with the allowed set and is never silently read as e2e. (c) The `scope: story` copy exits 1 with scope-valid FAILing \"unrecognised scope 'story' — allowed: e2e, smoke (or omit the field for e2e)\": the retired value is not read as e2e, so its three-expected step also FAILs required-fields ('TC-1: step 1 has 3 expected results (exactly one is allowed)'). (d) parse_header returns NO 'scope' key at all — absent is not defaulted in the parser; the consumer applies absent-means-e2e, so the payload's status is 'Review', Feature is the caller's 'Milestones', and the marker reads scope=e2e. (e) merge_allure_ids carries TC-1's allure-id 13401 and its report has no 'scope' key; the merged header is the regenerated plan's exactly as written (no scope: line — nothing is carried forward from the previous header), and the merged plan still validates 0/PASS because an absent scope means e2e, which allows the multi-expected step.",
       "files": [
-        "skills/testplan/evals/fixtures/e2e-scope/test-plan-story-scope.md",
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan-smoke.md",
         "skills/testplan/evals/fixtures/e2e-scope/test-plan-unknown-scope.md",
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan.md",
         "skills/testplan/evals/fixtures/e2e-scope/previous-plan.md",
         "skills/testplan/evals/fixtures/e2e-scope/regenerated-plan.md",
         "skills/testplan/evals/fixtures/business-only/test-plan.md"
       ],
       "assertions": [
         {
-          "text": "test-plan-story-scope.md — the same plan marked scope: story — is validated for real and exits 1, with required-fields FAILing and naming the step: 'TC-1: step 1 has 3 expected results (exactly one is allowed)'",
+          "text": "test-plan-smoke.md is validated for real and exits 0 with RESULT: PASS; smoke-shape PASSes on its single functional case",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "That Story-scoped failure is the multi-expected rule, not the scope value: scope-valid itself PASSes on 'story', so the e2e relaxation is proven not to leak into Story scope",
+          "text": "On the smoke plan, ac-coverage PASSes with the detail 'advisory: uncovered: AC-2' — the uncovered AC is reported, not failed, because the plan is smoke",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "test-plan-unknown-scope.md (scope: integration) is validated for real, exits 1, and scope-valid FAILs naming both the offending value and the allowed set: \"unrecognised scope 'integration' — allowed: e2e, story (or omit the field for Story scope)\"",
+          "text": "The smoke plan's TC-1 payload, built for real, has status 'Draft', Feature = the caller's 'Milestones', and a description whose marker reads 'scope=smoke'",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "An unrecognised scope is never coerced to story or to e2e — the run states it cannot reach Step E at all",
+          "text": "test-plan-unknown-scope.md (scope: integration) is validated for real, exits 1, and scope-valid FAILs naming both the offending value and the allowed set: \"unrecognised scope 'integration' — allowed: e2e, smoke (or omit the field for e2e)\"",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "plan_parser.parse_header run for real on fixtures/business-only/test-plan.md returns a dict with NO 'scope' key — the parser does not default; the run says the absent-means-story default is applied by the consumer",
+          "text": "The copy with scope: story is validated for real, exits 1, and scope-valid FAILs with \"unrecognised scope 'story' — allowed: e2e, smoke (or omit the field for e2e)\" — the retired value is never read as e2e, and the run states such a plan cannot reach Step E",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "That no-scope plan's TC-1 payload, built for real, has status 'Draft', Feature = the caller's 'Milestones' (unchanged by scope), and a marker reading 'scope=story'",
+          "text": "plan_parser.parse_header run for real on fixtures/business-only/test-plan.md returns a dict with NO 'scope' key — the parser does not default; the run says the absent-means-e2e default is applied by the consumer",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "plan_writer.merge_allure_ids(previous, new) is run for real for the regeneration that dropped scope:, and report['scope'] is exactly {previous: 'e2e', new: None, effective: 'e2e', carried_forward: True, changed: False}",
+          "text": "That no-scope plan's TC-1 payload, built for real, has status 'Review', Feature = the caller's 'Milestones', and a marker reading 'scope=e2e'",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "The merged plan text carries 'scope: e2e' in its header and TC-1 keeps '- allure-id: 13401' — the regeneration neither demotes the plan to Story scope nor loses the id",
+          "text": "plan_writer.merge_allure_ids(previous, new) is run for real for the regeneration with no scope: line: TC-1 keeps '- allure-id: 13401', the report has no 'scope' key, and the merged header carries no scope: line — the regenerated header is taken as written, nothing is carried forward from the previous plan's header",
           "passed": false,
           "evidence": ""
         },
         {
-          "text": "The merged plan is validated for real and exits 0/PASS, while the raw regenerated-plan.md validated on its own exits 1 on the multi-expected step — showing the carry-forward, not a weakened rule, is what keeps it valid",
+          "text": "The merged plan is validated for real and exits 0/PASS: an absent scope means e2e, so the multi-expected step is allowed without any carry-forward",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "one-case-cites-several-acs",
+      "fixture": "multi-ac",
+      "prompt": "Multi-AC sources. fixtures/multi-ac/test-plan.md is an e2e plan whose TC-1 cites `source: ac: AC-1, AC-2` and whose TC-2 cites `source: ac: AC-3`. skills/testplan/scripts/validate_test_plan.py and plan_parser.py are pure stdlib Python and must be RUN FOR REAL. Validate the plan and report every check. Call plan_parser.parse_ac_source on each case's source, and on the value 'ac: see AC-1, AC-2'. Then validate a temporary copy of the plan in which TC-1's source is changed to 'ac: AC-1, AC-2, AC-9', and another copy in which TC-1's source is changed to 'ac: AC-1' (so no case cites AC-2). Report every exit code, RESULT line and failing detail.",
+      "expected_output": "The plan exits 0 with RESULT: PASS: source-valid accepts the comma-separated list, and ac-coverage counts AC-1 and AC-2 as cited by TC-1 and AC-3 by TC-2. parse_ac_source returns ['AC-1', 'AC-2'] and ['AC-3'], and for 'ac: see AC-1, AC-2' returns ['see AC-1', 'AC-2'] — a part that does not start a new AC-<n> is reported whole, never split. The 'ac: AC-1, AC-2, AC-9' copy exits 1 with source-valid naming AC-9 as unknown. The 'ac: AC-1' copy exits 1 with ac-coverage FAILing 'uncovered: AC-2' — in an e2e plan every AC must be cited.",
+      "files": [
+        "skills/testplan/evals/fixtures/multi-ac/test-plan.md"
+      ],
+      "assertions": [
+        {
+          "text": "validate_test_plan.py is run for real on fixtures/multi-ac/test-plan.md and exits 0 with RESULT: PASS — source-valid accepts 'ac: AC-1, AC-2'",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "ac-coverage PASSes because each id of TC-1's list counts as cited: AC-1 and AC-2 by TC-1, AC-3 by TC-2",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "plan_parser.parse_ac_source, run for real, returns ['AC-1', 'AC-2'] for TC-1 and ['AC-3'] for TC-2",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "parse_ac_source('ac: see AC-1, AC-2') returns ['see AC-1', 'AC-2'] — the unknown id is kept whole, not split at its words",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The copy citing 'ac: AC-1, AC-2, AC-9' exits 1 and source-valid FAILs naming AC-9 — every id in the list is checked, not only the first",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "The copy citing only 'ac: AC-1' exits 1 and ac-coverage FAILs with 'uncovered: AC-2' — an uncovered AC is a hard failure in an e2e plan",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "testplan-stops-on-a-smoke-header",
+      "fixture": "e2e-scope",
+      "prompt": "testplan is e2e-only. Copy fixtures/e2e-scope/test-plan-smoke.md (a valid `scope: smoke` plan: one functional case) to the stable e2e path plans/<STORY-KEY>-<service>-<capability>-e2e.test-plan.md, then run /kinoa-qa:testplan for that Story and target with --dry-run, following SKILL.md from Step C on this plan as if Step B had just written it. Report what the skill does at Step C, whether it reaches the Step D gate, and whether any TestOps tool is called. Also run skills/testplan/scripts/validate_test_plan.py for real on the copy and report its RESULT line.",
+      "expected_output": "The validator, run for real, exits 0 with RESULT: PASS: a `scope: smoke` plan is valid on its own. testplan still stops at Step C before the gate: it reads the header with plan_parser.parse_header, sees `scope: smoke`, and reports that it validates and pushes e2e plans only. It does not reach the Step D gate and calls no TestOps tool; nothing is created or updated.",
+      "files": [
+        "skills/testplan/evals/fixtures/e2e-scope/test-plan-smoke.md"
+      ],
+      "assertions": [
+        {
+          "text": "validate_test_plan.py run for real on the copy exits 0 with RESULT: PASS",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "testplan stops at Step C because the header says `scope: smoke`, and says it validates and pushes e2e plans only",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "the Step D gate is not reached and no TestOps tool is called",
           "passed": false,
           "evidence": ""
         }

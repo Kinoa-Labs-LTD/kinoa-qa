@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
 from plan_parser import parse_cases
 from testops_payload import (slugify, case_to_payload, target_marker, parse_target,
-                             STATUS, E2E_STATUS)
+                             SMOKE_STATUS, E2E_STATUS)
 
 FIELDS = {"Suite": "[KING-1] Admin sign-in", "Story": "Template",
           "Component": "Game-Settings", "Feature": "In-Apps"}
@@ -81,10 +81,10 @@ class TestPayload(unittest.TestCase):
         self.assertNotIn("TC-", p["name"])
         self.assertEqual(p["description"],
                          "Verify an admin with valid credentials reaches the dashboard."
-                         "\nTarget: service=svc; capability=cap; scope=story")
+                         "\nTarget: service=svc; capability=cap; scope=e2e")
         self.assertEqual(p["precondition"], "a user exists")
         self.assertEqual(p["expectedResult"], "signed in")
-        self.assertEqual(p["status"], "Draft")
+        self.assertEqual(p["status"], "Review")
         self.assertEqual(p["workflow"], "Manual Kinoa")
         self.assertNotIn("testLayer", p)
         self.assertNotIn("links", p)
@@ -126,7 +126,7 @@ class TestTagVocabulary(unittest.TestCase):
         # purpose + one provenance line + the target marker
         self.assertEqual(len(d.splitlines()), 3)
         self.assertEqual(d.splitlines()[-1],
-                         "Target: service=svc; capability=cap; scope=story")
+                         "Target: service=svc; capability=cap; scope=e2e")
 
     def test_description_carries_image_provenance(self):
         d = _payload(_case(**{"image-ref": "10001 — hero.png"}))["description"]
@@ -145,7 +145,7 @@ class TestTagVocabulary(unittest.TestCase):
     def test_description_omits_absent_refs(self):
         d = _payload(_case())["description"]
         self.assertEqual(d, "Verify sign-in works.\n"
-                            "Target: service=svc; capability=cap; scope=story")
+                            "Target: service=svc; capability=cap; scope=e2e")
         self.assertNotIn("openspec-ref", d)
         self.assertNotIn("design-ref", d)
         self.assertNotIn("source:", d)
@@ -204,20 +204,20 @@ class TestTargetMarker(unittest.TestCase):
     def test_marker_is_the_last_description_line(self):
         d = _payload(CASE)["description"]
         self.assertEqual(d.splitlines()[-1],
-                         "Target: service=svc; capability=cap; scope=story")
+                         "Target: service=svc; capability=cap; scope=e2e")
 
     def test_reconciliation_parses_the_target_back_out(self):
         self.assertEqual(parse_target(_payload(CASE)["description"]),
-                         ("svc", "cap", "story"))
+                         ("svc", "cap", "e2e"))
 
     def test_marker_round_trips_for_multiword_targets(self):
         c = case_to_payload(CASE, story="KING-1", service="In App Templates",
                             capability="Export / Import", custom_fields=FIELDS)
         self.assertEqual(parse_target(c["description"]),
-                         ("in-app-templates", "export-import", "story"))
+                         ("in-app-templates", "export-import", "e2e"))
         self.assertEqual(target_marker("In App Templates", "Export / Import"),
                          "Target: service=in-app-templates; capability=export-import; "
-                         "scope=story")
+                         "scope=e2e")
 
     def test_parse_target_returns_none_when_there_is_no_marker(self):
         self.assertIsNone(parse_target("Verify sign-in works."))
@@ -238,12 +238,12 @@ class TestTargetMarker(unittest.TestCase):
             with self.subTest(target=(service, capability)):
                 marker = target_marker(service, capability)
                 self.assertEqual(parse_target("Purpose line.\n" + marker),
-                                 (slugify(service), slugify(capability), "story"))
+                                 (slugify(service), slugify(capability), "e2e"))
 
     def test_no_target_run_emits_a_parseable_empty_marker(self):
         self.assertEqual(target_marker("", ""),
-                         "Target: service=; capability=; scope=story")
-        self.assertEqual(parse_target(target_marker(None, None)), ("", "", "story"))
+                         "Target: service=; capability=; scope=e2e")
+        self.assertEqual(parse_target(target_marker(None, None)), ("", "", "e2e"))
 
     def test_targets_that_differ_compare_unequal_even_when_half_empty(self):
         pairs = (("", ""), ("svc", ""), ("", "cap"), ("svc", "cap"), ("none", "none"))
@@ -252,7 +252,7 @@ class TestTargetMarker(unittest.TestCase):
 
     def test_marker_survives_a_case_with_no_purpose(self):
         c = dict(CASE, tags=dict(CASE["tags"], purpose=""))
-        self.assertEqual(parse_target(_payload(c)["description"]), ("svc", "cap", "story"))
+        self.assertEqual(parse_target(_payload(c)["description"]), ("svc", "cap", "e2e"))
 
 
 def _scoped(case, scope):
@@ -277,33 +277,35 @@ MULTI_EXPECTED_CASE = {
 
 
 class TestScopeChangesExactlyTwoThings(unittest.TestCase):
-    """The test scope changes the status and nothing else in the payload. Everything a case
-    carries besides `status` — and besides the marker, which narrows reconciliation — must be
-    byte-identical under both scopes, or an e2e run would silently reshape its cases."""
+    """The format (smoke or e2e) changes the status and nothing else in the payload. Everything
+    a case carries besides `status` — and besides the marker, which narrows reconciliation —
+    must be byte-identical under both formats, or an e2e run would silently reshape its cases."""
 
     def test_e2e_scope_is_in_review(self):
         self.assertEqual(_scoped(CASE, "e2e")["status"], "Review")
 
-    def test_story_scope_and_default_are_draft(self):
-        for scope in ("story", None):
-            self.assertEqual(_scoped(CASE, scope)["status"], "Draft")
-        self.assertEqual(_payload(CASE)["status"], "Draft")
+    def test_absent_scope_is_in_review(self):
+        self.assertEqual(_scoped(CASE, None)["status"], "Review")
+        self.assertEqual(_payload(CASE)["status"], "Review")
+
+    def test_smoke_scope_is_draft(self):
+        self.assertEqual(_scoped(CASE, "smoke")["status"], "Draft")
 
     def test_only_the_status_and_the_marker_differ_between_scopes(self):
-        story, e2e = _scoped(CASE, "story"), _scoped(CASE, "e2e")
-        self.assertNotEqual(story["status"], e2e["status"])
-        self.assertEqual(set(story), set(e2e))
-        for key in story:
+        smoke, e2e = _scoped(CASE, "smoke"), _scoped(CASE, "e2e")
+        self.assertNotEqual(smoke["status"], e2e["status"])
+        self.assertEqual(set(smoke), set(e2e))
+        for key in smoke:
             if key == "status":
                 continue
             if key == "description":
-                self.assertEqual(_without_marker(story[key]), _without_marker(e2e[key]))
+                self.assertEqual(_without_marker(smoke[key]), _without_marker(e2e[key]))
                 continue
-            self.assertEqual(story[key], e2e[key], key)
+            self.assertEqual(smoke[key], e2e[key], key)
 
     def test_the_named_fields_are_identical_field_by_field(self):
-        story, e2e = _scoped(CASE, "story"), _scoped(CASE, "e2e")
-        for payload in (story, e2e):
+        smoke, e2e = _scoped(CASE, "smoke"), _scoped(CASE, "e2e")
+        for payload in (smoke, e2e):
             self.assertEqual(payload["customFields"],
                              [{"name": "Suite", "value": "[KING-1] Admin sign-in"},
                               {"name": "Story", "value": "Template"},
@@ -311,9 +313,9 @@ class TestScopeChangesExactlyTwoThings(unittest.TestCase):
                               {"name": "Feature", "value": "In-Apps"}])
             self.assertEqual(payload["issues"], [{"name": "Kinoa-Allure", "value": "KING-1"}])
             self.assertEqual(payload["tags"], ["qa-generated"])
-        # Outside the loop: inside it the first pass compared `story` with itself, so that
+        # Outside the loop: inside it the first pass compared `smoke` with itself, so that
         # half of the assertion could not fail.
-        self.assertEqual(e2e["scenario"], story["scenario"])
+        self.assertEqual(e2e["scenario"], smoke["scenario"])
 
     def test_a_step_emits_one_expected_block_per_expected_result_in_order(self):
         steps = _scoped(MULTI_EXPECTED_CASE, "e2e")["scenario"]["steps"]
@@ -340,27 +342,34 @@ class TestStoryLinkIsLoadBearing(unittest.TestCase):
         self.assertTrue(all(i["value"].strip() for i in issues))
 
 
-# What every case written before this ticket carries: the two-field marker KING-22861 shipped.
+# What every case written before the scope field carries: the two-field marker.
 LEGACY_MARKER = "Target: service=in-app-templates; capability=export-import"
 
 
 class TestMarkerCarriesTheScope(unittest.TestCase):
-    """The marker is reconciliation's only narrowing key, so it must carry the test scope
-    too: without it an e2e run and a Story run of one Story and target claim each other's
-    cases. A marker written before this ticket has no scope and must report it as absent."""
+    """The marker is reconciliation's only narrowing key, so it must carry the format too:
+    without it an e2e run and a smoke run of one Story and target claim each other's cases.
+    An absent scope is written as e2e; a two-field marker from before the scope field has no
+    scope and must report it as absent."""
 
     def test_marker_emits_the_scope_field_last(self):
         self.assertEqual(target_marker("svc", "cap", "e2e"),
                          "Target: service=svc; capability=cap; scope=e2e")
-        self.assertEqual(target_marker("svc", "cap", "story"),
-                         "Target: service=svc; capability=cap; scope=story")
+        self.assertEqual(target_marker("svc", "cap", "smoke"),
+                         "Target: service=svc; capability=cap; scope=smoke")
 
-    def test_absent_scope_is_written_as_story(self):
+    def test_absent_scope_is_written_as_e2e(self):
         self.assertEqual(target_marker("svc", "cap"),
-                         "Target: service=svc; capability=cap; scope=story")
+                         "Target: service=svc; capability=cap; scope=e2e")
+
+    def test_story_is_written_by_no_default(self):
+        for scope in (None, "", "   "):
+            with self.subTest(scope=scope):
+                self.assertNotIn("story", target_marker("svc", "cap", scope))
+                self.assertNotIn("story", _scoped(CASE, scope)["description"])
 
     def test_marker_round_trips_all_three_fields(self):
-        for scope in ("e2e", "story"):
+        for scope in ("e2e", "smoke"):
             with self.subTest(scope=scope):
                 marker = target_marker("In App Templates", "Export / Import", scope)
                 self.assertEqual(parse_target("Purpose.\n" + marker),
@@ -369,26 +378,26 @@ class TestMarkerCarriesTheScope(unittest.TestCase):
     def test_payload_marker_carries_the_payload_scope(self):
         self.assertEqual(parse_target(_scoped(CASE, "e2e")["description"]),
                          ("svc", "cap", "e2e"))
-        self.assertEqual(parse_target(_scoped(CASE, "story")["description"]),
-                         ("svc", "cap", "story"))
+        self.assertEqual(parse_target(_scoped(CASE, "smoke")["description"]),
+                         ("svc", "cap", "smoke"))
         self.assertEqual(parse_target(_scoped(CASE, None)["description"]),
-                         ("svc", "cap", "story"))
+                         ("svc", "cap", "e2e"))
 
     def test_the_two_scopes_of_one_target_compare_unequal(self):
         e2e = parse_target(_scoped(CASE, "e2e")["description"])
-        story = parse_target(_scoped(CASE, "story")["description"])
-        self.assertNotEqual(e2e, story)
-        self.assertEqual(e2e[:2], story[:2])
+        smoke = parse_target(_scoped(CASE, "smoke")["description"])
+        self.assertNotEqual(e2e, smoke)
+        self.assertEqual(e2e[:2], smoke[:2])
 
     def test_a_legacy_two_field_marker_still_parses_with_the_scope_absent(self):
         self.assertEqual(parse_target("Verify export works.\n" + LEGACY_MARKER),
                          ("in-app-templates", "export-import", None))
 
-    def test_a_legacy_marker_scope_is_absent_not_guessed_as_story(self):
+    def test_a_legacy_marker_scope_is_absent_not_guessed_as_e2e(self):
         self.assertIsNone(parse_target(LEGACY_MARKER)[2])
         self.assertNotEqual(parse_target(LEGACY_MARKER),
                             parse_target(target_marker("in-app-templates",
-                                                       "export-import", "story")))
+                                                       "export-import")))
 
 
 class TestTheFirstTwoNarrowingFieldsAreUntouched(unittest.TestCase):
@@ -397,13 +406,13 @@ class TestTheFirstTwoNarrowingFieldsAreUntouched(unittest.TestCase):
     exactly as they did, for a three-field marker and for a legacy two-field one alike."""
 
     def test_the_story_link_is_unchanged_in_both_scopes(self):
-        for scope in ("e2e", "story", None):
+        for scope in ("e2e", "smoke", None):
             with self.subTest(scope=scope):
                 self.assertEqual(_scoped(CASE, scope)["issues"],
                                  [{"name": "Kinoa-Allure", "value": "KING-1"}])
 
     def test_qa_generated_is_still_the_only_tag_in_both_scopes(self):
-        for scope in ("e2e", "story", None):
+        for scope in ("e2e", "smoke", None):
             with self.subTest(scope=scope):
                 self.assertEqual(_scoped(CASE, scope)["tags"], ["qa-generated"])
 
@@ -431,7 +440,7 @@ class TestTheFirstTwoNarrowingFieldsAreUntouched(unittest.TestCase):
 class ScopeNormalisationTest(unittest.TestCase):
     """`target_marker` slugifies the scope, so comparing the raw string let a marker say
     `scope=e2e` while the status stayed `Draft` — a case reconciliation would later claim
-    as e2e with Story-scoped field values. Gate 0a rejects such a scope, so this is the
+    as e2e with smoke-scoped field values. Gate 0a rejects such a scope, so this is the
     second line of defence, not the first."""
 
     CASE = {"id": "TC-1", "title": "A", "tags": {"type": "functional", "priority": "high"},
@@ -449,12 +458,19 @@ class ScopeNormalisationTest(unittest.TestCase):
                 self.assertEqual(payload["status"], E2E_STATUS)
                 self.assertIn("scope=e2e", payload["description"].splitlines()[-1])
 
-    def test_a_story_scope_is_unaffected(self):
-        for scope in ("story", "STORY", None):
+    def test_an_absent_scope_is_e2e(self):
+        for scope in (None, "", "  "):
             with self.subTest(scope=scope):
                 payload = self._payload(scope)
-                self.assertEqual(payload["status"], STATUS)
-                self.assertIn("scope=story", payload["description"].splitlines()[-1])
+                self.assertEqual(payload["status"], E2E_STATUS)
+                self.assertIn("scope=e2e", payload["description"].splitlines()[-1])
+
+    def test_an_odd_cased_smoke_is_draft(self):
+        for scope in ("smoke", "SMOKE", " Smoke "):
+            with self.subTest(scope=scope):
+                payload = self._payload(scope)
+                self.assertEqual(payload["status"], SMOKE_STATUS)
+                self.assertIn("scope=smoke", payload["description"].splitlines()[-1])
 
 
 if __name__ == "__main__":

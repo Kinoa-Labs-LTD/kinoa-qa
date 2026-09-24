@@ -6,10 +6,12 @@ source of truth; OpenSpec files (`--openspec`, optional) are context only. Check
 
   1. required-fields — every `### TC-` case has type, priority, purpose, source,
      preconditions, non-empty steps, non-empty expected, and every step carries an
-     `\u2192 expected:` result — exactly one under Story scope, one or more under
-     `scope: e2e` (the offending step is named by number);
-  2. source-valid — every `source:` is `ac: AC-<n>` (must exist in `## Acceptance
-     Criteria`) or `QA-added: <reason>`; there is no `scenario:` source;
+     `\u2192 expected:` result — exactly one under `scope: smoke`, one or more under
+     `scope: e2e` or with the scope absent (the offending step is named by number);
+  2. source-valid — every `source:` is `ac: AC-<n>[, AC-<m>…]` (a comma-separated list;
+     each id must exist in `## Acceptance Criteria`, and a part that does not start a new
+     `AC-<n>` is read as part of the id before it) or `QA-added: <reason>`; there is no
+     `scenario:` source;
   3. openspec-ref-valid — every `openspec-ref:` names a real scenario of a supplied
      OpenSpec file, qualified `<capability>#<Requirement>/<Scenario>` when more than one
      file is supplied;
@@ -23,17 +25,30 @@ source of truth; OpenSpec files (`--openspec`, optional) are context only. Check
      first-run state;
   7. scenario-coverage — advisory only: how many OpenSpec scenarios a case enriches;
   8. ac-coverage — `## Acceptance Criteria` is required and every AC listed there is cited
-     by >=1 case;
+     by >=1 case, each id of an `ac:` list counting as cited. Under `scope: smoke` an
+     uncovered AC is advisory (`ok`, detail `advisory: uncovered: …`); a missing section
+     still FAILs in both formats;
   9. conflict-resolution — `## Conflicts` header present, no unrecognised line in the
      section, every side of each conflict (two or more) named with a known artifact, and no
-     case citing an AC a still-unresolved conflict contradicts, and every `→ resolved:`
+     case citing (anywhere in its `ac:` list) an AC a still-unresolved conflict
+     contradicts, and every `→ resolved:`
      annotation written in the documented grammar;
  10. gap-honesty — every scenario-less requirement AND every OpenSpec scenario no case
      enriches is named in a `## Gaps` line, unless an unresolved `## Conflicts` line already
      names it; spec coverage is advisory, dishonesty is not;
- 11. scope-valid — the header's optional `scope:` is `e2e` or `story`. Absent is the
-     ordinary state and passes (the Story-scope default is applied by the consumer, not
-     here); any other value FAILs naming the value and the allowed set.
+ 11. scope-valid — the header's optional `scope:` is `e2e` or `smoke`, compared
+     case-sensitively. Absent passes and means `e2e`; any other value, `story` included,
+     FAILs naming the value and the allowed set;
+ 12. type-valid — every present `type:` is one of `functional`, `negative`, `edge`,
+     `regression`, `nonfunctional`; any other value FAILs naming the case and the value,
+     and `type: e2e` FAILs pointing at `scope: e2e` (a format, not a case type);
+ 13. smoke-shape — under `scope: smoke` the plan has exactly one case and it is
+     `type: functional`; n/a for an e2e plan, the scope absent included. The smoke rules
+     (here, in required-fields and in ac-coverage) apply only when `scope:` is exactly
+     `smoke`, the comparison scope-valid makes; any other value runs the e2e rules;
+ 14. sections-present — the `## Cases` and `## Gaps` section headers are present (`## Gaps`
+     may be empty); a missing one FAILs naming it. `## Acceptance Criteria` is ac-coverage's
+     and `## Conflicts` is conflict-resolution's.
 
 Exit 0 = PASS, 1 = FAIL, 2 = HOLD (structurally valid, but an unresolved conflict blocks
 the TestOps upsert until the QA engineer annotates `→ resolved: …`).
@@ -44,9 +59,9 @@ import os
 import re
 import sys
 
-from plan_parser import (SCOPES, E2E_SCOPE, normalise_scope,
+from plan_parser import (SCOPES, E2E_SCOPE, SMOKE_SCOPE,
                          parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts,
-                         parse_header)
+                         parse_header, parse_ac_source)
 
 def _capability_of(spec_path):
     """The capability a spec file belongs to: its parent directory, per the OpenSpec layout
@@ -56,6 +71,8 @@ def _capability_of(spec_path):
 
 
 AC_SECTION_RE = re.compile(r"^##\s+Acceptance Criteria\s*$", re.M)
+# The required section headers no other check owns, in plan order. `## Gaps` may be empty.
+REQUIRED_SECTIONS = ("Cases", "Gaps")
 # `allure-id:` is assigned by Allure TestOps, so a valid one is a positive integer with no
 # sign, separator or decimal point. Shape only: the validator is offline and never asks
 # TestOps whether the id exists.
@@ -64,9 +81,9 @@ DESIGN_REF_RE = re.compile(r"^[^/\s]+/[^/\s]+\s+—\s+\S.*$")
 # `<attachment-id> — <filename>`. Matched, never split: a filename may legitimately contain
 # an em dash, and splitting on it would truncate the value silently.
 IMAGE_REF_RE = re.compile(r"^[0-9]+\s+—\s+\S.*$")
-# The two test scopes a plan may declare. The field is optional — absent means Story scope,
-# and that default lives in the consumer, not here: this check only rejects a value that is
-# neither, so an unrecognised scope cannot reach Step E and be silently read as Story-scoped.
+# The case types a plan may use. `e2e` is a format (the header's `scope:`), not a type.
+CASE_TYPES = ("functional", "negative", "edge", "regression", "nonfunctional")
+SMOKE_CASE_TYPE = "functional"
 CONFLICT_SOURCES = ("story", "prd", "design", "openspec", "image")
 CONFLICT_AC_RE = re.compile(r"^(AC-\d+)\s*·")
 CONFLICT_BODY_RE = re.compile(r"·\s*(.*)$")
@@ -95,17 +112,17 @@ def conflict_sides(claim):
     return sides if len(sides) >= 2 else []
 
 
-def _step_problems(steps, scope):
-    """Every step must carry at least one `\u2192 expected:` result under either scope; only an
-    e2e plan may carry more than one on a step, each becoming its own expected_body. Returns
-    one message per offending step, naming its 1-based number so the QA engineer knows which
+def _step_problems(steps, smoke):
+    """Every step must carry at least one `\u2192 expected:` result in both formats, smoke and
+    e2e. Only under smoke is a step limited to exactly one; an e2e step may carry several,
+    each becoming its own expected_body. Returns one message per offending step, naming its 1-based number so the QA engineer knows which
     line to fix. A blank `\u2192 expected:` counts as missing, matching the payload builder,
     which omits an empty expected result entirely."""
     problems = []
     for n, step in enumerate(steps, 1):
         if not step.get("expected"):
             problems.append(f"step {n} has no expected result")
-        elif step.get("extra_expected") and normalise_scope(scope) != E2E_SCOPE:
+        elif step.get("extra_expected") and smoke:
             problems.append(f"step {n} has {1 + len(step['extra_expected'])} expected results "
                             f"(exactly one is allowed)")
     return problems
@@ -131,6 +148,10 @@ def validate(plan_path, openspec_path=None):
     has_conflicts_section, conflicts, unparsed_conflicts = parse_conflicts(plan_text)
     has_ac_section = bool(AC_SECTION_RE.search(plan_text))
     header = parse_header(plan_text)
+    # The one definition of "the smoke rules apply": exactly the value scope-valid accepts
+    # as smoke. Absent, `e2e` or an invalid value runs the e2e rules, and scope-valid alone
+    # reports an invalid value. The default lives here, never in the parser.
+    smoke = header.get("scope") == SMOKE_SCOPE
     checks = []
 
     # 1. required-fields
@@ -143,9 +164,7 @@ def validate(plan_path, openspec_path=None):
         if not c["steps"]:
             missing.append("steps")
         problems = [f"missing {', '.join(missing)}"] if missing else []
-        # Absent means Story scope: the default lives here, in the consumer, never in the
-        # parser, so "the plan said story" and "the plan said nothing" stay distinguishable.
-        problems += _step_problems(c["steps"], header.get("scope") or "story")
+        problems += _step_problems(c["steps"], smoke)
         if problems:
             bad.append(f"{c['id']}: {'; '.join(problems)}")
     checks.append({"name": "required-fields", "ok": not bad,
@@ -156,11 +175,14 @@ def validate(plan_path, openspec_path=None):
     for c in cases:
         src = c["tags"].get("source", "")
         if src.startswith("ac:"):
-            ref = src[len("ac:"):].strip()
-            if ref in acs:
-                covered_ac.add(ref)
-            else:
-                bad.append(f"{c['id']}: unknown acceptance-criterion '{ref}'")
+            refs = parse_ac_source(src)
+            if not refs:
+                bad.append(f"{c['id']}: 'ac:' source names no acceptance criterion")
+            for ref in refs:
+                if ref in acs:
+                    covered_ac.add(ref)
+                else:
+                    bad.append(f"{c['id']}: unknown acceptance-criterion '{ref}'")
         elif src.startswith("QA-added:"):
             pass
         else:
@@ -270,15 +292,22 @@ def validate(plan_path, openspec_path=None):
         if m:
             contradicted.add(m.group(1))
 
-    # 8. ac-coverage — required in both modes
+    # 8. ac-coverage — the section is required in both formats; an uncovered AC fails an
+    # e2e plan and is advisory under smoke.
     if not has_ac_section or not acs:
         checks.append({"name": "ac-coverage", "ok": False,
                        "detail": "missing '## Acceptance Criteria' — every case must be "
                                  "grounded in a business acceptance criterion"})
     else:
         uncovered_ac = sorted(set(acs) - covered_ac - contradicted)
-        checks.append({"name": "ac-coverage", "ok": not uncovered_ac,
-                       "detail": "ok" if not uncovered_ac else "uncovered: " + "; ".join(uncovered_ac)})
+        if not uncovered_ac:
+            checks.append({"name": "ac-coverage", "ok": True, "detail": "ok"})
+        elif smoke:
+            checks.append({"name": "ac-coverage", "ok": True,
+                           "detail": "advisory: uncovered: " + "; ".join(uncovered_ac)})
+        else:
+            checks.append({"name": "ac-coverage", "ok": False,
+                           "detail": "uncovered: " + "; ".join(uncovered_ac)})
 
     # 9. conflict-resolution
     bad = []
@@ -300,10 +329,10 @@ def validate(plan_path, openspec_path=None):
                 bad.append(f"unknown conflict source '{side}' "
                            f"(expected one of {', '.join(CONFLICT_SOURCES)})")
     for case in cases:
-        src = case["tags"].get("source", "")
-        if src.startswith("ac:") and src[len("ac:"):].strip() in contradicted:
-            bad.append(f"{case['id']}: cites {src[len('ac:'):].strip()}, contradicted by an "
-                       f"unresolved conflict — a contradicted AC must yield no case")
+        for ref in parse_ac_source(case["tags"].get("source", "")):
+            if ref in contradicted:
+                bad.append(f"{case['id']}: cites {ref}, contradicted by an unresolved "
+                           f"conflict — a contradicted AC must yield no case")
     checks.append({"name": "conflict-resolution", "ok": not bad,
                    "detail": "ok" if not bad else "; ".join(bad)})
 
@@ -321,17 +350,59 @@ def validate(plan_path, openspec_path=None):
     else:
         checks.append({"name": "gap-honesty", "ok": True, "detail": "n/a (no OpenSpec file)"})
 
-    # 11. scope-valid — the declared test scope, value only. Absent is the ordinary state of
-    # every plan on disk and passes; anything but `e2e` or `story` fails naming the value.
+    # 11. scope-valid — the declared format, value only. Absent passes and means e2e;
+    # anything but `e2e` or `smoke` fails naming the value.
     if "scope" not in header:
-        scope_detail, scope_ok = "ok: no scope declared (Story-scoped)", True
+        scope_detail, scope_ok = f"ok: no scope declared ({E2E_SCOPE})", True
     elif header["scope"] in SCOPES:
         scope_detail, scope_ok = f"ok: scope '{header['scope']}'", True
     else:
         scope_ok = False
         scope_detail = (f"unrecognised scope '{header['scope']}' — allowed: "
-                        + ", ".join(SCOPES) + " (or omit the field for Story scope)")
+                        + ", ".join(SCOPES) + f" (or omit the field for {E2E_SCOPE})")
     checks.append({"name": "scope-valid", "ok": scope_ok, "detail": scope_detail})
+
+    # 12. type-valid — a present `type:` is one of CASE_TYPES; its absence is
+    # required-fields' failure, not this one's.
+    bad = []
+    for c in cases:
+        case_type = c["tags"].get("type")
+        if not case_type or case_type in CASE_TYPES:
+            continue
+        if case_type == E2E_SCOPE:
+            bad.append(f"{c['id']}: type '{case_type}' is a format, not a case type — "
+                       f"declare it in the header as 'scope: {E2E_SCOPE}'")
+        else:
+            bad.append(f"{c['id']}: unknown type '{case_type}' — allowed: "
+                       + ", ".join(CASE_TYPES))
+    checks.append({"name": "type-valid", "ok": not bad,
+                   "detail": "ok" if not bad else "; ".join(bad)})
+
+    # 13. smoke-shape — a smoke plan is exactly one `functional` case; n/a otherwise.
+    if smoke:
+        bad = []
+        if len(cases) != 1:
+            bad.append(f"a smoke plan has exactly one case, found {len(cases)}")
+        for c in cases:
+            if c["tags"].get("type") != SMOKE_CASE_TYPE:
+                bad.append(f"{c['id']}: type '{c['tags'].get('type', '')}' — a smoke case "
+                           f"is '{SMOKE_CASE_TYPE}'")
+        checks.append({"name": "smoke-shape", "ok": not bad,
+                       "detail": "ok" if not bad else "; ".join(bad)})
+    else:
+        checks.append({"name": "smoke-shape", "ok": True,
+                       "detail": f"n/a (scope {header.get('scope') or E2E_SCOPE})"})
+
+    # 14. sections-present — the required headers no other check owns, each named when
+    # missing; a present-but-empty `## Gaps` passes.
+    missing = [name for name in REQUIRED_SECTIONS
+               if not re.search(rf"^##\s+{name}\s*$", plan_text, re.M)]
+    checks.append({"name": "sections-present", "ok": not missing,
+                   "detail": "ok" if not missing else "; ".join(
+                       f"missing '## {name}' section header"
+                       + (" (may be empty, but it is required)" if name == "Gaps"
+                          else " (required)")
+                       for name in missing)})
 
     report = {
         "plan": plan_path, "openspec": spec_paths or None,

@@ -1,9 +1,9 @@
 {
   "name": "Collecting a non-final milestone does not change the eligibility counter",
-  "description": "Verify eligibility is untouched while the player progresses through milestones before the last one.",
+  "description": "Verify eligibility is untouched while the player progresses through milestones before the last one.\nTarget: service=kinoa-in-app; capability=milestones-eligibility; scope=e2e",
   "precondition": "Published Milestone in-app with 3 milestones and Max Eligibility = 2.\nTest player has an active in-app instance with actual_eligibility = 2 and no milestones collected.",
   "expectedResult": "Eligibility is decremented only at the final milestone; intermediate collects leave actual_eligibility, the instance ID and the progression intact.",
-  "status": "Draft",
+  "status": "Review",
   "workflow": "Manual Kinoa",
   "issues": [
     {

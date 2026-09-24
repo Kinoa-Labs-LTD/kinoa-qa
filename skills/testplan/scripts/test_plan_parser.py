@@ -2,7 +2,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unittest
 from plan_parser import (parse_spec, parse_cases, parse_gaps, parse_acs, parse_conflicts,
-                         parse_header)
+                         parse_header, parse_ac_source)
 
 SPEC = """## capability
 ### Requirement: Sign-in
@@ -472,6 +472,27 @@ class HeaderSeparatorTest(unittest.TestCase):
     def test_a_trailing_continuation_is_kept(self):
         header = parse_header("story: KING-1 · title: A · B · C\n\n## Cases\n")
         self.assertEqual(header["title"], "A · B · C")
+
+
+class ParseAcSourceTest(unittest.TestCase):
+    """`source: ac:` holds a comma-separated AC list. A part that does not start a new
+    `AC-<n>` belongs to the part before it, so an unknown id is reported whole."""
+
+    def test_a_single_id_parses(self):
+        self.assertEqual(["AC-1"], parse_ac_source("ac: AC-1"))
+
+    def test_a_list_parses_in_order(self):
+        self.assertEqual(["AC-2", "AC-1", "AC-3"], parse_ac_source("ac: AC-2, AC-1,AC-3"))
+
+    def test_duplicates_and_empty_parts_are_dropped(self):
+        self.assertEqual(["AC-1", "AC-2"], parse_ac_source("ac: AC-1, , AC-2, AC-1,"))
+
+    def test_a_non_ac_first_part_is_kept_whole(self):
+        self.assertEqual(["see AC-1", "AC-2"], parse_ac_source("ac: see AC-1, AC-2"))
+
+    def test_a_comma_inside_a_value_is_rejoined_not_split(self):
+        self.assertEqual(["AC-1, as agreed with PM", "AC-2"],
+                         parse_ac_source("ac: AC-1, as agreed with PM, AC-2"))
 
 
 if __name__ == "__main__":
