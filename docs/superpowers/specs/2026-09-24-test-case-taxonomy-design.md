@@ -2,7 +2,7 @@
 
 **Jira:** KING-22942 · **Related:** KING-22737 (QA plugin), KING-22797 (scope marker),
 KING-22213 / KING-22214 (smoke skills), KING-22420 (smoke promotion)
-**Author:** Dmytro Kapeliukh · **Date:** 2026-09-24 · **Status:** Design. §5 decided, critic review folded in (2026-09-24), §6 open
+**Author:** Dmytro Kapeliukh · **Date:** 2026-09-24 · **Status:** Design. §5 decided, critic review folded in (2026-09-24), §6 decided
 
 ---
 
@@ -122,7 +122,7 @@ that contains `]` and `,`, because a value may legitimately contain the delimite
 **remote link** titled `Allure TestOps case <id>`, pointing at the case. It is never written
 into the description, which is the plan. `smoke-run` reads the id from that link. This is the
 first Jira write `testplan` makes, so it gets its own confirmation at the Step D gate and needs
-the `write:jira-work` scope, which the README says is unused today (open item 6.1).
+the `write:jira-work` scope, which the README says is unused today (§6.1).
 
 The pushed case goes to TestOps as `Draft`, with the caller's `Feature`. It reconciles only
 against the smoke plan's own case set (same `target:` marker plus `scope: smoke`), so a smoke
@@ -136,14 +136,14 @@ with KING-22420 and `testops-to-playwright`.
 |---|---|
 | `.claude/skills/smoke-plan/SKILL.md` | `skills/smoke-plan/SKILL.md` |
 | `.claude/skills/smoke-run/SKILL.md` | `skills/smoke-run/SKILL.md` |
-| `.claude/skills/shared/step-outcome-contract.md` | `skills/shared/step-outcome-contract.md`. `testops-manual-run` stays behind and still uses it (open item 6.2) |
+| `.claude/skills/shared/step-outcome-contract.md` | `skills/shared/step-outcome-contract.md`. `testops-manual-run` stays behind and still uses it (§6.2) |
 | `scripts/jiraReport.mjs`, `scripts/jiraAttach.mjs` | `skills/smoke-run/scripts/` |
 
 - **Two separate skills**, `/kinoa-qa:smoke-plan` and `/kinoa-qa:smoke-run`, not merged into
   `testplan`. After reading the sources, the smoke flow (Jira sub-task) and the e2e flow
   (`test-plan.md` → TestOps) share almost nothing.
 - **This is a move, not a redesign.** Only the edits in §2.4 and the path and prerequisite
-  changes below are made. Two things are **separate tickets** (open item 6.3):
+  changes below are made. Two things are **separate tickets** (§6.3):
   - extracting a shared source-reading reference for `testplan` and `smoke-plan`;
   - the three improvements from the KING-22213 comment of 2026-09-21: sub-task comments as a
     named source, a tag for them, and an "AC with no implementing sub-task" readiness signal.
@@ -268,20 +268,20 @@ whatever tests they have today; adding a Node test harness to this repo is out o
    **Decided:** ship AC-4 in the same PR as the validator changes (the follow-up ticket).
    This ticket closes with the decision comment (AC-1 to AC-3) and the linked follow-up (AC-5).
 
-## 6. Open items (raised by the critic review, 2026-09-24)
+## 6. Decided after the critic review (2026-09-24)
 
 1. **May `testplan` write to Jira?** The case-id write-back is the plugin's first Jira write.
    It needs the `write:jira-work` scope, which the README says the plugin does not use today.
-   **Recommendation:** yes, limited to adding one remote link on the sub-task, behind the
+   **Decided:** yes, limited to adding one remote link on the sub-task, behind the
    Step D confirmation. The alternative is to show the id and ask the user to paste it, which
    is exactly the manual step this push exists to remove.
 2. **Where does `step-outcome-contract.md` live?** `testops-manual-run` stays in
    kinoa-test-automation and uses it (`testops-manual-run/SKILL.md:18, 52`), and
    `scripts/packageSkill.mjs` bundles it. Deleting it there breaks that skill.
-   **Recommendation:** the plugin copy becomes the owner. The repo copy stays as a read-only
+   **Decided:** the plugin copy becomes the owner. The repo copy stays as a read-only
    mirror, with a header naming the plugin as the source, until `testops-manual-run` moves
    too. The alternative, pointing `testops-manual-run` at a plugin path, ties a repo skill to
    the plugin's install location.
 3. **Two items split into their own tickets** (§2.5): the shared source-reading reference,
-   and the three improvements from the KING-22213 comment. **Recommendation:** confirm they
-   are not part of the move.
+   and the three improvements from the KING-22213 comment. **Decided:** they are not part of
+   the move and get their own tickets.
