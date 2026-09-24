@@ -2,7 +2,7 @@
 
 **Jira:** KING-22942 · **Related:** KING-22737 (QA plugin), KING-22797 (scope marker),
 KING-22213 / KING-22214 (smoke skills), KING-22420 (smoke promotion)
-**Author:** Dmytro Kapeliukh · **Date:** 2026-09-24 · **Status:** Design, pending review
+**Author:** Dmytro Kapeliukh · **Date:** 2026-09-24 · **Status:** Design, §5 decided 2026-09-24, pending critic review
 
 ---
 
@@ -168,19 +168,19 @@ AC-4). The README's scope section is rewritten.
 **Move.** Everything in §2.5, done as one PR here and one deletion PR in
 kinoa-test-automation.
 
-## 5. Open items for the reviewer
+## 5. Decided at review (2026-09-24)
 
 1. **Which Allure mapping does e2e keep?** KING-22797 set e2e cases to `Feature = "e2e
    scope"` and status `Review`. That was written for journeys. Now that e2e is the
    full-coverage default, every case `testplan` pushes would get that `Feature`, and the
    `Feature` field would stop telling cases apart.
-   **Recommendation:** e2e takes the caller's `Feature` and keeps `Review`. Smoke pushes use
-   the caller's `Feature` and `Draft`. If the `"e2e scope"` Feature is still needed as a
-   filter, say so and it stays.
+   **Decided:** e2e takes the caller's `Feature` and keeps `Review`. Smoke pushes use the
+   caller's `Feature` and `Draft`. The `"e2e scope"` Feature value is no longer set by the
+   plugin, and passing `--feature` under e2e is no longer an error.
 2. **When do the doc updates land?** KING-22942 AC-4 puts the taxonomy into
    `test-plan-format.md` and `generation.md` on this ticket. But CLAUDE.md says a reference
    file that misdescribes the validator is a defect, and until item 4.1–4.4 lands, the
    validator still accepts `story` and `type: e2e` and rejects multi-AC sources.
-   **Recommendation:** ship AC-4 in the same PR as the validator changes (the follow-up
+   **Decided:** ship AC-4 in the same PR as the validator changes (the follow-up
    ticket). This ticket closes with the decision comment (AC-1 to AC-3) and the linked
    follow-up (AC-5).
