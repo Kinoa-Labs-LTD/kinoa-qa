@@ -556,9 +556,9 @@ class TestPurposeAndPerStepExpected(unittest.TestCase):
             self.assertIn("no expected result", detail)
             self.assertNotIn("step 1", detail)
 
-    def test_step_with_two_expected_results_fails(self):
+    def test_step_with_two_expected_results_fails_under_smoke(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan = _write(tmp, PLAN_BUSINESS_MODE.replace(
+            plan = _write(tmp, _with_scope("smoke").replace(
                 "  1. sign in\n     \u2192 expected: the session opens\n",
                 "  1. sign in\n     \u2192 expected: the session opens\n"
                 "     \u2192 expected: the dashboard loads\n", 1))
@@ -777,6 +777,32 @@ def _with_scope(scope):
                                       header + "\n## Acceptance Criteria", 1)
 
 
+# TC-2 of PLAN_BUSINESS_MODE, spliced out to leave the one case a smoke plan may carry.
+CASE_TC2 = ("### TC-2 · Reject bad password\n- type: negative\n- priority: P1\n"
+            "- purpose: Verify a wrong password is rejected.\n"
+            "- source: ac: AC-2\n- preconditions: a user exists\n- steps:\n"
+            "  1. sign in with wrong password\n     → expected: an error is shown\n"
+            "- expected: rejected\n")
+
+
+def _without_tc2(plan):
+    """`plan` with CASE_TC2 spliced out. Raises when CASE_TC2 is not in `plan`, so a drift in
+    either text fails loudly instead of leaving a two-case plan behind."""
+    if CASE_TC2 not in plan:
+        raise AssertionError("CASE_TC2 no longer matches the plan text; update it")
+    return plan.replace(CASE_TC2, "", 1)
+
+
+def _smoke_plan():
+    """A well-formed smoke plan: `scope: smoke`, one functional case citing AC-1, AC-2 uncovered."""
+    return _without_tc2(_with_scope("smoke"))
+
+
+def _failing(report):
+    """The names of the checks that failed, in report order."""
+    return [c["name"] for c in report["checks"] if not c["ok"]]
+
+
 class ScopeValidTest(unittest.TestCase):
     def _check(self, scope):
         with tempfile.TemporaryDirectory() as tmp:
@@ -788,14 +814,23 @@ class ScopeValidTest(unittest.TestCase):
         self.assertTrue(check["ok"], check["detail"])
         self.assertEqual("PASS", r["outcome"])
 
-    def test_story_passes(self):
-        r, check = self._check("story")
+    def test_smoke_passes(self):
+        r, check = self._check("smoke")
         self.assertTrue(check["ok"], check["detail"])
-        self.assertEqual("PASS", r["outcome"])
+        self.assertIn("smoke", check["detail"])
 
-    def test_an_absent_scope_passes(self):
+    def test_story_fails_naming_the_allowed_values(self):
+        r, check = self._check("story")
+        self.assertFalse(check["ok"])
+        self.assertIn("'story'", check["detail"])
+        self.assertIn("e2e, smoke", check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_an_absent_scope_passes_as_e2e(self):
         r, check = self._check(None)
         self.assertTrue(check["ok"], check["detail"])
+        self.assertIn("e2e", check["detail"])
         self.assertEqual("PASS", r["outcome"])
 
     def test_a_plan_with_no_header_at_all_passes(self):
@@ -808,7 +843,7 @@ class ScopeValidTest(unittest.TestCase):
         self.assertFalse(check["ok"])
         self.assertIn("E2E", check["detail"])
         self.assertIn("e2e", check["detail"])
-        self.assertIn("story", check["detail"])
+        self.assertIn("smoke", check["detail"])
         self.assertEqual("FAIL", r["outcome"])
         self.assertEqual(1, r["exit_code"])
 
@@ -817,14 +852,14 @@ class ScopeValidTest(unittest.TestCase):
         self.assertFalse(check["ok"])
         self.assertIn("integration", check["detail"])
         self.assertIn("e2e", check["detail"])
-        self.assertIn("story", check["detail"])
+        self.assertIn("smoke", check["detail"])
         self.assertEqual("FAIL", r["outcome"])
 
     def test_an_empty_value_fails(self):
         r, check = self._check("")
         self.assertFalse(check["ok"])
         self.assertIn("e2e", check["detail"])
-        self.assertIn("story", check["detail"])
+        self.assertIn("smoke", check["detail"])
         self.assertEqual("FAIL", r["outcome"])
 
     def test_scope_is_not_a_required_field(self):
@@ -845,10 +880,20 @@ def _with_scope_and_steps(scope, steps):
     return _with_scope(scope).replace(ONE_EXPECTED_STEP, steps, 1)
 
 
+def _smoke_with_steps(steps):
+    """`_smoke_plan` with its one case's single step replaced by `steps`."""
+    return _smoke_plan().replace(ONE_EXPECTED_STEP, steps, 1)
+
+
 class MultiExpectedPerStepTest(unittest.TestCase):
     def _validate(self, scope, steps=TWO_EXPECTED_STEP):
         with tempfile.TemporaryDirectory() as tmp:
             r = validate(_write(tmp, _with_scope_and_steps(scope, steps)), None)
+            return r, _checks(r)["required-fields"]
+
+    def _validate_smoke(self, steps=TWO_EXPECTED_STEP):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, _smoke_with_steps(steps)), None)
             return r, _checks(r)["required-fields"]
 
     def test_two_expected_results_pass_under_e2e(self):
@@ -857,19 +902,19 @@ class MultiExpectedPerStepTest(unittest.TestCase):
         self.assertEqual("PASS", r["outcome"])
         self.assertEqual(0, r["exit_code"])
 
-    def test_two_expected_results_fail_under_story_naming_the_step(self):
-        r, check = self._validate("story")
+    def test_two_expected_results_fail_under_smoke_naming_the_step(self):
+        r, check = self._validate_smoke()
         self.assertFalse(check["ok"])
         self.assertEqual("TC-1: step 1 has 2 expected results (exactly one is allowed)",
                          check["detail"])
+        self.assertEqual(["required-fields"], _failing(r))
         self.assertEqual(1, r["exit_code"])
 
-    def test_two_expected_results_fail_with_the_scope_absent(self):
+    def test_two_expected_results_pass_with_the_scope_absent(self):
         r, check = self._validate(None)
-        self.assertFalse(check["ok"])
-        self.assertEqual("TC-1: step 1 has 2 expected results (exactly one is allowed)",
-                         check["detail"])
-        self.assertEqual(1, r["exit_code"])
+        self.assertTrue(check["ok"], check["detail"])
+        self.assertEqual("PASS", r["outcome"])
+        self.assertEqual(0, r["exit_code"])
 
     def test_three_expected_results_pass_under_e2e(self):
         r, check = self._validate(
@@ -883,10 +928,11 @@ class MultiExpectedPerStepTest(unittest.TestCase):
         self.assertIn("TC-1: step 2 has no expected result", check["detail"])
         self.assertEqual(1, r["exit_code"])
 
-    def test_a_step_with_no_expected_result_fails_under_story(self):
-        r, check = self._validate("story", ONE_EXPECTED_STEP + "  2. open the dashboard\n")
+    def test_a_step_with_no_expected_result_fails_under_smoke(self):
+        r, check = self._validate_smoke(ONE_EXPECTED_STEP + "  2. open the dashboard\n")
         self.assertFalse(check["ok"])
         self.assertIn("TC-1: step 2 has no expected result", check["detail"])
+        self.assertEqual(["required-fields"], _failing(r))
         self.assertEqual(1, r["exit_code"])
 
     def test_a_blank_expected_result_still_fails_under_e2e(self):
@@ -895,42 +941,199 @@ class MultiExpectedPerStepTest(unittest.TestCase):
         self.assertIn("step 1 has no expected result", check["detail"])
 
 
-# --- 2.2 the Story-scoped rejection is byte-identical to before -------------
-class StoryScopeMultiExpectedUnchangedTest(unittest.TestCase):
-    """Pins the rule KING-22795 shipped: under Story scope the check name, the message and
-    the exit code of a multi-expected step must survive the e2e relaxation unchanged."""
+# --- 2.2 the smoke rejection keeps the message the one-expected rule shipped with --
+class SmokeScopeMultiExpectedUnchangedTest(unittest.TestCase):
+    """Under `scope: smoke` the check name, the message and the exit code of a
+    multi-expected step are the ones the rule shipped with; a plan with no scope is e2e
+    and may carry several expected results on a step."""
 
     EXPECTED_DETAIL = "TC-1: step 1 has 2 expected results (exactly one is allowed)"
 
-    def _report(self, scope):
+    def test_message_and_check_name_unchanged_under_smoke(self):
         with tempfile.TemporaryDirectory() as tmp:
-            return validate(_write(tmp, _with_scope_and_steps(scope, TWO_EXPECTED_STEP)), None)
-
-    def test_message_and_check_name_unchanged_with_the_scope_absent(self):
-        r = self._report(None)
+            r = validate(_write(tmp, _smoke_with_steps(TWO_EXPECTED_STEP)), None)
         check = _checks(r)["required-fields"]
         self.assertFalse(check["ok"])
         self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
+        self.assertEqual(["required-fields"], _failing(r))
         self.assertEqual("FAIL", r["outcome"])
         self.assertEqual(1, r["exit_code"])
 
-    def test_message_and_check_name_unchanged_under_story(self):
-        r = self._report("story")
-        check = _checks(r)["required-fields"]
-        self.assertFalse(check["ok"])
-        self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
-        self.assertEqual("FAIL", r["outcome"])
-        self.assertEqual(1, r["exit_code"])
+    def test_the_scope_absent_relaxes_the_rule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, _with_scope_and_steps(None, TWO_EXPECTED_STEP)), None)
+        self.assertTrue(_checks(r)["required-fields"]["ok"], _checks(r)["required-fields"])
+        self.assertEqual("PASS", r["outcome"])
+        self.assertEqual(0, r["exit_code"])
 
-    def test_message_unchanged_on_a_headerless_plan(self):
-        # The pre-scope shape: no header at all, exactly as KING-22795 left it.
+    def test_a_headerless_plan_relaxes_the_rule(self):
+        # The pre-scope shape: no header at all, which now reads as e2e.
         with tempfile.TemporaryDirectory() as tmp:
             text = PLAN_BUSINESS_MODE.replace(ONE_EXPECTED_STEP, TWO_EXPECTED_STEP, 1)
             r = validate(_write(tmp, text), None)
             check = _checks(r)["required-fields"]
             self.assertEqual("required-fields", check["name"])
-            self.assertEqual(self.EXPECTED_DETAIL, check["detail"])
-            self.assertEqual(1, r["exit_code"])
+            self.assertTrue(check["ok"], check["detail"])
+            self.assertEqual(0, r["exit_code"])
+
+
+class TypeValidTest(unittest.TestCase):
+    TYPES = ("functional", "negative", "edge", "regression", "nonfunctional")
+
+    def _check(self, case_type):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, PLAN_BUSINESS_MODE.replace(
+                "- type: functional", "- type: " + case_type, 1)), None)
+        checks = _checks(r)
+        self.assertIn("type-valid", checks)
+        return r, checks["type-valid"]
+
+    def test_each_of_the_five_types_passes(self):
+        for case_type in self.TYPES:
+            with self.subTest(type=case_type):
+                r, check = self._check(case_type)
+                self.assertTrue(check["ok"], check["detail"])
+                self.assertEqual("PASS", r["outcome"])
+
+    def test_an_unknown_type_fails_naming_the_case_and_the_value(self):
+        r, check = self._check("banana")
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1", check["detail"])
+        self.assertIn("'banana'", check["detail"])
+        self.assertIn("functional, negative, edge, regression, nonfunctional", check["detail"])
+        self.assertEqual("FAIL", r["outcome"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_e2e_fails_pointing_at_the_scope(self):
+        r, check = self._check("e2e")
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1", check["detail"])
+        self.assertIn("scope: e2e", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+
+class MultiAcSourceTest(unittest.TestCase):
+    """`source: ac:` may cite several ACs; source-valid, ac-coverage and
+    conflict-resolution each check every id in the list."""
+
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            return validate(_write(tmp, plan_text), None)
+
+    def _one_case_citing(self, source):
+        plan = _without_tc2(PLAN_BUSINESS_MODE)
+        self.assertIn("- source: ac: AC-1", plan)
+        return plan.replace("- source: ac: AC-1", "- source: " + source, 1)
+
+    def test_one_case_citing_two_acs_covers_both(self):
+        r = self._run(self._one_case_citing("ac: AC-1, AC-2"))
+        self.assertTrue(_checks(r)["source-valid"]["ok"], _checks(r)["source-valid"])
+        self.assertTrue(_checks(r)["ac-coverage"]["ok"], _checks(r)["ac-coverage"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_an_unknown_id_in_the_list_fails_naming_it(self):
+        r = self._run(self._one_case_citing("ac: AC-1, AC-9"))
+        check = _checks(r)["source-valid"]
+        self.assertFalse(check["ok"])
+        self.assertEqual("TC-1: unknown acceptance-criterion 'AC-9'", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_a_non_ac_first_part_is_reported_whole(self):
+        r = self._run(self._one_case_citing("ac: see AC-1, AC-2"))
+        check = _checks(r)["source-valid"]
+        self.assertFalse(check["ok"])
+        self.assertEqual("TC-1: unknown acceptance-criterion 'see AC-1'", check["detail"])
+
+    def test_a_contradicted_id_in_the_list_fails_conflict_resolution(self):
+        r = self._run(PLAN_CONFLICT.replace("- source: ac: AC-1", "- source: ac: AC-1, AC-2", 1))
+        check = _checks(r)["conflict-resolution"]
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1: cites AC-2", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+
+class SmokeShapeTest(unittest.TestCase):
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, plan_text), None)
+        checks = _checks(r)
+        self.assertIn("smoke-shape", checks)
+        return r, checks
+
+    def test_one_functional_case_passes(self):
+        r, checks = self._run(_smoke_plan())
+        self.assertTrue(checks["smoke-shape"]["ok"], checks["smoke-shape"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_two_cases_fail(self):
+        r, checks = self._run(_smoke_plan().replace(
+            "## Conflicts\n", CASE_TC3 + "## Conflicts\n", 1))
+        check = checks["smoke-shape"]
+        self.assertFalse(check["ok"])
+        self.assertIn("exactly one case", check["detail"])
+        self.assertIn("found 2", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_one_negative_case_fails(self):
+        r, checks = self._run(_smoke_plan().replace(
+            "- type: functional", "- type: negative", 1))
+        check = checks["smoke-shape"]
+        self.assertFalse(check["ok"])
+        self.assertIn("TC-1", check["detail"])
+        self.assertIn("'negative'", check["detail"])
+        self.assertIn("functional", check["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_an_uncovered_ac_is_advisory(self):
+        r, checks = self._run(_smoke_plan())
+        check = checks["ac-coverage"]
+        self.assertTrue(check["ok"], check)
+        self.assertTrue(check["detail"].startswith("advisory:"), check["detail"])
+        self.assertIn("AC-2", check["detail"])
+
+    def test_a_missing_ac_section_still_fails(self):
+        text = _smoke_plan().replace(
+            "## Acceptance Criteria\n- AC-1: Users can sign in\n- AC-2: Bad passwords rejected\n",
+            "", 1).replace("- source: ac: AC-1", "- source: QA-added: smoke check", 1)
+        r, checks = self._run(text)
+        self.assertFalse(checks["ac-coverage"]["ok"])
+        self.assertIn("missing", checks["ac-coverage"]["detail"])
+        self.assertEqual(["ac-coverage"], _failing(r))
+        self.assertEqual(1, r["exit_code"])
+
+
+class SmokeChecksIgnoreE2eTest(unittest.TestCase):
+    """The smoke rules apply to `scope: smoke` only: a headerless plan is e2e."""
+
+    PLANS = {"headerless": PLAN_BUSINESS_MODE, "scope: e2e": _with_scope("e2e")}
+
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, plan_text), None)
+        checks = _checks(r)
+        self.assertIn("smoke-shape", checks)
+        return r, checks
+
+    def _three_cases(self, plan_text):
+        return plan_text.replace("## Conflicts\n", CASE_TC3 + "## Conflicts\n", 1)
+
+    def test_three_cases_including_a_negative_pass_smoke_shape(self):
+        for label, plan in self.PLANS.items():
+            with self.subTest(plan=label):
+                r, checks = self._run(self._three_cases(plan))
+                self.assertTrue(checks["smoke-shape"]["ok"], checks["smoke-shape"])
+                self.assertEqual("PASS", r["outcome"])
+
+    def test_an_uncovered_ac_still_fails_ac_coverage(self):
+        for label, plan in self.PLANS.items():
+            with self.subTest(plan=label):
+                r, checks = self._run(self._three_cases(plan).replace(
+                    "- AC-2: Bad passwords rejected\n",
+                    "- AC-2: Bad passwords rejected\n- AC-3: Sessions expire\n", 1))
+                self.assertTrue(checks["smoke-shape"]["ok"], checks["smoke-shape"])
+                self.assertFalse(checks["ac-coverage"]["ok"])
+                self.assertEqual("uncovered: AC-3", checks["ac-coverage"]["detail"])
+                self.assertEqual(1, r["exit_code"])
 
 
 PLAN_IMAGE_REF = """# QA Test Plan — KING-1 · svc / cap
@@ -1031,6 +1234,86 @@ class ImageConflictSource(unittest.TestCase):
         r = self._run(PLAN_IMAGE_REF.replace(
             "## Conflicts\n",
             "## Conflicts\n\n- ⚠️ CONFLICT: AC-1 · story: a vs screenshot: b — none\n"))
+        self.assertEqual(1, r["exit_code"])
+
+
+class SectionsPresentTest(unittest.TestCase):
+    """`## Cases` and `## Gaps` are required section headers; `## Gaps` may be empty."""
+
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            return validate(_write(tmp, plan_text), None)
+
+    def test_a_well_formed_plan_passes(self):
+        r = self._run(PLAN_BUSINESS_MODE)
+        self.assertTrue(_checks(r)["sections-present"]["ok"], _checks(r)["sections-present"])
+        self.assertEqual("PASS", r["outcome"])
+
+    def test_a_plan_missing_gaps_fails_naming_it(self):
+        r = self._run(PLAN_BUSINESS_MODE.replace("## Gaps\n", "", 1))
+        check = _checks(r)["sections-present"]
+        self.assertFalse(check["ok"])
+        self.assertIn("'## Gaps'", check["detail"])
+        self.assertNotIn("'## Cases'", check["detail"])
+        self.assertEqual(["sections-present"], _failing(r))
+        self.assertEqual(1, r["exit_code"])
+
+    def test_a_plan_missing_cases_fails_naming_it(self):
+        # The cases stay in the plan, so every other check still sees them.
+        r = self._run(PLAN_BUSINESS_MODE.replace("## Cases\n", "", 1))
+        check = _checks(r)["sections-present"]
+        self.assertFalse(check["ok"])
+        self.assertIn("'## Cases'", check["detail"])
+        self.assertNotIn("'## Gaps'", check["detail"])
+        self.assertEqual(["sections-present"], _failing(r))
+        self.assertEqual(1, r["exit_code"])
+
+    def test_a_plan_missing_both_names_both(self):
+        r = self._run(PLAN_BUSINESS_MODE.replace("## Cases\n", "", 1)
+                      .replace("## Gaps\n", "", 1))
+        check = _checks(r)["sections-present"]
+        self.assertIn("'## Cases'", check["detail"])
+        self.assertIn("'## Gaps'", check["detail"])
+
+    def test_a_heading_with_trailing_text_is_not_the_section(self):
+        r = self._run(PLAN_BUSINESS_MODE.replace("## Gaps\n", "## Gaps and notes\n", 1))
+        self.assertFalse(_checks(r)["sections-present"]["ok"])
+
+    def test_every_plan_fixture_passes(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "evals",
+                            "fixtures")
+        plans = [os.path.join(d, f) for d, _, files in os.walk(root) for f in files
+                 if f.endswith(".md") and "plan" in f]
+        self.assertTrue(plans)
+        for path in plans:
+            with self.subTest(plan=os.path.relpath(path, root)):
+                check = _checks(validate(path, None))["sections-present"]
+                self.assertTrue(check["ok"], check["detail"])
+
+
+class SmokeRulesNeedTheExactScopeTest(unittest.TestCase):
+    """The smoke rules apply only when the header says exactly `smoke`, the comparison
+    scope-valid makes; an invalid scope is scope-valid's failure alone."""
+
+    def _run(self, plan_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = validate(_write(tmp, plan_text), None)
+        return r, _checks(r)
+
+    def test_capitalised_smoke_fails_scope_valid_and_runs_no_smoke_rule(self):
+        r, checks = self._run(_without_tc2(_with_scope("Smoke")))
+        self.assertFalse(checks["scope-valid"]["ok"])
+        self.assertIn("'Smoke'", checks["scope-valid"]["detail"])
+        self.assertFalse(checks["ac-coverage"]["ok"], checks["ac-coverage"])
+        self.assertEqual("uncovered: AC-2", checks["ac-coverage"]["detail"])
+        self.assertTrue(checks["smoke-shape"]["detail"].startswith("n/a"),
+                        checks["smoke-shape"]["detail"])
+        self.assertEqual(1, r["exit_code"])
+
+    def test_an_invalid_scope_does_not_also_fail_multi_expected(self):
+        r, checks = self._run(_with_scope_and_steps("story", TWO_EXPECTED_STEP))
+        self.assertTrue(checks["required-fields"]["ok"], checks["required-fields"])
+        self.assertEqual(["scope-valid"], _failing(r))
         self.assertEqual(1, r["exit_code"])
 
 

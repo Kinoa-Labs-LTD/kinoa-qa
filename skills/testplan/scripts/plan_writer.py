@@ -8,7 +8,7 @@ import json
 import re
 import sys
 
-from plan_parser import CASE_HEADING_RE, parse_cases, parse_header
+from plan_parser import CASE_HEADING_RE, parse_cases
 
 # Source of truth for the id shape is `ALLURE_ID_RE` in validate_test_plan.py (Gate 0a):
 # a positive integer with no sign, separator, decimal point or leading zero. Duplicated
@@ -40,43 +40,6 @@ def _newline_of(text):
     return "\r\n" if crlf and crlf >= (text.count("\n") - crlf) else "\n"
 
 
-SCOPE_FIELD = "scope"
-
-
-def _carry_scope_forward(new_plan_text, previous_plan_text):
-    """Carry the previous plan's `scope:` into a regenerated plan that omits it, and report
-    what happened to it. The merge emits the new plan's header verbatim, so without this a
-    regeneration that drops the field silently demotes an e2e plan to Story scope. A scope
-    that really changed is REPORTED, never reverted — the gate decides, as it does for a
-    suspect id. Returns (plan_text, scope_report)."""
-    previous = parse_header(previous_plan_text).get(SCOPE_FIELD)
-    new_header = parse_header(new_plan_text)
-    # Presence, not truthiness: a plan that writes `scope:` with an empty value has DECLARED a
-    # scope — an invalid one. Carrying the previous value forward there would add a second
-    # `scope:` line, and parse_header is last-wins, so the plan `scope-valid` must fail would
-    # silently read as the old scope instead.
-    declared = SCOPE_FIELD in new_header
-    new = new_header.get(SCOPE_FIELD)
-    effective = new if declared else previous
-    carried_forward = bool(previous and not declared)
-    report = {"previous": previous, "new": new, "effective": effective,
-              "carried_forward": carried_forward,
-              "changed": bool(previous and declared and previous != new)}
-    if not carried_forward:
-        return new_plan_text, report
-    lines = new_plan_text.split("\n")
-    # The prologue before the first `##` is the header; the field goes after its last
-    # non-blank line, so a plan with no prologue at all still gets a readable header.
-    insert_at = 0
-    for index, line in enumerate(lines):
-        if line.startswith("## "):
-            break
-        if line.strip():
-            insert_at = index + 1
-    lines.insert(insert_at, "%s: %s" % (SCOPE_FIELD, previous))
-    return "\n".join(lines), report
-
-
 def merge_allure_ids(previous_plan_text, new_plan_text):
     """Carry `allure-id:` from the previous plan into the regenerated one by exact title.
 
@@ -86,11 +49,11 @@ def merge_allure_ids(previous_plan_text, new_plan_text):
     report: carried / retained (new plan already had an id the previous plan confirms under
     the same title) / suspect (new plan carries an id the previous plan does not corroborate)
     / unmatched (new case with no id) / orphaned (previous id no merged case carries).
+    The new plan's header is emitted as written; nothing is taken from the previous one.
     """
     previous_text = (previous_plan_text or "").replace("\r\n", "\n")
     newline = _newline_of(new_plan_text)
     new_plan_text = new_plan_text.replace("\r\n", "\n")
-    new_plan_text, scope_report = _carry_scope_forward(new_plan_text, previous_text)
 
     # Every previous title counts towards ambiguity, id or not: a duplicated title whose
     # first occurrence has no id is still a title this module cannot resolve.
@@ -124,8 +87,7 @@ def merge_allure_ids(previous_plan_text, new_plan_text):
         key = _norm(case["title"])
         new_title_counts[key] = new_title_counts.get(key, 0) + 1
 
-    report = {"carried": [], "retained": [], "suspect": [], "unmatched": [], "orphaned": [],
-              "scope": scope_report}
+    report = {"carried": [], "retained": [], "suspect": [], "unmatched": [], "orphaned": []}
     out = []
     for line in new_plan_text.split("\n"):
         out.append(line)
@@ -221,14 +183,6 @@ def print_report(report, stream=None):
               % (entry["id"], entry["allure_id"], entry["title"], entry["reason"]), file=out)
     for entry in report["orphaned"]:
         print("orphaned  %s · %s" % (entry["allure_id"], entry["title"]), file=out)
-    scope = report.get("scope") or {}
-    if scope.get("changed"):
-        print("SCOPE CHANGED %s → %s — the test scope of this plan changed; a push would "
-              "rewrite every case's status and Feature"
-              % (scope["previous"], scope["new"]), file=out)
-    elif scope.get("carried_forward"):
-        print("scope     carried forward from the previous plan: %s" % scope["effective"],
-              file=out)
 
 
 def build_arg_parser():

@@ -2,11 +2,12 @@
 identity is the Allure case id assigned on first creation and carried in the plan as
 `allure-id:` — never a value derived from the case's content. stdlib-only, no network."""
 import re
-from plan_parser import E2E_SCOPE, STORY_SCOPE, normalise_scope
+from plan_parser import E2E_SCOPE, SMOKE_SCOPE, normalise_scope
 
-# A created case is a Draft in the manual workflow; an e2e-scoped one goes straight to Review.
-# The test scope changes the status and nothing else in the body.
-STATUS = "Draft"
+# A smoke case is a Draft in the manual workflow; an e2e case, or one with no scope, is Review.
+# The format (smoke or e2e) changes exactly two things in the body: the status and the
+# target marker's `scope=` field.
+SMOKE_STATUS = "Draft"
 E2E_STATUS = "Review"
 WORKFLOW = "Manual Kinoa"
 ISSUE_INTEGRATION = "Kinoa-Allure"
@@ -54,13 +55,14 @@ _TARGET_RE = re.compile(
 
 
 def target_marker(service, capability, scope=None):
-    """The description's last line: the `--target` and test scope this plan was written for.
-    `issue = "<KEY>"` returns every target's cases, so reconciliation needs this to narrow —
-    and without `scope=` an e2e run and a Story run of one target would claim each other's
-    cases. Every half is slugified so the marker is a stable machine key, not free text."""
+    """The description's last line: the `--target` and the format (smoke or e2e) this plan
+    was written for. `issue = "<KEY>"` returns every target's cases, so reconciliation needs this to narrow —
+    and without `scope=` an e2e run and a smoke run of one target would claim each other's
+    cases. An absent scope is written as e2e. Every half is slugified so the marker is a
+    stable machine key, not free text."""
     return (f"{TARGET_PREFIX}service={slugify(service or '')}; "
             f"capability={slugify(capability or '')}; "
-            f"scope={slugify(normalise_scope(scope) or STORY_SCOPE)}")
+            f"scope={slugify(normalise_scope(scope) or E2E_SCOPE)}")
 
 
 def parse_target(description):
@@ -69,7 +71,7 @@ def parse_target(description):
     this format and must never be treated as a reconciliation match. An empty half is a
     value, not an absence: ('', '') is the target of a run invoked without `--target`. A
     two-field marker written before this field existed reports `scope` as None, never as
-    `story`: "no scope recorded" and "scope is story" must stay distinguishable."""
+    `e2e`: "no scope recorded" and "scope is e2e" must stay distinguishable."""
     if not description:
         return None
     m = _TARGET_RE.search(description)
@@ -126,7 +128,7 @@ def case_to_payload(case, *, story, service, capability, custom_fields, scope=No
         "description": _description(case, tags, target_marker(service, capability, scope)),
         "precondition": tags.get("preconditions", ""),
         "expectedResult": tags.get("expected", ""),
-        "status": E2E_STATUS if normalise_scope(scope) == E2E_SCOPE else STATUS,
+        "status": SMOKE_STATUS if normalise_scope(scope) == SMOKE_SCOPE else E2E_STATUS,
         "workflow": WORKFLOW,
         "issues": [{"name": ISSUE_INTEGRATION, "value": story.strip()}],
         "customFields": _custom_fields(custom_fields),

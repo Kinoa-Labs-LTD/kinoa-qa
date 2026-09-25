@@ -143,6 +143,27 @@ def parse_acs(plan_text):
     return acs
 
 
+AC_ID_START_RE = re.compile(r"^AC-\d+")
+
+
+def parse_ac_source(src):
+    """Return the AC ids a `source:` value cites, in order and without duplicates; [] unless
+    it is an `ac:` source. The list is comma-separated, but a part that does not start a new
+    `AC-<n>` continues the part before it, so an unknown id is reported whole."""
+    if not src.startswith("ac:"):
+        return []
+    ids = []
+    for part in src[len("ac:"):].split(","):
+        piece = part.strip()
+        if not piece:
+            continue
+        if ids and not AC_ID_START_RE.match(piece):
+            ids[-1] += ", " + piece
+        else:
+            ids.append(piece)
+    return list(dict.fromkeys(ids))
+
+
 RESOLVED_RE = re.compile(r"→\s*resolved:")
 CONFLICT_LINE_RE = re.compile(r"^-\s+⚠️\s+CONFLICT:\s+(.*\S)\s*$")
 
@@ -207,8 +228,8 @@ def parse_conflicts(plan_text):
 # builder, the field resolver and the merge — already imports this module. Four modules
 # owning the same two strings is how one of them drifts.
 E2E_SCOPE = "e2e"
-STORY_SCOPE = "story"
-SCOPES = (E2E_SCOPE, STORY_SCOPE)
+SMOKE_SCOPE = "smoke"
+SCOPES = (E2E_SCOPE, SMOKE_SCOPE)
 
 
 def normalise_scope(scope):
@@ -229,7 +250,7 @@ def parse_header(plan_text):
     Only that prologue is the header, so a `story:`- or `scope:`-looking line inside a case
     body is never mistaken for one. An absent field is absent from the dict — never defaulted:
     the default lives in the consumer, so "the plan says nothing" stays distinguishable from
-    "the plan says story".
+    "the plan says e2e".
     """
     header = {}
     for line in plan_text.splitlines():

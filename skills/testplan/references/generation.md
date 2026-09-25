@@ -30,48 +30,67 @@ Step B re-applies the unambiguous part of this mechanically (`plan_writer.merge_
 matches identical titles), and the Step D gate shows the QA engineer which cases kept an id
 and which are new. Your judgement is needed exactly where the title changed.
 
-## The test scope of the run (given, never invented)
+## The format of the plan: e2e (given, never invented)
 
-The plan carries a **test scope** in its header — `scope: e2e | story`, absent meaning `story`
-(`references/test-plan-format.md`). It is a property of the **run**, handed to you by Step B,
-not something you decide, and never something you vary per case: one run produces one kind of
-test, and every case in the plan you return belongs to that one scope. Do not add, change or
-remove the `scope:` line to suit the cases you wrote; if a `previous_plan` carries one, copy it
-through verbatim — Step B carries it forward and reports any change at the human gate. ("Test
-scope" is this field; the reconciliation *in-scope set* in `testops-sync.md` is a different
-thing.)
+Every plan `testplan` generates is an **e2e plan**, the full-coverage format: write
+`scope: e2e` in its header (`references/test-plan-format.md`, "Formats"). The format is a
+property of the **run**, not something you decide and never something you vary per case. Do
+not write `scope: smoke`: a smoke plan — one short functional scenario — is never made by
+this generation, and `testplan` stops at Step C on a plan that says `scope: smoke`. Smoke
+plans are made outside this skill. ("Format" is this field; the reconciliation
+*in-scope set* in `testops-sync.md` is a different thing.)
 
-`type: e2e` on a single case is unrelated: it is one of the six case types of the QA-lens rules
-below and says nothing about the plan's test scope.
+`type:` is not the format. It is one of the **five case types** of the QA-lens rules below —
+`functional`, `negative`, `edge`, `regression`, `nonfunctional` — and the validator
+(`type-valid`) fails any other value. `e2e` is not a case type: `type: e2e` FAILs, pointing
+at `scope: e2e` in the header.
 
-What the scope changes for you is exactly one authoring rule: **under `scope: e2e` a step may
-carry more than one `→ expected:` line**, each becoming its own `expected_body` block in
-TestOps, in order. Under `scope: story` — and with the field absent — a step carries **exactly
-one**, and a second one FAILs the validator naming the step. Under either scope a step with
-**no** expected result FAILs.
+What the e2e format allows you, and never requires:
 
-### What this plugin does NOT know about e2e authoring
+- **several `→ expected:` lines on one step**, each becoming its own `expected_body` block in
+  TestOps, in order. One per step is still fine. A step with **no** expected result FAILs.
+- **several ACs on one case** — `source: ac: AC-1, AC-2`, a comma-separated list — when one
+  case genuinely proves more than one criterion. Every id in the list must exist in
+  `## Acceptance Criteria`, and each one counts as cited.
+- **any length**: a long journey or a short focused check. No step count and no AC count is
+  enforced.
 
-This is a deliberate, recorded boundary, not an omission, and not something to fill in with
-judgement. The e2e suite's own authoring conventions — its **case-naming grammar**, its
-**stepper structure**, and its **publish-flow and WS/InBox blocks** — live outside this
-repository and are **not taught here**. Nothing in this file, `test-plan-format.md` or
-`SKILL.md` describes them.
+Every AC must still be cited by at least one case (`ac-coverage` FAILs an e2e plan with an
+uncovered AC), and `## Acceptance Criteria` is required.
+
+For contrast, the smoke format you never write: exactly one case, `type: functional`
+(`smoke-shape`), exactly one `→ expected:` per step (`required-fields`), about 2–5 steps as
+guidance only, and an uncovered AC reported as advisory rather than failed. **What the
+validator enforces**, and so what you can rely on it to catch:
+
+| Rule | Enforced by |
+|---|---|
+| Smoke: one case, `functional` | Validator (`smoke-shape`) |
+| Smoke: one `→ expected:` per step | Validator (`required-fields`) |
+| Smoke: 2–5 steps | Nobody — guidance only |
+| E2E: any type, any length, several expected results per step, several ACs | The validator allows it and nothing requires it |
+| Every step has an expected result | Validator (`required-fields`), both formats |
+
+### What the e2e suite's house style is, and why you must not invent it
+
+E2E is now this plugin's default output — every plan is one. What stays true is that the e2e
+suite's own **house style** — its **case-naming grammar**, its **stepper structure**, and its
+**publish-flow and WS/InBox blocks** — lives outside this repository and is **not ported
+here**. Nothing in this file, `test-plan-format.md` or `SKILL.md` describes it.
 
 Therefore:
 
-- **An e2e plan is authored by the QA engineer**, who knows those conventions. Under
-  `scope: e2e` you still write what the rules in this file say: titles as clean behavioural
-  statements, `purpose:` beginning "Verify", every case grounded in an AC, one `## Conflicts`
-  and one `## Gaps` section. What this repo validates is what you must produce.
-- **Do not invent the e2e conventions.** Do not reach for a naming grammar, a four-step
-  stepper, a publish block or a WS/InBox block you have seen elsewhere or can imagine. They
-  contradict rules this repo enforces — a stepper-derived case has no acceptance criterion, and
-  `ac-coverage` is a hard fail, so following them would mean either failing validation or
-  fabricating an AC, which "No fabrication" below forbids.
-- A case you cannot ground in an AC is a `- ⚠️ GAP:` line, in an e2e plan exactly as in a
-  Story-scoped one. Porting the e2e conventions into this plugin is a separate ticket; until it
-  lands, the honest output is the plan these rules produce.
+- **Write what the rules in this file say**: titles as clean behavioural statements,
+  `purpose:` beginning "Verify", every case grounded in an AC, one `## Conflicts` and one
+  `## Gaps` section. What this repo validates is what you must produce.
+- **Do not invent the house style.** Do not reach for a naming grammar, a four-step stepper,
+  a publish block or a WS/InBox block you have seen elsewhere or can imagine. A
+  stepper-derived case has no acceptance criterion, and `ac-coverage` fails an e2e plan with
+  an uncited AC, so following them would mean either failing validation or fabricating an AC,
+  which "No fabrication" below forbids.
+- A case you cannot ground in an AC is a `- ⚠️ GAP:` line. Porting the house style into this
+  plugin is a separate ticket; until it lands, the honest output is the plan these rules
+  produce.
 
 ## Precedence (read this first)
 
@@ -79,8 +98,9 @@ The Jira Story, the Confluence PRD, any Figma mockup linked from the Story and a
 image attachment **decide** what a case asserts. OpenSpec `spec.md` files only **enrich** —
 they carry no authority over an outcome. Concretely:
 
-- Every case is derived from an acceptance criterion. `source:` is `ac: AC-<n>` or
-  `QA-added: <reason>`; there is no `scenario:` source and no `design:` source.
+- Every case is derived from one or more acceptance criteria. `source:` is
+  `ac: AC-<n>[, AC-<m>…]` or `QA-added: <reason>`; there is no `scenario:` source and no
+  `design:` source.
 - OpenSpec text may shape `preconditions` and `steps`. It may **never** decide `expected`.
 - Where a spec contradicts the business sources, write a `## Conflicts` line — never a
   chosen `expected`. See "Conflicts" below.
@@ -93,7 +113,8 @@ warns at the gate.
 
 ## Source discipline (which `source:` to use)
 - A case grounded in an **acceptance criterion** → `source: ac: AC-<n>`, and that `AC-<n>`
-  MUST be listed in `## Acceptance Criteria`. Derive the AC list from the Story
+  MUST be listed in `## Acceptance Criteria`. A case that proves several criteria lists them
+  all, comma-separated — `source: ac: AC-1, AC-2` — and every id MUST be listed. Derive the AC list from the Story
   description/acceptance-criteria, the PRD **and** the linked mockups.
 - A genuinely QA-motivated case with no direct AC → `source: QA-added: <reason>`
   (use sparingly; it is not an escape hatch for laziness).
@@ -112,8 +133,11 @@ warns at the gate.
    shared contract change (an API payload, an event schema, a shared response), add a
    `type: regression` case asserting backward compatibility, grounded in the AC that
    covers it. Skip if there is no contract signal.
-4. **End-to-end:** only when the SoT describes a cross-component flow the Story spans;
-   otherwise omit.
+4. **Journeys are the format's, not a type's.** Whether journeys are written is a property
+   of the plan's format, not of a case type: the e2e format allows a case that follows a
+   cross-component flow across several ACs, with several expected results on a step, when
+   the SoT describes that flow. Such a case takes the type of what it proves (usually
+   `functional`) and cites every AC it covers. There is no `e2e` case type.
 5. **Nonfunctional:** only when the source text states an observable nonfunctional
    requirement (a timeout, a rate limit with an asserted response). Never infer silently.
 
@@ -130,7 +154,7 @@ grammar — this section owns the content that goes in it.
 | `purpose:` | **One** sentence beginning "Verify", stating what the case proves — `Verify that the Destination Project dropdown excludes the source project.` Not a restatement of the title and not a summary of the steps. |
 | `preconditions:` | The state that must hold before step 1, as statements, one per line. Several statements are newline-separated continuation lines, not a comma list. |
 | `steps:` | User-level actions — what a tester does in the product, not API calls or internal state. |
-| `→ expected:` | Exactly one per step: the observable result of that step. No step without one, no step with two. |
+| `→ expected:` | The observable result of that step — at least one per step, never none. One is the norm; several are allowed in an e2e plan when a step genuinely has several observable results. |
 | `expected:` | The overall pass condition for the case, not a repeat of the last step's expected result. |
 
 Coverage style: prefer several focused cases over one mega-case — a case that verifies three
