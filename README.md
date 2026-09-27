@@ -1,8 +1,22 @@
 # kinoa-qa
 
-QA plugin for Claude Code. Turns a Jira Story (+ optional Confluence PRD + optional linked
-Figma mockups + optional service-repo OpenSpec specs) into a validator-checked QA **Test Plan**, then — after a
-human review gate — idempotently upserts **Test Cases into Allure TestOps** (project KINOA).
+QA plugin for Claude Code. Three skills:
+
+- **`/kinoa-qa:testplan`** turns a Jira Story (+ optional Confluence PRD + optional linked
+  Figma mockups + optional service-repo OpenSpec specs) into a validator-checked QA **Test
+  Plan**, then — after a human review gate — idempotently upserts **Test Cases into Allure
+  TestOps** (project KINOA). See [Usage: `/kinoa-qa:testplan`](#usage-kinoa-qatestplan).
+- **`/kinoa-qa:smoke-plan`** turns a Jira Story into a **"Smoke test" sub-task** on that Story:
+  a few numbered steps, one expected result each, every result tagged with its source (the
+  acceptance criteria, the PRD, the Figma design). It writes to Jira only, after you confirm.
+  See [Usage: `/kinoa-qa:smoke-plan`](#usage-kinoa-qasmoke-plan).
+- **`/kinoa-qa:smoke-run`** runs that sub-task against the built feature in a real browser
+  through the Playwright MCP, and reports whether the feature is **live** and whether it
+  **conforms** — as a comment on the sub-task, with the evidence attached, plus a published
+  artifact. See [Usage: `/kinoa-qa:smoke-run`](#usage-kinoa-qasmoke-run).
+
+The smoke pair and `testplan` share almost nothing: a smoke plan is a Jira sub-task, never a
+`test-plan.md`, and `testplan` does not read it.
 
 Standalone and decoupled from `kinoa-dev`: it depends only on the artifacts kinoa-dev
 produces (OpenSpec `spec.md` files in service repos) and the Jira/[AQA] conventions.
@@ -12,15 +26,50 @@ produces (OpenSpec `spec.md` files in service repos) and the Jira/[AQA] conventi
 The plugin ships **no `mcpServers` config**. Every server below is connected in the host
 environment (your Claude Code MCP settings); the plugin probes for the tools at runtime.
 
-| Server | Required? | Used for | If missing |
+| Server / tool | Needed by | Used for | If missing |
 |---|---|---|---|
-| **Atlassian** | Required | Jira Story (Step A, the one required input) and the Confluence PRD | No Story → hard stop at Step A. PRD only → header `prd: none (<reason>)`, warn at the gate, continue. |
-| **Allure TestOps** | Required for Step E | Finding and upserting cases in project KINOA | Steps A–D still run and `test-plan.md` is on disk; the upsert is deferred until the server is back. `--dry-run` needs it only to print intended actions. |
-| **Figma** | Optional | Reading mockup frames linked from the Story (`get_screenshot`, `get_design_context`) — **remote server preferred** (works headless), with the **local desktop server** as fallback | Header `design: none (<reason>)`, warn at the gate, continue — never a hard stop. Mockup-derived acceptance criteria are simply absent. |
-| **Jira REST (attachments)** | Optional, Step A | Reading image attachments on the Story | Without `JIRA_EMAIL` + `JIRA_API_TOKEN` the run continues and the header records `images: none (jira credentials not set)`. |
+| **Atlassian** | `testplan` — required | Jira Story (Step A, the one required input) and the Confluence PRD | No Story → hard stop at Step A. PRD only → header `prd: none (<reason>)`, warn at the gate, continue. |
+| **Atlassian** | `smoke-plan`, `smoke-run` — required | `smoke-plan` reads the Story, its remote links and the PRD, then creates the sub-task and comments open questions on the Story. `smoke-run` reads the sub-task and its remote links, updates the sub-task's `Latest run:` line and raises Sub-bugs | Neither skill has anything to work from without it. |
+| **Allure TestOps** | `testplan` — required for Step E | Finding and upserting cases in project KINOA | Steps A–D still run and `test-plan.md` is on disk; the upsert is deferred until the server is back. `--dry-run` needs it only to print intended actions. |
+| **Allure TestOps** | `smoke-run` — not used | Nothing. The case id comes from a Jira remote link `Allure TestOps case <id>` on the sub-task or from you, and the MCP cannot upload a launch | Not checked. `smoke-plan` does not use it either: it creates no TestOps case. |
+| **Figma** | `testplan` — optional | Reading mockup frames linked from the Story (`get_screenshot`, `get_design_context`) — **remote server preferred** (works headless), with the **local desktop server** as fallback | Header `design: none (<reason>)`, warn at the gate, continue — never a hard stop. Mockup-derived acceptance criteria are simply absent. |
+| **Figma** | `smoke-plan` — optional, strongly preferred | Reading labels, control states, validation copy and empty/error states off the Story's frames, so expected results are concrete | The draft says design grounding was unavailable and grounds on the acceptance criteria and the PRD. Access needs team membership **and** a Dev seat — see [Usage: `/kinoa-qa:smoke-plan`](#usage-kinoa-qasmoke-plan). |
+| **Playwright MCP** | `smoke-run` — required | Driving the browser through the plan's steps | **Checked at the start**: `smoke-run` names it and stops. Not provided by this plugin — see [Playwright MCP](#playwright-mcp-for-smoke-run). |
+| **Artifact tool** | `smoke-run` | Publishing the readable mirror of every run report (one artifact per plan, updated in place) | Claude Code's built-in `Artifact` tool, not an MCP server. Not checked at the start. |
+| **Jira REST (attachments)** | `testplan` — optional, Step A | Reading image attachments on the Story | Without `JIRA_EMAIL` + `JIRA_API_TOKEN` the run continues and the header records `images: none (jira credentials not set)`. |
+| **Jira REST (`JIRA_EMAIL` + `JIRA_API_TOKEN`)** | `smoke-run` — required | `jiraReport.mjs` posts the run report as a comment; `jiraAttach.mjs` uploads the evidence screenshots | **Checked at the start**: `smoke-run` names the missing variable and stops. A `jiraReport.mjs … --dry-run` rehearsal needs neither. See [Jira API token](#jira-api-token). |
+
+`smoke-run`'s two scripts are Node (18 or newer) and are run as
+`node <plugin>/skills/smoke-run/scripts/<name>.mjs`; they have no npm dependencies.
 
 OpenSpec specs are read with the `gh` CLI, not an MCP server; a repo with no OpenSpec file
 is the ordinary path, not a degradation.
+
+### Playwright MCP, for smoke-run
+
+The plugin declares no Playwright server — add it to your own Claude Code MCP settings, for
+example:
+
+```
+claude mcp add -s user playwright -- npx @playwright/mcp@latest
+```
+
+`-s user` registers it at user scope because the smoke skills run from any directory; the
+default (local) scope registers the server for the current project only, so `smoke-run`'s start
+check would fail everywhere else.
+
+Three things to know:
+
+- **The server must be named `playwright`.** `smoke-run` drives the tools as
+  `mcp__playwright__browser_*`; a server registered under another name gives the tools other
+  names.
+- **Every `mcp__playwright__*` call asks for permission** unless you allow the tools in your
+  own settings — the plugin grants none (kinoa-test-automation allow-lists them in its own
+  `.claude/settings.json`, which applies only inside that repo). To allow them everywhere, add
+  `"mcp__playwright"` to `permissions.allow` in `~/.claude/settings.json`.
+- **Screenshots land in `.playwright-mcp/` in the working directory.** kinoa-test-automation
+  already ignores that directory; anywhere else, add `.playwright-mcp/` to your own
+  `.gitignore` so run evidence is not committed by accident.
 
 ## Install
 
@@ -64,10 +113,12 @@ rather than GitHub — and you can equally well write it by hand:
 
 For a local checkout the source is `{ "source": "directory", "path": "/path/to/kinoa-qa" }`.
 
-Verify with `/plugin` — `kinoa-qa` should be listed as enabled, and `/kinoa-qa:testplan`
-should complete as a command.
+Verify with `/plugin` — `kinoa-qa` should be listed as enabled, and `/kinoa-qa:testplan`,
+`/kinoa-qa:smoke-plan` and `/kinoa-qa:smoke-run` should complete as commands.
 
 ## Configure
+
+`config.json` and `services.json` are `testplan`'s; the smoke skills read neither.
 
 `config.json` ships with the three Allure custom-field defaults **empty on purpose**, so no
 run inherits another team's values by accident:
@@ -85,37 +136,90 @@ isn't listed is fine — OpenSpec input is optional throughout.
 
 ### Jira API token
 
-Two environment variables let Step A read files attached to the Story — today that means
-**image attachments**, so a requirement that lives in a pasted screenshot becomes an
-acceptance criterion instead of a gap:
+Two environment variables, `JIRA_EMAIL` and `JIRA_API_TOKEN`, are used by two skills:
 
-```bash
-export JIRA_EMAIL="you@kinoa.io"
-export JIRA_API_TOKEN="<token>"
-```
+- **`testplan`**, Step A, reads files attached to the Story with them — today that means
+  **image attachments**, so a requirement that lives in a pasted screenshot becomes an
+  acceptance criterion instead of a gap. Read only; optional.
+- **`smoke-run`** posts its run report (`jiraReport.mjs`) and uploads its evidence
+  screenshots (`jiraAttach.mjs`) with them. Required, and checked at the start.
 
-Create the token at **id.atlassian.com → Security → API tokens**. The plugin owns no
-credentials, exactly as it owns no MCP configuration: it reads these two variables and
-nothing else.
+The plugin owns no credentials, exactly as it owns no MCP configuration: everything comes from
+your shell. `testplan` reads `JIRA_EMAIL` and `JIRA_API_TOKEN` only. The two `smoke-run`
+scripts also read three optional variables:
 
-**Required scopes.** A token created *with* scopes needs `read:jira-work` — that is what
-covers issues and their attachments. `write:jira-work` is not used. A classic token created
-*without* scopes works too and needs nothing configured.
+| Variable | Read by | Default |
+|---|---|---|
+| `JIRA_BASE_URL` | both scripts | `https://kinoadev.atlassian.net` |
+| `JIRA_CLOUD_ID` | both scripts | the Kinoa cloud id, for the `api.atlassian.com` gateway |
+| `JIRA_HOST` | `jiraAttach.mjs` | `auto` — tries the site URL, then the gateway. `gateway` for a scoped token, `site` for a classic unscoped one |
+
+**One-time setup — one token serves both skills.**
+
+1. Go to [id.atlassian.com → Security → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+   and choose **Create API token with scopes** → **Jira**. Grant only:
+
+   | Scope | Why |
+   | --- | --- |
+   | `read:jira-work` | View issues and their attachments — all `testplan` needs |
+   | `write:jira-work` | Post the run report and create attachments — `smoke-run` only; `testplan` never writes to Jira |
+
+   > ⚠ **Choose the CLASSIC scopes, not the granular ones.** `write:attachment:jira` looks
+   > tighter and is what you'd reach for, but granular-scoped tokens **cannot upload
+   > attachments at all** — Atlassian's gateway rejects every `POST` with
+   > `401 "Unauthorized; scope does not match"` regardless of the scopes granted. It's a
+   > confirmed Atlassian bug, not a config error
+   > ([details](https://community.developer.atlassian.com/t/401-scope-does-not-match-issue-when-uploading-an-attachment/93805)).
+   > `write:jira-work` is broader than we'd like — it also permits editing, commenting as you
+   > and deleting issues — but it is the documented workaround.
+
+   If you only use `testplan`, `read:jira-work` alone is enough, and a classic token created
+   *without* scopes works too. **`smoke-run` needs the scoped token:** `jiraReport.mjs` always
+   posts through the `api.atlassian.com` gateway, which a classic unscoped token cannot use — it
+   passes `smoke-run`'s start check (which only sees that the variables are set) and fails at the
+   final post.
+2. Add to `~/.zshrc`:
+   ```bash
+   export JIRA_EMAIL="you@kinoa.io"
+   export JIRA_API_TOKEN="<token>"
+   ```
+3. Open a new shell, then optionally pin `jiraAttach.mjs`'s transport to skip the probe
+   (`JIRA_HOST` affects `jiraAttach.mjs` only; `jiraReport.mjs` ignores it):
+   ```bash
+   export JIRA_HOST=gateway   # scoped tokens; use "site" for a classic unscoped token
+   ```
+
+> **`~/.zshrc`, not `~/.zprofile`.** `.zprofile` is only read by login shells, so tooling that
+> spawns a non-login shell will not see your token.
+
+Same pattern as `ALLURE_TESTOPS_TOKEN` — per-user, in your shell, never committed. Auth is
+**Basic** (`email:token`). **All Atlassian tokens now expire within a year**, so expect to
+rotate. Verified working 11 Aug 2026 with a scoped token holding the classic scopes, via the
+gateway.
 
 **Note for scoped tokens.** A scoped token cannot call `https://<site>.atlassian.net/rest/...`
 at all — that host answers **403** no matter which scopes the token holds. Only
-`https://api.atlassian.com/ex/jira/<cloudId>/rest/...` works. You do **not** configure that:
-`jira_base_url` stays the ordinary site URL and the cloud id is looked up automatically. It is
-worth knowing when a token looks correct and a call still returns 403.
+`https://api.atlassian.com/ex/jira/<cloudId>/rest/...` works. You do **not** configure that for
+`testplan`: `jira_base_url` stays the ordinary site URL and the cloud id is looked up
+automatically. `jiraReport.mjs` always posts through the gateway and ignores `JIRA_HOST`, so it
+needs a token that works there — a scoped token with the classic `read:jira-work` +
+`write:jira-work` scopes. `jiraAttach.mjs` tries the site first and falls back to the gateway
+unless `JIRA_HOST` pins one. It is worth knowing when a token looks correct and a call still
+returns 403.
 
-Each image is capped at 10 MB; a larger attachment is skipped with its reason and the others
-are still read.
+Each image `testplan` reads is capped at 10 MB; a larger attachment is skipped with its reason
+and the others are still read.
 
-**If the variables are unset** the run continues — the header records
-`images: none (jira credentials not set)` and the gate warns. Missing credentials are never a
-hard stop; they only mean no image-derived acceptance criteria.
+**If the variables are unset**, the two skills behave differently:
 
-## Usage
+- **`testplan`** continues — the header records `images: none (jira credentials not set)` and
+  the gate warns. For `testplan` missing credentials only mean no image-derived acceptance
+  criteria.
+- **`smoke-run`** stops at the start and names the missing variable, before it drives a
+  browser: a run that cannot post its report or attach its evidence is not started. A
+  `jiraReport.mjs … --dry-run` rehearsal needs no credentials and is not gated.
+
+## Usage: `/kinoa-qa:testplan`
 
 ```
 /kinoa-qa:testplan <STORY-KEY> [--target <service>/<capability>] [--repo <owner>/<name>]
@@ -127,8 +231,10 @@ Every plan this command generates is an **e2e plan** — the full-coverage forma
 functional, negative, edge, regression and nonfunctional cases, `scope: e2e` written in the
 plan header, cases created in TestOps as **`Review`** under the `Feature` you passed. There is
 no flag that changes the format. The other format, `smoke` — one short functional scenario,
-created as `Draft` — is not generated by this command, and no flow of this plugin produces
-one yet; smoke plans are made outside it. The validator accepts both (`scope: smoke | e2e`; a
+created as `Draft` — is not generated by this command, and no flow of this plugin produces a
+smoke `test-plan.md` yet. A Story's smoke plan comes from `/kinoa-qa:smoke-plan`, as a "Smoke
+test" Jira sub-task rather than a `test-plan.md`; pushing that sub-task to TestOps is planned
+(KING-23102), not built. The validator accepts both (`scope: smoke | e2e`; a
 plan without the line is e2e) and rejects anything else, the retired `story` value included.
 This command validates and pushes e2e plans only: a plan whose header says `scope: smoke`
 stops at Step C and is never pushed.
@@ -205,6 +311,161 @@ the generator is told not to invent that house style. See
 See `skills/testplan/SKILL.md` for the flow and `skills/testplan/references/` for the current
 format and vocabulary. `docs/superpowers/` holds the original design and plan as dated historical
 records — they predate later vocabulary changes and are not authoritative.
+
+## Usage: `/kinoa-qa:smoke-plan`
+
+```
+/kinoa-qa:smoke-plan <STORY-KEY>
+```
+
+**Use it when** a Story has been built and you need to know what to check, or when you want to
+find out early whether a Story is testable at all. It runs from any working directory.
+
+**What it does**
+
+1. Reads the Story, its acceptance criteria, its comments, its remote links and any linked
+   Confluence PRD.
+2. Opens the linked Figma design read-only and takes the real UI copy from the Story's frames —
+   labels, states, validation text. Never locators: those come from the live DOM at run time.
+3. Cross-checks those sources **against each other**. Contradictions become open questions, not
+   guesses.
+4. Writes about 2–5 numbered steps — a target, not a limit — one expected result each, every
+   result tagged with its source (`[AC-2]`, `[Story]`, `[PRD: section]`, `[Figma: frame]`,
+   `[live-confirmed]`). Steps that prove the feature is live are tagged `[GATE]`; `smoke-run`
+   derives its feature verdict from them.
+5. Shows you the draft and **stops**. Nothing reaches Jira before you confirm.
+6. On your yes: creates a "Smoke test" sub-task on the Story, and comments the open questions onto
+   the Story for its owner.
+
+**What to expect**
+
+- **It will not invent expected results.** Anything it cannot trace to a source becomes an open
+  question addressed to the PO. That is the point, not a limitation.
+- **Open questions do not block the test.** A question about an expected *value* withholds one
+  step's verdict. Only "not deployed" / "can't find it" / "can't set up the data" stops a run.
+- **It creates no Allure TestOps case.** The sub-task is the source of truth. A push of the smoke
+  plan to TestOps (`/kinoa-qa:testplan --from-smoke`, KING-23102) is planned and not built.
+- **Expect to edit it.** The steps are a strong first draft, not finished work.
+
+**Figma is the one that catches people out.** Everyone authenticates as themselves — no account is
+shared and no credential is committed. Being *able to open the file in your browser is not
+enough*: the MCP additionally requires **membership of the team that owns the file**. A file shared
+with you directly, or via a link, gives browser access without membership, and the MCP refuses with
+a misleading `"you don't have edit access to this file"`. Run `whoami` — if the owning team is not
+in the plan list, ask to be added to the team, not to be given edit rights. A View seat is capped at
+6 API calls a **month**; you want a Dev seat. Only `smoke-plan` needs Figma — `smoke-run` reads the
+sub-task, never the design.
+
+See `skills/smoke-plan/SKILL.md` for the full workflow.
+
+## Usage: `/kinoa-qa:smoke-run`
+
+```
+/kinoa-qa:smoke-run <SMOKE-SUBTASK-KEY>
+```
+
+**Use it when** the feature is built and deployed and you want to know whether it works. The
+input is the "Smoke test" sub-task `smoke-plan` created.
+
+**Start checks.** Before anything else `smoke-run` checks for the **Playwright MCP** and for
+**`JIRA_EMAIL`** and **`JIRA_API_TOKEN`** in the environment (only that each is set — it never
+prints them). If one is missing it names exactly what is missing and stops. It cannot tell
+whether the token works: `jiraReport.mjs` always posts through the `api.atlassian.com` gateway,
+so use a scoped token with the classic scopes (see [Jira API token](#jira-api-token)). It also checks once
+whether it is **inside kinoa-test-automation**: the working directory is a git repo whose
+`origin` URL ends in `kinoa-test-automation` or `kinoa-test-automation.git`.
+
+**What it does** — asks you to log in to the app in the Playwright MCP's browser (it never reads
+the operator password), drives the browser through the plan's steps, judges each one `pass` /
+`fail` / `blocked` per `skills/shared/step-outcome-contract.md`, screenshots every `fail`, then
+shows you the report and **waits for your yes before any Jira write**. On your yes it reports
+twice, in two formats:
+
+| Where | What it is |
+| --- | --- |
+| A comment on the Jira sub-task | The durable record, rendered by `jiraReport.mjs` as native Jira — coloured verdict panels and `PASS`/`FAIL`/`BLOCKED` lozenges. The script computes the conformance verdict from the step outcomes, and refuses to post when a step's outcome is not `pass`/`fail`/`blocked`, a step has no title, a non-pass step has no evidence, a `fail` has no screenshot (or waiver), a screenshot is not named `step-NN-….png`, no step is a gate, or the feature verdict contradicts the gate steps. It does not check that every plan step is present, or that the Not attempted, Grounding, Raised and Environment left blocks are filled — `smoke-run` has to get those right itself |
+| A published artifact | The readable mirror — same content, screenshots inline. One per plan, updated in place, so the link stays stable |
+
+It also rewrites a single `Latest run:` line at the top of the sub-task's description (the rest
+of the description is the plan and is never overwritten), and raises suspected product defects
+as Sub-bugs on the Story, with evidence attached.
+
+**Two verdicts, and the distinction matters:**
+
+| Verdict | Answers |
+| --- | --- |
+| **Feature** — `live` / `partially live` / `not live` | Is it deployed, reachable, does the main path work, can deeper tests be written now? Derived from the `[GATE]` steps only |
+| **Conformance** — `passed` / `failed` / `blocked` | Does each expected result match what the plan says? |
+
+`live` + `failed` is a normal and useful result: the feature works, but something disagrees with a
+written spec — a defect, or a stale spec. It does not block deeper testing.
+
+**It runs against real data.** It creates and modifies entities. Point it at a sandbox project,
+never at `Autotest Project` or `Autotest Project 2…21`, which the e2e suite draws from.
+
+### Inside kinoa-test-automation, or not
+
+The Jira report, the evidence and the artifact work from any working directory. Three things
+work **only inside kinoa-test-automation**, and outside it `smoke-run` says each one when it
+applies:
+
+| | Inside kinoa-test-automation | Anywhere else |
+| --- | --- | --- |
+| **Test data setup** | Through the repo's API helpers (`api/controler/`) — API over UI | Through the UI, and the report says so |
+| **Saving the run as a `tests/smoke/<feature>.smoke.ts` spec** | On request only, never by default, on a new branch, built from the repo's page objects, fixtures and `SMOKE` Playwright project | Refused, with the reason |
+| **The Allure TestOps case id in the spec** | Only on the save-as-spec path, and only with a case id: a remote link `Allure TestOps case <id>` on the sub-task, else an id you give. That link is meant to be written by the planned push to TestOps (KING-23102, not built), so today the id normally comes from you. With a case id the spec carries `@allure.id`, and its run writes `allure-results/` (the repo's `allure-playwright` reporter). **Nothing publishes that as a TestOps launch**: kinoa-test-automation has no upload step (its launches come from its Jenkins CI jobs, and the `SMOKE` project has none), and the Allure TestOps MCP cannot upload one. `smoke-run` says no launch was published and where `allure-results/` is | No spec, so no `@allure.id` and no launch; `smoke-run` says so. The Jira report is unaffected |
+
+**It does not write code by default.** The deliverable is the report. A Story smoke test runs a
+handful of times and is then done; when a check earns permanent coverage, use
+kinoa-test-automation's `testops-to-playwright` skill rather than growing the smoke test. If you
+do ask for a `*.smoke.ts`, **never name it `*.test.ts`** — the suffix is what keeps it out of
+kinoa-test-automation's sharded CI run.
+
+Inside kinoa-test-automation the repo also keeps the operator password out of Claude's reach
+(its `.claudeignore` and `.claude/settings.json`). Outside it nothing does: `smoke-run` never echoes a
+secret, and asks you to provide the operator password through the environment, never in the chat.
+
+### Attaching evidence to Jira
+
+The Atlassian MCP can write comments but cannot upload files, so the plugin ships
+`skills/smoke-run/scripts/jiraAttach.mjs`, which posts to Jira's REST attachment endpoint.
+`smoke-run` calls it for you; to attach by hand:
+
+```bash
+node <plugin>/skills/smoke-run/scripts/jiraAttach.mjs KING-22355 ./evidence-1.png ./evidence-2.png
+```
+
+`<plugin>` is the plugin's install directory. The script needs `JIRA_EMAIL` and `JIRA_API_TOKEN`
+set up as in [Jira API token](#jira-api-token) — a scoped token with the **classic**
+`read:jira-work` + `write:jira-work` scopes. If they are missing it prints how to set them. The
+report comment is posted the same way, by `jiraReport.mjs`:
+
+```bash
+node <plugin>/skills/smoke-run/scripts/jiraReport.mjs run.json --dry-run   # validate and print, post nothing
+```
+
+`--dry-run` needs no credentials and no network.
+
+See `skills/smoke-run/SKILL.md` for the full workflow.
+
+### What the smoke skills will not do
+
+- **Decide what "correct" means.** They surface contradictions between the Story, the PRD, the design
+  and the build; a human resolves them.
+- **Replace the regression suite.** Smoke means "does the new thing work", nothing wider.
+- **Write to Jira without asking.** Both show you their output and wait for your yes first.
+- **Guarantee the expected results are right.** They are traceable to a source, which is a different
+  and weaker claim — on the first calibration Story the most authoritative-looking source (the PRD)
+  was the wrong one. For UI copy, precedence when sources disagree is **live UI > design > PRD**;
+  what the feature does still comes from the acceptance criteria and the Story.
+
+### Troubleshooting the smoke skills
+
+| Symptom | Cause |
+| --- | --- |
+| `Kinoa Team is required` | Jira mandates `customfield_10131` on the sub-task. `smoke-plan` reads it off a sibling sub-task on the same Story, never guesses it |
+| Jira body renders as literal `h2.` | Wiki markup in a Markdown field — bodies must be Markdown |
+| `requires re-authorization` (Atlassian) | The MCP token expired. Reconnect via `/mcp`, then restart the session |
 
 ## Versions and updating
 

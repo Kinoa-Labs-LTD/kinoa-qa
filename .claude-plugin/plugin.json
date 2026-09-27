@@ -1,12 +1,12 @@
 {
   "name": "kinoa-qa",
-  "description": "QA plugin: builds Allure TestOps test cases from Jira Story + Confluence PRD + linked Figma mockups, enriched by OpenSpec specs. Standalone, decoupled from kinoa-dev.",
-  "version": "0.3.0",
+  "description": "QA plugin with three skills: testplan builds Allure TestOps test cases from a Jira Story + Confluence PRD + linked Figma mockups, enriched by OpenSpec specs; smoke-plan turns a Story into a Smoke test Jira sub-task; smoke-run runs that sub-task in a browser via the Playwright MCP and reports back to Jira. Standalone, decoupled from kinoa-dev.",
+  "version": "0.4.0",
   "author": {
     "name": "Dmytro Kapeliukh",
     "email": "d.kapeliukh@kinoa.io"
   },
   "homepage": "https://github.com/Kinoa-Labs-LTD/kinoa-qa",
   "repository": "https://github.com/Kinoa-Labs-LTD/kinoa-qa.git",
-  "keywords": ["jira", "confluence", "figma", "openspec", "allure-testops", "qa", "test-plan", "kinoa"]
+  "keywords": ["jira", "confluence", "figma", "openspec", "allure-testops", "qa", "test-plan", "smoke-test", "playwright", "kinoa"]
 }

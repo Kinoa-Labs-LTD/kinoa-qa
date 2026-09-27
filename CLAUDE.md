@@ -1,11 +1,15 @@
 # kinoa-qa
 
-The markdown under `skills/testplan/` is the implementation for the
-agent-driven steps, not documentation about it: a reference file that
-misdescribes the validator is a defect, not a typo.
+The markdown under `skills/` — every skill's SKILL.md and references, and
+`skills/shared/` — is the implementation for the agent-driven steps, not
+documentation about it: a reference file that misdescribes the validator, or
+a SKILL.md that misdescribes what its script does, is a defect, not a typo.
 
 A skill or reference doc describes only what this repo does today — a planned
 flow, skill, flag or path is named as planned, never as if it already runs.
+
+A skill names every plugin file the agent reads or runs as `<plugin>/skills/…` — a
+repo-root path resolves only inside this repo, never for a plugin user.
 
 Every `## Section` the test-plan format declares required must be enforced by
 `validate_test_plan.py`, or the format doc is lying to the generator that

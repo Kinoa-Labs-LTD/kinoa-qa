@@ -1,7 +1,7 @@
 # test_plugin_manifest.py
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import json, re, unittest
+import glob, json, re, shutil, tempfile, unittest
 
 # repo root: skills/testplan/scripts/ -> ../../..
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
@@ -66,6 +66,67 @@ class ManifestsAgree(unittest.TestCase):
         self.assertEqual(
             self.plugin["version"], top,
             "CHANGELOG's newest entry and plugin.json disagree — bump both in the same PR")
+
+
+def skill_names(root):
+    """The name of every `skills/<name>/` directory that holds a SKILL.md — `shared` excluded,
+    since it is a file every skill reads, not a skill."""
+    names = []
+    for path in sorted(glob.glob(os.path.join(root, "skills", "*", "SKILL.md"))):
+        name = os.path.basename(os.path.dirname(path))
+        if name != "shared":
+            names.append(name)
+    return names
+
+
+def unnamed_skills(description, names):
+    """The skill names `description` does not mention as a whole word — `smoke-plan` does not
+    count as naming `plan`, nor `testplans` as naming `testplan`."""
+    return [n for n in names
+            if not re.search(r"(?<![\w-])" + re.escape(n) + r"(?![\w-])", description)]
+
+
+class UnnamedSkills(unittest.TestCase):
+    def test_names_the_skill_a_description_leaves_out(self):
+        self.assertEqual(["smoke-run"], unnamed_skills(
+            "the /kinoa-qa:testplan and /kinoa-qa:smoke-plan skills",
+            ["smoke-plan", "smoke-run", "testplan"]))
+
+    def test_a_longer_name_does_not_count_as_naming_a_shorter_one(self):
+        self.assertEqual(["plan", "testplan"],
+                         unnamed_skills("smoke-plan and testplans", ["plan", "testplan"]))
+
+    def test_skill_names_skips_shared_and_directories_without_a_skill_md(self):
+        root = tempfile.mkdtemp()
+        try:
+            for name, has_skill in (("a", True), ("shared", True), ("b", False)):
+                os.makedirs(os.path.join(root, "skills", name))
+                if has_skill:
+                    with open(os.path.join(root, "skills", name, "SKILL.md"), "w") as f:
+                        f.write("---\nname: {}\n---\n".format(name))
+            self.assertEqual(["a"], skill_names(root))
+        finally:
+            shutil.rmtree(root)
+
+
+class DescriptionsNameEverySkill(unittest.TestCase):
+    """plugin.json and every marketplace entry describe the plugin by naming each of its skills."""
+
+    def test_the_real_tree_has_the_three_skills(self):
+        self.assertEqual(["smoke-plan", "smoke-run", "testplan"], skill_names(ROOT))
+
+    def test_plugin_json_and_marketplace_entry_name_every_skill(self):
+        with open(PLUGIN_JSON, encoding="utf-8") as f:
+            plugin = json.load(f)
+        with open(MARKETPLACE_JSON, encoding="utf-8") as f:
+            marketplace = json.load(f)
+        descriptions = [("plugin.json", plugin["description"])]
+        descriptions += [("marketplace.json plugins[{}]".format(i), entry["description"])
+                         for i, entry in enumerate(marketplace["plugins"])]
+        for where, description in descriptions:
+            with self.subTest(where=where):
+                self.assertEqual([], unnamed_skills(description, skill_names(ROOT)),
+                                 "{} does not name these skills".format(where))
 
 
 if __name__ == "__main__":

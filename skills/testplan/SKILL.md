@@ -11,8 +11,10 @@ description: Build a validator-checked QA test plan from a Jira Story (+ optiona
 
 `testplan` generates **e2e plans only**, and it validates and pushes only e2e plans: a plan
 whose header says `scope: smoke` is a stop, never pushed (Step C). The validator also accepts
-a `scope: smoke` plan, but no flow of this plugin produces or pushes one yet; smoke plans are
-made outside this skill.
+a `scope: smoke` plan, but no flow of this plugin produces or pushes one yet. A Story's smoke
+plan comes from `/kinoa-qa:smoke-plan`, which writes it as a "Smoke test" Jira sub-task, not
+as a `test-plan.md`; turning that sub-task into a smoke `test-plan.md` for TestOps is planned
+(KING-23102), not built.
 
 "Spec" in this plugin means an OpenSpec `spec.md` file generated from service-repo code;
 a Confluence PRD/HLD is never called a "spec" here.

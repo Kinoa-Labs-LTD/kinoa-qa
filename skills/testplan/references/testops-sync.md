@@ -338,7 +338,10 @@ and is out of scope: not a match candidate, not an orphan, not reported as eithe
 Narrowing by the third field is what keeps the two formats of one Story apart. Without it an
 e2e push would claim the smoke cases of the same target and flip real cases between `Review`
 and `Draft`. `testplan` itself pushes e2e plans only (a `scope: smoke` plan stops at Step C);
-the smoke cases it must not claim come from outside this skill. This is the reconciliation **in-scope set**; the value narrowing
+the smoke cases it must not claim are never created by this skill. `/kinoa-qa:smoke-plan` does
+not create them either — it writes a Story's smoke plan as a "Smoke test" Jira sub-task and
+creates no TestOps case; a push of that plan to TestOps is planned (KING-23102), not built.
+This is the reconciliation **in-scope set**; the value narrowing
 it is the plan's **format**.
 
 A case whose marker carries **no** `scope=` at all (`parse_target` → `scope is None`) is a case
