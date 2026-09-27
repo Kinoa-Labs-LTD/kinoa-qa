@@ -9,6 +9,44 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.4.0 — 2026-09-25
+
+**Two new skills, `/kinoa-qa:smoke-plan` and `/kinoa-qa:smoke-run`, moved in from
+kinoa-test-automation** (KING-23103, per the KING-22942 taxonomy). They keep their workflow;
+what changed is below.
+
+- **New skill `/kinoa-qa:smoke-plan <STORY-KEY>`.** Turns a Story into a "Smoke test" Jira
+  sub-task: numbered steps, one expected result each, every result tagged with its source.
+  It now aims at **about 2–5 steps — a target, not a limit** (it was 5–12). It **creates no
+  Allure TestOps case**; the push of a smoke plan to TestOps is planned (KING-23102), not
+  built.
+- **New skill `/kinoa-qa:smoke-run <SMOKE-SUBTASK-KEY>`.** Runs the sub-task in a browser via
+  the Playwright MCP and reports two verdicts (feature, conformance) as a Jira comment plus a
+  published artifact. Its two scripts ship with it and are run as
+  `node <plugin>/skills/smoke-run/scripts/jiraReport.mjs` and `…/jiraAttach.mjs` (Node 18+,
+  no npm dependencies).
+- **Start checks.** `smoke-run` checks for the Playwright MCP and for `JIRA_EMAIL` +
+  `JIRA_API_TOKEN` before anything else, names what is missing and stops. The plugin still
+  ships no `mcpServers` config: add a Playwright server named `playwright` yourself — see the
+  README's **Prerequisites**. A `jiraReport.mjs … --dry-run` rehearsal needs no credentials.
+- **Removed: the file-path fallback.** With the Jira variables unset, `smoke-run` used to hand
+  you the screenshot paths to attach yourself. It now stops at the start instead.
+- **Inside kinoa-test-automation only:** API data setup, saving the run as a
+  `tests/smoke/<feature>.smoke.ts` spec, and that spec's `@allure.id` (the case id from an
+  `Allure TestOps case <id>` remote link on the sub-task, else an id you give). The spec's run
+  writes `allure-results/`; publishing it as a TestOps launch is not automated, and `smoke-run`
+  says no launch was published. "Inside" means the working directory's `origin` URL ends in
+  `kinoa-test-automation` or `kinoa-test-automation.git`. Anywhere else `smoke-run` sets data up through the UI, refuses the
+  spec save and skips the launch, and says why in each case; the Jira report is unaffected.
+- **`testplan` is unchanged in behaviour.** Its docs now say smoke plans come from
+  `/kinoa-qa:smoke-plan` as a Jira sub-task; a plan whose header says `scope: smoke` still
+  stops at Step C.
+- CI sets up Node 20 and runs the two scripts through `node` from the Python suite.
+
+**Rollout:** kinoa-test-automation removes its own copies of the two skills and scripts after
+0.4.0 is released. **Update the plugin before that** (`/plugin marketplace update kinoa-qa`,
+then `/plugin update kinoa-qa@kinoa-qa`), or the smoke skills disappear for you.
+
 ## 0.3.0 — 2026-09-24
 
 **Two plan formats, `smoke` and `e2e`, and `testplan` generates e2e only.** The header's

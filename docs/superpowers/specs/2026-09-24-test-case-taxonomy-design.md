@@ -169,8 +169,10 @@ the start, stating plainly what is missing:
 `qa-skills-guide.html`. KING-22420's paths are updated to point here.
 
 **Packaging.** The `plugin.json` and `marketplace.json` descriptions name the new skills. The
-version bump and CHANGELOG entry follow `test_plugin_manifest.py`. The Node scripts come with
-whatever tests they have today; adding a Node test harness to this repo is out of scope.
+version bump and CHANGELOG entry follow `test_plugin_manifest.py`. The Node scripts get no npm
+setup and no JS test framework: a Python test (`test_smoke_scripts.py`, in the existing
+`unittest` suite) runs the two `.mjs` through `node`, and CI sets up Node 20 before the unit
+tests (decided on KING-23103).
 
 ## 3. Rejected options
 

@@ -36,8 +36,9 @@ Every plan `testplan` generates is an **e2e plan**, the full-coverage format: wr
 `scope: e2e` in its header (`references/test-plan-format.md`, "Formats"). The format is a
 property of the **run**, not something you decide and never something you vary per case. Do
 not write `scope: smoke`: a smoke plan — one short functional scenario — is never made by
-this generation, and `testplan` stops at Step C on a plan that says `scope: smoke`. Smoke
-plans are made outside this skill. ("Format" is this field; the reconciliation
+this generation, and `testplan` stops at Step C on a plan that says `scope: smoke`. A Story's
+smoke plan comes from `/kinoa-qa:smoke-plan`, as a "Smoke test" Jira sub-task — not a
+`test-plan.md`, and not from this generation. ("Format" is this field; the reconciliation
 *in-scope set* in `testops-sync.md` is a different thing.)
 
 `type:` is not the format. It is one of the **five case types** of the QA-lens rules below —

@@ -1,0 +1,20 @@
+{
+  "issue": "KING-10001",
+  "date": "25 Sep 2026",
+  "env": "TEST",
+  "driver": "model-driven (Playwright MCP)",
+  "featureVerdict": "partially live",
+  "grounding": {"liveConfirmedOnly": 1, "total": 3},
+  "steps": [
+    {"n": 1, "gate": true, "title": "Open the In-App list and open the row's Action List", "outcome": "pass"},
+    {"n": 2, "gate": true, "title": "Click Export", "outcome": "fail",
+     "evidence": "The export modal opened without the Destination Project placeholder",
+     "screenshot": "step-02-dropdown-no-placeholder.png", "blocking": false, "known": "KING-10002"},
+    {"n": 3, "title": "Pick a destination and confirm", "outcome": "blocked",
+     "evidence": "No destination project was available in the sandbox"}
+  ],
+  "notAttempted": "none — all 3 steps accounted for",
+  "raised": ["KING-10002 — Destination Project placeholder missing"],
+  "openQuestions": ["Which status should an exported In-App carry?"],
+  "environmentLeft": "Nothing created; the sandbox is unchanged."
+}
