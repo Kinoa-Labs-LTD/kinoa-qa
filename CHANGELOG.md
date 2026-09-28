@@ -9,6 +9,40 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.5.0 — 2026-09-28
+
+**`/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>` pushes a Story's smoke plan to Allure
+TestOps** (KING-23102). Until now a smoke plan lived only as the "Smoke test" Jira sub-task
+`smoke-plan` writes, and `testplan` stopped on any `scope: smoke` plan.
+
+- **The push.** The agent saves the raw sub-task, parent Story and remote-link responses into
+  one input file; `smoke_to_plan.py` converts them, with no LLM step, into a `scope: smoke`
+  plan at `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-smoke.test-plan.md` (or
+  `-no-target-smoke`). It then goes through the validator, the review gate and Step E as one
+  `Draft` case under the `Feature` you pass. The Story key comes from the plan header, never
+  the sub-task key. The plan is never hand-edited: fix the sub-task and re-push.
+- **Refusals, with the reason:** a sub-task with no or an empty `## Preconditions`, a step
+  without exactly one expected result, no `[GATE]` step, a Story with no acceptance-criteria
+  list, an `[AC-n]` past the Story's count, or remote links naming two different cases.
+  `[AC-n]` means the n-th criterion of the parent Story, counted from 1; `smoke-plan` now
+  states that rule.
+- **The case id lives on the sub-task.** On a separate yes at the gate, after Step E,
+  `jira_remote_link.py` writes one remote link titled `Allure TestOps case <id>` — the one
+  `smoke-run` reads — updating in place on a re-push the link it wrote, or any link whose
+  title starts `Allure TestOps case <digits>` (`case_id_from_title`, the rule
+  `smoke_to_plan.py` reads the id with). Not on `--dry-run`, never unattended.
+  A re-push updates the case by that id only when it carries `qa-generated`, the same Story
+  and `scope=smoke`.
+- **Token scope.** The link needs `JIRA_EMAIL` + `JIRA_API_TOKEN` with the classic
+  `write:jira-work` scope and the Jira "Link issues" permission. Without them (exit 3), or on
+  an unreadable config or a refused write (exit 1), the case stays pushed and you get the
+  title — and the URL, whenever the config names the TestOps host and project — to add by
+  hand. Exit 2 is a usage error only. A `testplan` run
+  without `--from-smoke` still needs only `read:jira-work` and never writes to Jira.
+- **Config.** `config.json` gains `testops.base_url`, used for the link's case URL.
+- `smoke-run`: with more than one `Allure TestOps case …` link on a sub-task, it asks you
+  which id to use.
+
 ## 0.4.0 — 2026-09-25
 
 **Two new skills, `/kinoa-qa:smoke-plan` and `/kinoa-qa:smoke-run`, moved in from

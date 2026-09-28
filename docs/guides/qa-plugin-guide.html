@@ -378,7 +378,7 @@
       <div class="skill">
         <span class="cmd">/kinoa-qa:smoke-plan</span>
         <span class="out">smoke plan → Jira sub-task</span>
-        <p>One short scenario, about 2–5 steps, that proves the main feature works. Written as a "Smoke test" sub-task on the Story. No TestOps case.</p>
+        <p>One short scenario, about 2–5 steps, that proves the main feature works. Written as a "Smoke test" sub-task on the Story. It creates no TestOps case itself — <code>testplan --from-smoke</code> pushes the sub-task as one on request.</p>
       </div>
       <div class="skill">
         <span class="cmd">/kinoa-qa:smoke-run</span>
@@ -414,7 +414,7 @@
         <div class="step-letter">C<span>validate</span></div>
         <div>
           <h3>Check it mechanically</h3>
-          <p>Fourteen checks, no judgement: required fields and sections, valid sources, every acceptance criterion covered, honest gaps, resolved conflicts, valid references (spec, mockup and image), a known scope (<code>smoke</code> or <code>e2e</code>) and a known case type. This is a script — it produces the same verdict every time. <code>testplan</code> only goes on with an e2e plan; a plan whose header says <code>scope: smoke</code> stops here and is never pushed.</p>
+          <p>Fourteen checks, no judgement: required fields and sections, valid sources, every acceptance criterion covered, honest gaps, resolved conflicts, valid references (spec, mockup and image), a known scope (<code>smoke</code> or <code>e2e</code>) and a known case type. This is a script — it produces the same verdict every time. <code>testplan</code> only goes on with an e2e plan, unless the run is <code>--from-smoke</code>; otherwise a plan whose header says <code>scope: smoke</code> stops here and is never pushed.</p>
         </div>
       </div>
 
@@ -497,10 +497,14 @@
 
 <span class="c"># the Story smoke test: plan it, then run it</span>
 /kinoa-qa:smoke-plan KING-1234
-/kinoa-qa:smoke-run KING-5678</pre>
+/kinoa-qa:smoke-run KING-5678
+
+<span class="c"># push that smoke sub-task to TestOps as one Draft case</span>
+/kinoa-qa:testplan --from-smoke KING-5678 --story-field Template --component Game-Settings --feature In-Apps</pre>
 
     <h3 class="sub">testplan makes e2e plans only</h3>
     <p>There is no scope flag any more. Every plan <code>testplan</code> writes is an e2e plan at <code>…-e2e.test-plan.md</code>, and a step may carry several expected results, each its own block in TestOps. A smoke plan comes from <code>/kinoa-qa:smoke-plan</code> as a Jira sub-task, not as a test plan file. Passing <code>--scope</code> stops the run and says why.</p>
+    <p><strong>Pushing a smoke sub-task.</strong> <code>--from-smoke &lt;SUBTASK-KEY&gt;</code> generates nothing: a script converts the sub-task, with its parent Story's acceptance criteria, into a smoke plan at <code>…-smoke.test-plan.md</code>, which then goes through the same validator, gate and push as one <code>Draft</code> case. A sub-task the script cannot read — no preconditions, a step without exactly one expected result, no <code>[GATE]</code> step, a Story with no criteria list — is refused with the reason; you fix the sub-task, never the plan file. On a separate yes at the gate, the case id is then recorded on the sub-task as one remote link, <code>Allure TestOps case &lt;id&gt;</code>, which <code>smoke-run</code> reads and a re-push updates in place.</p>
     <p>A plan written before version 0.3.0 at <code>…-story.test-plan.md</code> is no longer read. To keep its Allure ids, rename it to <code>…-e2e.test-plan.md</code> and set <code>scope: e2e</code> in its header before the next run.</p>
     <p>One caveat: this plugin does <strong>not</strong> encode our e2e suite's house style — its naming grammar, stepper structure and publish/WS blocks live outside the repo. A generated e2e plan follows the plugin's own rules, and the generator is told not to invent the house style.</p>
 
@@ -524,7 +528,7 @@
       </table>
     </div>
     <p>The three field flags are required because <code>config.json</code> ships its defaults empty on purpose — no run inherits another team's values by accident. Fill them into the config and the flags become optional overrides. <strong>This is the most common reason a first run stops.</strong></p>
-    <p><code>JIRA_EMAIL</code> and <code>JIRA_API_TOKEN</code> are read by two skills, differently. <code>testplan</code> uses them to read images attached to the Story; without them it continues and records <code>images: none (jira credentials not set)</code>. <code>smoke-run</code> needs them to post its report, so without them it stops at the start and names what is missing.</p>
+    <p><code>JIRA_EMAIL</code> and <code>JIRA_API_TOKEN</code> are read by two skills, differently. <code>testplan</code> uses them to read images attached to the Story; without them it continues and records <code>images: none (jira credentials not set)</code>. Under <code>--from-smoke</code> it also writes the sub-task's remote link with them, which needs the classic <code>write:jira-work</code> scope; without them the case is still pushed and you add the link by hand. <code>smoke-run</code> needs them to post its report, so without them it stops at the start and names what is missing.</p>
     <pre><span class="c"># updating, once a new version lands</span>
 /plugin marketplace update kinoa-qa
 /plugin update kinoa-qa@kinoa-qa</pre>
@@ -561,28 +565,28 @@
           <tr><td class="k">cases</td><td>one scenario, always <code>functional</code></td><td>as many as the criteria need, any type</td></tr>
           <tr><td class="k">expected results</td><td>one per step</td><td>one or more per step</td></tr>
           <tr><td class="k">criteria coverage</td><td>advisory — uncovered criteria are reported</td><td>every criterion covered</td></tr>
-          <tr><td class="k">lives in</td><td>the Jira "Smoke test" sub-task</td><td><code>test-plan.md</code>, then Allure TestOps</td></tr>
+          <tr><td class="k">lives in</td><td>the Jira "Smoke test" sub-task; on request also one <code>Draft</code> case in Allure TestOps</td><td><code>test-plan.md</code>, then Allure TestOps</td></tr>
           <tr><td class="k">made by</td><td><code>/kinoa-qa:smoke-plan</code></td><td><code>/kinoa-qa:testplan</code></td></tr>
         </tbody>
       </table>
     </div>
-    <p>Still to come: pushing a finished smoke sub-task into TestOps on request (KING-23102). Until it lands, smoke tests live only in Jira.</p>
+    <p>A finished smoke sub-task goes into TestOps only on request, with <code>/kinoa-qa:testplan --from-smoke</code> (0.5.0, KING-23102); without that, a smoke test lives only in Jira.</p>
   </section>
 
   <section>
     <div class="status">
       <div class="ready-line">
-        <span class="pill pill-yes">326 tests green</span>
-        <span class="pill pill-yes">v0.4.0 on develop</span>
+        <span class="pill pill-yes">472 tests green</span>
+        <span class="pill pill-yes">v0.5.0 on develop</span>
         <span class="pill pill-yes">first real plan generated</span>
         <span class="pill pill-no">nothing pushed to TestOps yet</span>
       </div>
       <h2>Honest status</h2>
       <p class="section-note">Read this before you trust it · checked 28 September</p>
       <ul>
-        <li><strong>The deterministic core is well tested.</strong> Parser, validator, payload builder, field resolver, the id merge, the attachment reader and the two smoke scripts are covered by 326 tests, run in CI on every pull request.</li>
+        <li><strong>The deterministic core is well tested.</strong> Parser, validator, payload builder, field resolver, the id merge, the attachment reader, the smoke converter <code>smoke_to_plan.py</code>, the link writer <code>jira_remote_link.py</code> and the two smoke-run Jira scripts are covered by 472 tests, run in CI on every pull request.</li>
         <li><strong>Steps A–D have run for real once, on KING-18454</strong> — 15 cases across 15 acceptance criteria, validator-clean. That plan predates version 0.3.0, so it sits at the old <code>…-story</code> path: rename it and set <code>scope: e2e</code> before pushing. <strong>Step E has still never run:</strong> project KINOA holds zero plugin-authored cases, so the upsert, the reconciliation gate and the id write-back remain untested against the real server.</li>
-        <li><strong>Two stops rest on prose, not code.</strong> Refusing a passed <code>--scope</code>, and stopping at Step C on a <code>scope: smoke</code> plan, live in the skill's instructions with no script enforcing them.</li>
+        <li><strong>Two stops rest on prose, not code.</strong> Refusing a passed <code>--scope</code>, and stopping at Step C on a <code>scope: smoke</code> plan outside <code>--from-smoke</code>, live in the skill's instructions with no script enforcing them.</li>
         <li><strong>The smoke skills are moved, not changed.</strong> They came over from kinoa-test-automation in 0.4.0 with only the edits the move needed. Nothing uploads a TestOps launch for a smoke run yet; smoke-run says so. Some bugs already in the moved Jira scripts are waiting for a follow-up ticket.</li>
         <li><strong>The sensible next step is still the first real push.</strong> Take the KING-18454 plan through step E with the three custom-field values, and look at those cases in TestOps before anyone generates in volume.</li>
       </ul>
@@ -590,7 +594,7 @@
   </section>
 
   <footer>
-    kinoa-qa · plugin version 0.4.0 · Allure TestOps project KINOA<br>
+    kinoa-qa · plugin version 0.5.0 · Allure TestOps project KINOA<br>
     Epic KING-22737 · taxonomy decision KING-22942 · smoke push KING-23102<br>
     Prepared for the Kinoa QA team, September 2026 · last revised 28 September<br>
     Source: <code>docs/guides/qa-plugin-guide.html</code> in kinoa-qa.

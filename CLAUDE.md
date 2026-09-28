@@ -26,3 +26,6 @@ one exits 0 and does nothing, so the step silently never happens.
 When you split a delimited line, a value may legitimately contain the delimiter — rejoin
 parts that do not start a new field, and prove it with a test whose value contains one.
 Two silent truncations have now shipped from this.
+
+A parser of Jira text is tested on a raw MCP response saved under `scripts/fixtures/`, not
+only on the template the skill writes — Jira reads Markdown back in a different shape.

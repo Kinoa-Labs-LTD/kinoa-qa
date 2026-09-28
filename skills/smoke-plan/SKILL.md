@@ -160,7 +160,10 @@ steps — a target, not a limit. Each step is one user action with exactly one e
 
 - Steps are written for a person to read and follow, in the product's own vocabulary (`flow`, `in-app`,
   `segment`, `player event` — keep terminology consistent with the repo and the dashboard).
-- Preconditions go in their own block at the top of the sub-task, not smuggled into step 1.
+- The sub-task body uses exactly these headings: `## Preconditions` at the top, then `## Steps` (the
+  numbered steps), then `## Open questions` when there are any. Preconditions go under
+  `## Preconditions`, not smuggled into step 1. `/kinoa-qa:testplan --from-smoke` reads only these
+  three sections, by these exact headings (see step 7).
 - One expected result per step, observable and binary — a human must be able to say pass or fail
   without interpreting. "The list updates" is not an expected result; "3 rows remain, all with
   Country = DE" is.
@@ -179,6 +182,14 @@ list — the ranking is the point, not the tags:
 | `[PRD: section]` | A named section of the linked Confluence PRD | A derived spec. **Verify it against the build** — PRDs here go stale |
 | `[Figma: frame]` | Read off the design | A derived spec, good for micro-copy, also goes stale |
 | `[live-confirmed]` | Observed in the running build | **Not a spec at all.** Last resort — see below |
+
+**How `[AC-n]` is numbered.** `[AC-n]` is the n-th acceptance criterion of the parent Story, counted
+from 1: the top-level bullets or numbered items under the first heading or bold line that reads
+"Acceptance criteria", "AC" or "ACs" (any case; `##`, `###` or `**…**`) in the Story description, or
+in its acceptance-criteria field when the description has none. Nested items and continuation lines
+belong to their parent item and are not counted. Cite by this rule and no other: `/kinoa-qa:testplan
+--from-smoke` reads the Story the same way, and refuses the push when the Story has no such list or a
+step cites an `[AC-n]` past its count.
 
 #### `[live-confirmed]` — legal, ranked last, and counted
 
@@ -215,7 +226,7 @@ button states. Where a gate step genuinely has no written source, it stays legal
 thing to raise with the PO, because it means nothing written tells us what "working" looks like.
 
 **An expected result with no source at all — not even the build — is not written as a step.** It goes into
-an **Open questions** section on the sub-task, phrased as a question for the PO:
+the sub-task's `## Open questions` section, phrased as a question for the PO:
 
 > Open question: AC-3 says the export "handles large segments". What is the threshold, and what should
 > the user see above it — a warning, a queued job, or an error?
@@ -231,7 +242,7 @@ ready" signal this skill exists to produce.
 
 An open question buried in a sub-task nobody opens is not a question, it is a note to self. So:
 
-1. **Keep the full list on the sub-task**, in its own `Open questions` section. That is where the
+1. **Keep the full list on the sub-task**, in its own `## Open questions` section. That is where the
    person running the smoke test will look.
 2. **Duplicate it as a comment on the parent Story**, addressed to the Story owner — but only the
    things that belong there. See "What earns a Story comment" below.
@@ -387,10 +398,13 @@ In this order, because each step feeds the next:
 
 **This skill creates no Allure TestOps case.** A Story smoke test runs a handful of times and
 then the feature graduates into regression coverage; a TestOps case is a third representation to keep
-in sync for little return, and drift between representations is a real observed failure mode. A push
-of the smoke plan to TestOps through `/kinoa-qa:testplan --from-smoke` is planned (KING-23102) and not
-built yet — until it exists, this skill writes to Jira only. When a smoke check is being promoted to
-permanent coverage, use kinoa-test-automation's `.claude/skills/testops-to-playwright/SKILL.md`,
+in sync for little return, and drift between representations is a real observed failure mode. This
+skill writes to Jira only. When the QA engineer does want the smoke plan as a TestOps case, that is a
+separate command run on the sub-task afterwards: `/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>`
+converts the sub-task into one `Draft` case, pushes it after its own review gate, and records the case
+id as the sub-task's `Allure TestOps case <id>` remote link. It reads only the three headed sections
+named in step 3, and refuses a sub-task with no or an empty `## Preconditions`. When a smoke check is
+being promoted to permanent coverage, use kinoa-test-automation's `.claude/skills/testops-to-playwright/SKILL.md`,
 which owns that job properly and wires `@allure.id` as part of it.
 
 Report back: the sub-task key, the open-question count, and the testability verdict.

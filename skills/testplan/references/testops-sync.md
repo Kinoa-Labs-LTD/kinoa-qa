@@ -18,8 +18,11 @@ re-run the validator  →  read the format from the plan header  →  resolve th
 Before anything is resolved, read the plan's **format** — its `scope:` header field, `smoke`
 or `e2e` — from the plan on disk at the stable path
 `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<format>.test-plan.md`, the same text
-Gate 0a just validated. `testplan` writes only `-e2e` plans; the fourth segment keeps a smoke
-plan of the same target in its own file.
+Gate 0a just validated. `testplan` generates only `-e2e` plans; a `--from-smoke` run writes
+`smoke_to_plan.py`'s `-smoke` plan, so the fourth segment keeps the smoke plan of a target in
+its own file. Under `--from-smoke` the Story key used throughout this step — `issues`, the
+`issue = "<STORY-KEY>"` lookup, the custom-field resolution and the read-back — is the plan
+header's `story:`, never the sub-task key.
 
 ```python
 from plan_parser import parse_header
@@ -277,7 +280,12 @@ allure-id absent   →  reconcile by Story + target  →  human confirms  →  c
    overwrite a human-authored case — strictly worse than the duplication this protocol exists
    to stop. On a mismatch: write nothing for that case, name the case id, the tag and the Story
    it actually carries, and tell the QA engineer to correct or remove the `allure-id:` line.
-3. Both checks pass → `testops_update_testcase(id=<allure-id>, **payload)`. The `allure-id` is
+   **Under a `scope: smoke` plan, also refuse unless the case's `Target:` marker says
+   `scope=smoke`** (`parse_target(description)`): the id of a smoke plan comes from the
+   sub-task's remote link, and one that resolves to an e2e case would flip it to `Draft`. On a
+   mismatch write nothing for that case and name the id and the scope its marker carries; the
+   fix is the sub-task's remote link, not the plan.
+3. The checks pass → `testops_update_testcase(id=<allure-id>, **payload)`. The `allure-id` is
    never part of the payload body; it is the address, not a field.
 4. **The id no longer exists in TestOps** (deleted, or a different project) → this is a
    degradation, not a crash. Report `allure-id <id> for TC-<n> no longer exists in project
@@ -295,7 +303,7 @@ case Step B could not carry forward, so it must not mean "create". See
 
 Take the returned case id and write it back into the plan at the stable path
 `~/.kinoa-qa/plans/<STORY-KEY>-<service>-<capability>-<format>.test-plan.md` — the
-fourth segment is the format (`e2e` for every plan `testplan` writes), so the two formats of
+fourth segment is the format (`e2e` for a generated plan, `smoke` under `--from-smoke`), so the two formats of
 one target are two files — with
 `scripts/plan_writer.py`:
 
@@ -337,11 +345,10 @@ and is out of scope: not a match candidate, not an orphan, not reported as eithe
 
 Narrowing by the third field is what keeps the two formats of one Story apart. Without it an
 e2e push would claim the smoke cases of the same target and flip real cases between `Review`
-and `Draft`. `testplan` itself pushes e2e plans only (a `scope: smoke` plan stops at Step C);
-the smoke cases it must not claim are never created by this skill. `/kinoa-qa:smoke-plan` does
-not create them either — it writes a Story's smoke plan as a "Smoke test" Jira sub-task and
-creates no TestOps case; a push of that plan to TestOps is planned (KING-23102), not built.
-This is the reconciliation **in-scope set**; the value narrowing
+and `Draft`. A smoke case is created only by `testplan --from-smoke`, which converts the
+"Smoke test" Jira sub-task `/kinoa-qa:smoke-plan` wrote into a `scope: smoke` plan and pushes
+it with `scope=smoke` in its marker (`/kinoa-qa:smoke-plan` itself creates no TestOps case);
+every other `testplan` run pushes e2e plans only. This is the reconciliation **in-scope set**; the value narrowing
 it is the plan's **format**.
 
 A case whose marker carries **no** `scope=` at all (`parse_target` → `scope is None`) is a case
