@@ -502,5 +502,208 @@ class SmokeSkillBehaviourIsWritten(unittest.TestCase):
                           "**Say that no launch was published, and why**"))
 
 
+def testplan_docs():
+    """testplan's SKILL.md and every reference file: what the testplan agent reads."""
+    paths = [os.path.join(ROOT, *TESTPLAN_SKILL.split("/"))]
+    paths += sorted(glob.glob(os.path.join(SKILL_DIR, "references", "**", "*"), recursive=True))
+    return [rel(p) for p in paths if os.path.isfile(p)]
+
+
+# Wording from before the smoke push was built; none of it may survive in the testplan docs.
+SMOKE_PUSH_STALE = ("planned (KING-23102)", "(KING-23102), not built",
+                    "no flow of this plugin produces or pushes one",
+                    "never reads or writes any other plan path",
+                    "no flow of this plugin writes one", "No flow of this plugin yet")
+
+
+def fenced_plugin_commands(text):
+    """Every `<plugin>/…` path a fenced `node|python3` command runs, in order."""
+    return [m.group(1) for _, line, _ in fenced_lines(text)
+            for m in _PLUGIN_COMMAND.finditer(line)]
+
+
+class SmokePushIsWired(unittest.TestCase):
+    """testplan's docs give the `--from-smoke` flow end to end and no longer call it planned."""
+
+    def setUp(self):
+        self.skill = read_flat(TESTPLAN_SKILL)
+
+    def test_the_synopsis_names_from_smoke(self):
+        synopsis = self.skill[:self.skill.index("## Source of truth")]
+        self.assertIn("--from-smoke <SUBTASK-KEY>", synopsis)
+
+    def test_the_converter_and_the_link_writer_are_fenced_runnable_commands(self):
+        with open(os.path.join(ROOT, *TESTPLAN_SKILL.split("/")), encoding="utf-8") as f:
+            text = f.read()
+        commands = fenced_plugin_commands(text)
+        for script in ("skills/testplan/scripts/smoke_to_plan.py",
+                       "skills/testplan/scripts/jira_remote_link.py"):
+            with self.subTest(script=script):
+                self.assertIn(script, commands)
+        self.assertEqual([], missing_command_targets(text, ROOT))
+
+    def test_the_step_c_stop_names_the_from_smoke_exception(self):
+        step_c = section(self.skill, "Step C")
+        self.assertIn("unless the run is `--from-smoke`", step_c)
+
+    def test_a_converter_fail_is_a_defect_with_no_retry(self):
+        step_c = section(self.skill, "Step C")
+        self.assertIn("converter defect", step_c)
+        self.assertIn("no regeneration retry", step_c)
+
+    def test_step_d_asks_for_the_link_and_offers_no_hand_edit(self):
+        step_d = section(self.skill, "Step D")
+        self.assertIn("a separate yes", step_d)
+        self.assertIn("never hand-edited", step_d)
+
+    def test_step_e_takes_the_story_key_from_the_header(self):
+        step_e = section(self.skill, "Step E")
+        self.assertIn("the Story key from the plan header's `story:`", step_e)
+        self.assertIn("never the sub-task key", step_e)
+
+    def test_the_link_is_written_after_step_e_and_never_on_a_dry_or_unattended_run(self):
+        step_e = section(self.skill, "Step E")
+        self.assertIn("never under `--dry-run`", step_e)
+        self.assertIn("never on an unattended run", step_e)
+
+    def test_the_read_back_requires_scope_smoke_for_a_smoke_plan(self):
+        for doc in (TESTPLAN_SKILL, "skills/testplan/references/testops-sync.md"):
+            with self.subTest(doc=doc):
+                self.assertIn("`Target:` marker says `scope=smoke`", read_flat(doc))
+
+    def test_the_scope_flag_still_stops(self):
+        self.assertIn("the flag is gone", self.skill)
+
+    def test_the_stale_smoke_wording_is_gone_from_the_testplan_docs(self):
+        docs = testplan_docs()
+        self.assertIn("skills/testplan/references/testops-sync.md", docs)
+        for doc in docs:
+            text = read_flat(doc)
+            for stale in SMOKE_PUSH_STALE:
+                with self.subTest(doc=doc, stale=stale):
+                    self.assertNotIn(stale, text)
+
+
+class SmokeSkillsNameThePush(unittest.TestCase):
+    """smoke-plan and smoke-run describe the push to TestOps as built."""
+
+    def test_smoke_plan_names_the_push_and_still_creates_no_case(self):
+        text = read_flat(SMOKE_PLAN_SKILL)
+        for phrase in ("/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>",
+                       "This skill creates no Allure TestOps case."):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_smoke_plan_states_the_ac_numbering_rule(self):
+        text = read_flat(SMOKE_PLAN_SKILL)
+        self.assertIn("`[AC-n]` is the n-th acceptance criterion of the parent Story, counted "
+                      "from 1", text)
+
+    def test_smoke_run_says_what_happens_with_more_than_one_link(self):
+        text = read_flat(SMOKE_RUN_SKILL)
+        self.assertIn("more than one `Allure TestOps case …` link", text)
+        self.assertIn("ask the user which id to use", text)
+
+    def test_neither_smoke_skill_calls_the_push_planned(self):
+        for doc in (SMOKE_PLAN_SKILL, SMOKE_RUN_SKILL):
+            text = read_flat(doc)
+            for stale in ("not built", "planned (KING-23102)", "planned push"):
+                with self.subTest(doc=doc, stale=stale):
+                    self.assertNotIn(stale, text)
+
+
+class ReadmeDocumentsThePush(unittest.TestCase):
+    def setUp(self):
+        self.readme = read_flat("README.md")
+
+    def test_the_readme_documents_from_smoke_and_its_write_scope(self):
+        for phrase in ("/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>",
+                       "`--from-smoke` writes one remote link, which needs the classic "
+                       "`write:jira-work` scope"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.readme)
+
+    def test_the_readme_no_longer_says_testplan_never_writes_to_jira(self):
+        for stale in ("`testplan` never writes to Jira",
+                      "all `testplan` needs",
+                      "If you only use `testplan`, `read:jira-work` alone is enough",
+                      "no flow of this plugin produces a smoke `test-plan.md` yet",
+                      "and `testplan` does not read it",
+                      "planned (KING-23102)", "(KING-23102), not built", "KING-23102, not built",
+                      "is planned and not built"):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, self.readme)
+
+
+def changelog_entry(version):
+    """The flattened body of CHANGELOG.md's `## <version>` entry, up to the next `## `."""
+    text = read_flat("CHANGELOG.md")
+    start = text.index("## " + version + " ")
+    end = text.find(" ## ", start + 3)
+    return text[start:] if end == -1 else text[start:end]
+
+
+class SmokePushIsReleased(unittest.TestCase):
+    def _evals(self):
+        with open(os.path.join(EVALS_DIR, "evals.json"), encoding="utf-8") as f:
+            return json.load(f)["evals"]
+
+    def test_evals_have_a_from_smoke_case(self):
+        prompts = [e["prompt"] for e in self._evals() if "--from-smoke" in e["prompt"]]
+        self.assertTrue(prompts)
+
+    def test_the_step_c_stop_eval_still_describes_a_normal_run(self):
+        stop = [e for e in self._evals() if e["name"] == "testplan-stops-on-a-smoke-header"]
+        self.assertEqual(1, len(stop))
+        self.assertNotIn("--from-smoke", stop[0]["prompt"])
+        self.assertIn("stops at Step C", stop[0]["expected_output"])
+
+    def test_the_0_5_0_entry_lists_the_push_the_scripts_and_the_scope(self):
+        self.assertIn("## 0.5.0 ", read_flat("CHANGELOG.md"))
+        entry = changelog_entry("0.5.0")
+        for phrase in ("--from-smoke", "smoke_to_plan.py", "jira_remote_link.py",
+                       "write:jira-work"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, entry)
+
+
+class SmokePushDocsMatchTheScripts(unittest.TestCase):
+    """The `--from-smoke` prose says what `jira_remote_link.py` and `smoke_to_plan.py` do."""
+
+    def setUp(self):
+        self.skill = read_flat(TESTPLAN_SKILL)
+
+    def test_unset_credentials_are_exit_3_and_usage_errors_exit_2(self):
+        step_e = section(self.skill, "Step E")
+        self.assertIn("Exit 3: `JIRA_EMAIL` or `JIRA_API_TOKEN` is unset", step_e)
+        self.assertIn("Exit 2: a usage error", step_e)
+        self.assertNotIn("Exit 2: the credentials are unset", self.skill)
+        self.assertIn("Jira credentials unset (`jira_remote_link.py` exit 3)", self.skill)
+
+    def test_a_config_error_names_which_by_hand_lines_are_printed(self):
+        step_e = section(self.skill, "Step E")
+        self.assertIn("On exit 1 from the config, the `title:` line is always printed, and the "
+                      "`url:` line only when the config still names `testops.base_url` and "
+                      "`testops.project_id`", step_e)
+
+    def test_the_story_is_read_with_its_field_names(self):
+        self.assertIn('getJiraIssue(<STORY-KEY>, responseContentFormat="markdown", '
+                      'expand="names", fields=["*all"])', self.skill)
+
+    def test_the_link_rule_is_the_shared_title_matcher(self):
+        rule = "`^Allure TestOps case (\\d+)\\b`"
+        for doc in (TESTPLAN_SKILL, SMOKE_RUN_SKILL):
+            with self.subTest(doc=doc):
+                self.assertIn(rule, read_flat(doc))
+        self.assertIn("case_id_from_title", self.skill)
+
+    def test_smoke_plan_states_the_headings_where_it_lays_out_the_sub_task(self):
+        steps = read_flat(SMOKE_PLAN_SKILL)
+        layout = steps[steps.index("### 3) Write the steps"):steps.index("### 4)")]
+        for heading in ("`## Preconditions`", "`## Steps`", "`## Open questions`"):
+            with self.subTest(heading=heading):
+                self.assertIn(heading, layout)
+
+
 if __name__ == "__main__":
     unittest.main()

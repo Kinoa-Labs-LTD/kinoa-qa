@@ -872,6 +872,48 @@
           "evidence": ""
         }
       ]
+    },
+    {
+      "id": 18,
+      "name": "from-smoke-converts-and-reaches-the-gate",
+      "fixture": "../scripts/fixtures/smoke",
+      "prompt": "Run /kinoa-qa:testplan --from-smoke KING-22281 --target in-app-templates/export --dry-run. The Atlassian MCP is SIMULATED: skills/testplan/scripts/fixtures/smoke/king-22281.json already holds the raw getJiraIssue (sub-task and parent Story) and getJiraIssueRemoteIssueLinks responses in the input-file shape SKILL.md describes, so use it as the input file. Follow SKILL.md's 'Steps A–B under --from-smoke', then Step C and Step D. Run skills/testplan/scripts/smoke_to_plan.py for real (once with --print-path, once without) and validate_test_plan.py for real on its output. Report the stable path, the case title, whether Step C stops, what the Step D gate asks, and whether any Jira or TestOps write happens.",
+      "expected_output": "smoke_to_plan.py, run for real, exits 0; --print-path gives ~/.kinoa-qa/plans/KING-19550-in-app-templates-export-smoke.test-plan.md — the Story key from the parent, not the sub-task key. The plan's header says story: KING-19550 and scope: smoke, and its one functional case is titled 'Export In-App to a different project' (the summary without 'Smoke test: '). validate_test_plan.py exits 0 with RESULT: PASS. Step C does not stop on scope: smoke because the run is --from-smoke. The Step D gate shows the plan and asks, as a separate yes, whether to write the sub-task's remote link after Step E. No PRD, Figma or OpenSpec source is read, no generation subagent is dispatched, the plan is not hand-edited, and under --dry-run jira_remote_link.py is not run and nothing is written to Jira or TestOps.",
+      "files": [
+        "skills/testplan/scripts/fixtures/smoke/king-22281.json"
+      ],
+      "assertions": [
+        {
+          "text": "smoke_to_plan.py --print-path, run for real, prints the -smoke stable path under KING-19550 (the parent Story), not KING-22281",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "the converted plan says scope: smoke and holds one functional case titled with the sub-task summary minus 'Smoke test: '",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "validate_test_plan.py run for real on the converted plan exits 0 with RESULT: PASS",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "Step C does not stop on the scope: smoke header, because the run is --from-smoke",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "no generation subagent is dispatched and no PRD, Figma or OpenSpec source is read; the plan is the converter's output, never hand-edited",
+          "passed": false,
+          "evidence": ""
+        },
+        {
+          "text": "the Step D gate asks for the remote link as a separate yes, and under --dry-run jira_remote_link.py is not run and nothing is written to Jira or TestOps",
+          "passed": false,
+          "evidence": ""
+        }
+      ]
     }
   ]
 }

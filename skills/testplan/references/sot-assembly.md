@@ -12,6 +12,10 @@ each degrade independently, and none of them is a hard stop. Story, PRD, mockup 
 have no precedence between one another — a direct contradiction between them is a
 `## Conflicts` line, not something Step A arbitrates.
 
+A `testplan --from-smoke` run does not assemble this bundle: it saves the raw sub-task, Story
+and remote-link responses into one input file for `smoke_to_plan.py` instead (SKILL.md,
+"Steps A–B under `--from-smoke`"). Nothing below applies to it.
+
 ## 1. RequirementsReader — the Story (Atlassian MCP, required)
 `getJiraIssue(<STORY-KEY>)` → description + acceptance criteria + subtasks. Keep its raw
 JSON response as `issue_json` — including `fields.attachment` — for the ImageReader

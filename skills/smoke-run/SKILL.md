@@ -70,8 +70,9 @@ missing and stop — do not start a run that cannot drive the browser or post it
   `JIRA_HOST` affects `jiraAttach.mjs` only.
 - **Atlassian MCP** — to read the sub-task and its remote links, rewrite the `Latest run:` line and
   raise Sub-bugs.
-- **Allure TestOps MCP** — not used. The case id comes from a Jira remote link or from the user
-  (step 1), and the MCP cannot upload a launch (step 9).
+- **Allure TestOps MCP** — not used. The case id comes from a Jira remote link (written by
+  `/kinoa-qa:testplan --from-smoke`) or from the user (step 1), and the MCP cannot upload a launch
+  (step 9).
 - The feature must be **built and deployed** to the target environment. If it is not, stop and say so;
   do not report every step as `blocked` when the real answer is "not deployed yet".
 
@@ -245,10 +246,14 @@ expected result each.
 
 Then find the **TestOps case id** — the one rule for it, used by the spec's `@allure.id` (step 7) and
 the launch (step 9): read `getJiraIssueRemoteIssueLinks` on the sub-task for a remote link titled
-`Allure TestOps case <id>`. With no such link, use an id the user gives. With neither, there is no
-case id, no `@allure.id` and no launch — say so (step 9); never invent one. That remote link is meant
-to be written by the planned push of a smoke plan to TestOps (`/kinoa-qa:testplan --from-smoke`,
-KING-23102), which is not built, so today the id normally comes from the user.
+`Allure TestOps case <id>` — a title matching `^Allure TestOps case (\d+)\b`, so
+`Allure TestOps case 4711 (smoke)` names case 4711 and `Allure TestOps case x` names none (the rule
+`jira_remote_link.py` writes and updates by). With no such link, use an id the user gives. With neither, there is no
+case id, no `@allure.id` and no launch — say so (step 9); never invent one. That remote link is written
+by `/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>`, which pushes the sub-task to TestOps as a case, so
+a sub-task that was never pushed has none and the id can only come from the user. The push keeps one
+such link per sub-task; if the sub-task nevertheless carries more than one `Allure TestOps case …` link,
+do not pick one: list the ids and ask the user which id to use.
 
 If the sub-task carries **open questions** from `smoke-plan`, **do not treat them as a reason to defer
 the run.** A question about an expected *value* blocks that step's verdict, nothing else — the feature

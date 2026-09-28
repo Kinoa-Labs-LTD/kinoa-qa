@@ -2,6 +2,7 @@
   "testops": {
     "project_name": "KINOA",
     "project_id": 1,
+    "base_url": "https://kinoa.testops.cloud",
     "custom_fields": {
       "story": "",
       "component": "",
