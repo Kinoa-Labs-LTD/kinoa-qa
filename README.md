@@ -18,6 +18,12 @@ QA plugin for Claude Code. Three skills:
 The smoke pair and `testplan` share almost nothing: a smoke plan is a Jira sub-task, never a
 `test-plan.md`, and `testplan` does not read it.
 
+**Presenting this to someone?** Two guide pages tell the story for people who will not open this
+repo: the [kinoa-qa plugin guide](https://claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S) (the whole
+plugin) and the [smoke testing guide](https://claude.ai/code/artifact/a92e7012-7787-46ba-8404-19a9b2a62cc7)
+(the smoke pair). Their sources are in [`docs/guides/`](docs/guides/README.md); this README stays
+the reference you use mid-task.
+
 Standalone and decoupled from `kinoa-dev`: it depends only on the artifacts kinoa-dev
 produces (OpenSpec `spec.md` files in service repos) and the Jira/[AQA] conventions.
 

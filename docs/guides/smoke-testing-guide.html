@@ -1,0 +1,335 @@
+<title>Smoke testing with Claude — a QA guide</title>
+
+<style>
+  :root {
+    --paper:#F1F4F2; --paper-sunk:#E7EBE9; --card:#FBFCFB;
+    --ink:#16202A; --ink-soft:#4A5A63; --ink-faint:#7C8B92; --rule:#D2DAD7;
+    --petrol:#0F6B66; --petrol-sunk:#DCE9E7;
+    --ember:#B85C24; --ember-sunk:#F4E6DB;
+    --pass:#2E7D4F; --pass-sunk:#DEEDE4;
+    --fail:#B23A2E; --fail-sunk:#F6E0DD;
+    --blocked:#5C7183; --blocked-sunk:#E3E9EE;
+    --mono: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --serif: Charter,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --measure:66ch;
+  }
+  @media (prefers-color-scheme: dark){:root{
+    --paper:#10171B;--paper-sunk:#0A1013;--card:#172025;--ink:#E4EBE8;--ink-soft:#A2B1B2;
+    --ink-faint:#6F8085;--rule:#2A363B;--petrol:#4FC7BC;--petrol-sunk:#12302F;--ember:#E08A4C;
+    --ember-sunk:#33210F;--pass:#5FBE85;--pass-sunk:#12291D;--fail:#E1705F;--fail-sunk:#2E1613;
+    --blocked:#8FA3B2;--blocked-sunk:#1A242B;}}
+  :root[data-theme="dark"]{
+    --paper:#10171B;--paper-sunk:#0A1013;--card:#172025;--ink:#E4EBE8;--ink-soft:#A2B1B2;
+    --ink-faint:#6F8085;--rule:#2A363B;--petrol:#4FC7BC;--petrol-sunk:#12302F;--ember:#E08A4C;
+    --ember-sunk:#33210F;--pass:#5FBE85;--pass-sunk:#12291D;--fail:#E1705F;--fail-sunk:#2E1613;
+    --blocked:#8FA3B2;--blocked-sunk:#1A242B;}
+  :root[data-theme="light"]{
+    --paper:#F1F4F2;--paper-sunk:#E7EBE9;--card:#FBFCFB;--ink:#16202A;--ink-soft:#4A5A63;
+    --ink-faint:#7C8B92;--rule:#D2DAD7;--petrol:#0F6B66;--petrol-sunk:#DCE9E7;--ember:#B85C24;
+    --ember-sunk:#F4E6DB;--pass:#2E7D4F;--pass-sunk:#DEEDE4;--fail:#B23A2E;--fail-sunk:#F6E0DD;
+    --blocked:#5C7183;--blocked-sunk:#E3E9EE;}
+
+  body{background:var(--paper);color:var(--ink);font-family:var(--serif);font-size:1.02rem;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:74rem;margin-inline:auto;padding:clamp(1.4rem,4vw,4rem) clamp(1rem,4vw,2.5rem) 6rem;display:flex;flex-direction:column;gap:clamp(2.6rem,5vw,4.2rem)}
+  p{margin:0;max-width:var(--measure);text-wrap:pretty}
+  .stack{display:flex;flex-direction:column;gap:1rem}
+  code{font-family:var(--mono);font-size:.86em;background:var(--paper-sunk);border:1px solid var(--rule);border-radius:3px;padding:.06em .32em}
+  strong{font-weight:700}
+  a{color:var(--petrol)}
+
+  .eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin:0}
+  h1{font-family:var(--mono);font-size:clamp(1.9rem,1.2rem+2.6vw,3.2rem);font-weight:600;letter-spacing:-.035em;line-height:1.03;text-wrap:balance;margin:0}
+  .lede{font-size:clamp(1.1rem,1rem+.5vw,1.35rem);line-height:1.5;color:var(--ink-soft);max-width:60ch;margin:0}
+  h2{font-family:var(--mono);font-size:clamp(1.3rem,1rem+1.1vw,1.8rem);font-weight:600;letter-spacing:-.025em;margin:0;padding-left:.9rem;border-left:3px solid var(--petrol);line-height:1.15;text-wrap:balance}
+  h3{font-family:var(--mono);font-size:1rem;font-weight:700;margin:0;letter-spacing:-.01em}
+  section{display:flex;flex-direction:column;gap:1.3rem}
+
+  .say{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--petrol);border-radius:0 4px 4px 0;padding:.9rem 1.1rem;font-family:var(--mono);font-size:.92rem;color:var(--ink);max-width:var(--measure)}
+  .say b{color:var(--ink-faint);font-weight:400;display:block;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.35rem}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1rem}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:1.1rem 1.2rem;display:flex;flex-direction:column;gap:.5rem}
+  .card .t{font-family:var(--mono);font-size:.88rem;font-weight:700;color:var(--petrol)}
+  .card .d{font-size:.92rem;color:var(--ink-soft);line-height:1.5}
+  .card ul{margin:0;padding-left:1.1rem;font-size:.9rem;color:var(--ink-soft);line-height:1.55}
+
+  .table-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--card)}
+  table{border-collapse:collapse;width:100%;min-width:34rem;font-size:.9rem}
+  th,td{text-align:left;padding:.7rem .9rem;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.5}
+  thead th{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;background:var(--paper-sunk);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  td.k{font-family:var(--mono);font-weight:600;white-space:nowrap}
+
+  figure{margin:0;background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:clamp(1rem,2.5vw,1.7rem);display:flex;flex-direction:column;gap:.9rem;overflow-x:auto}
+  figure svg{display:block;max-width:100%;height:auto;min-width:34rem}
+  figcaption{font-family:var(--mono);font-size:.78rem;line-height:1.55;color:var(--ink-soft);max-width:72ch}
+  figcaption b{color:var(--ink);font-weight:600}
+  .s-box{fill:var(--card);stroke:currentColor;stroke-width:1.25}
+  .s-fill{fill:var(--petrol-sunk);stroke:var(--petrol);stroke-width:1.5}
+  .s-t{font-family:var(--mono);font-size:12px;fill:var(--ink)}
+  .s-sm{font-family:var(--mono);font-size:10.5px;fill:var(--ink-soft)}
+  .s-p{font-family:var(--mono);font-size:10.5px;fill:var(--petrol)}
+  .s-line{stroke:currentColor;stroke-width:1.25;fill:none}
+  .s-lp{stroke:var(--petrol);stroke-width:1.5;fill:none}
+  .s-dash{stroke-dasharray:4 3}
+
+  .verd{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}
+  .vc{background:var(--vb);border:1px solid var(--vc);border-left-width:4px;border-radius:0 4px 4px 0;padding:1rem 1.2rem;display:flex;flex-direction:column;gap:.3rem}
+  .vc .h{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--vc)}
+  .vc .q{font-size:.93rem;color:var(--ink-soft);line-height:1.5}
+  .v1{--vc:var(--pass);--vb:var(--pass-sunk)}
+  .v2{--vc:var(--fail);--vb:var(--fail-sunk)}
+
+  .note{border-left:3px solid var(--ember);background:var(--ember-sunk);padding:1rem 1.2rem;border-radius:0 4px 4px 0;max-width:var(--measure);display:flex;flex-direction:column;gap:.4rem}
+  .note .l{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ember);font-weight:700}
+  .note p{font-size:.93rem}
+
+  ol.steps{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:.8rem;counter-reset:s}
+  ol.steps li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.8rem;align-items:start;max-width:var(--measure)}
+  ol.steps li::before{content:counter(s);font-family:var(--mono);font-size:.8rem;font-weight:700;color:var(--petrol);background:var(--petrol-sunk);border:1px solid var(--petrol);border-radius:50%;width:1.7rem;height:1.7rem;display:grid;place-items:center}
+  ol.steps .b{font-size:.95rem;color:var(--ink-soft);line-height:1.55}
+  ol.steps .b b{color:var(--ink)}
+
+  .foot{border-top:1px solid var(--rule);padding-top:1.1rem;font-family:var(--mono);font-size:.78rem;color:var(--ink-faint);max-width:var(--measure)}
+</style>
+
+<div class="wrap">
+
+  <header class="stack" style="gap:1.2rem">
+    <p class="eyebrow">kinoa-qa plugin &middot; smoke testing guide</p>
+    <h1>Smoke testing<br><span style="color:var(--ink-faint);font-weight:400">with Claude</span></h1>
+    <p class="lede">
+      Hand Claude a Story key. Get back a smoke test plan you can read, a real run against TEST, and a
+      straight answer to the only question that matters early: <em>is this feature actually live and
+      testable yet?</em>
+    </p>
+  </header>
+
+  <!-- FLOW -->
+  <section>
+    <h2>The shape of it</h2>
+    <p>
+      Two skills, run in order, both driven by conversation. The Jira sub-task is the single source of
+      truth — the plan lives there, the run report gets posted back there, and anything that looks like
+      a bug is raised against the Story.
+    </p>
+    <figure>
+      <svg viewBox="0 0 720 220" role="img" aria-label="Flow: a Jira Story feeds the kinoa-qa plugin's smoke-plan, which creates a smoke test sub-task; the kinoa-qa plugin's smoke-run executes it against TEST and posts a report back to the same sub-task plus an artifact; promoting to a permanent regression test is an optional later step.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+          <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--petrol)"/></marker>
+        </defs>
+
+        <rect class="s-box" x="0" y="40" width="112" height="50" rx="3"/>
+        <text class="s-t" x="56" y="62" text-anchor="middle">Jira Story</text>
+        <text class="s-sm" x="56" y="77" text-anchor="middle">AC + PRD + Figma</text>
+
+        <rect class="s-fill" x="164" y="40" width="126" height="50" rx="3"/>
+        <text class="s-t" x="227" y="62" text-anchor="middle">smoke-plan</text>
+        <text class="s-sm" x="227" y="77" text-anchor="middle">asks before writing</text>
+        <line class="s-line" x1="112" y1="65" x2="158" y2="65" marker-end="url(#a)"/>
+
+        <rect class="s-box" x="344" y="30" width="150" height="70" rx="3"/>
+        <text class="s-t" x="419" y="55" text-anchor="middle">Smoke test</text>
+        <text class="s-t" x="419" y="71" text-anchor="middle">sub-task</text>
+        <text class="s-p" x="419" y="88" text-anchor="middle">source of truth</text>
+        <line class="s-lp" x1="290" y1="65" x2="338" y2="65" marker-end="url(#ap)"/>
+
+        <rect class="s-fill" x="164" y="150" width="126" height="50" rx="3"/>
+        <text class="s-t" x="227" y="172" text-anchor="middle">smoke-run</text>
+        <text class="s-sm" x="227" y="187" text-anchor="middle">real browser, TEST</text>
+        <path class="s-line" d="M 344 75 L 320 75 L 320 175 L 296 175" marker-end="url(#a)"/>
+        <text class="s-sm" x="330" y="124" text-anchor="start">reads</text>
+
+        <path class="s-lp" d="M 227 150 L 227 120 L 400 120 L 400 100" marker-end="url(#ap)"/>
+        <text class="s-p" x="300" y="114" text-anchor="middle">posts the report back</text>
+
+        <rect class="s-box" x="548" y="150" width="172" height="50" rx="3" style="stroke-dasharray:4 3"/>
+        <text class="s-t" x="634" y="172" text-anchor="middle">testops-to-playwright</text>
+        <text class="s-sm" x="634" y="187" text-anchor="middle">only if it earns it</text>
+        <path class="s-line s-dash" d="M 494 75 C 600 80, 634 110, 634 144" marker-end="url(#a)"/>
+        <text class="s-sm" x="580" y="112" text-anchor="middle">promote later</text>
+      </svg>
+      <figcaption>
+        <b>Everything lands on the sub-task.</b> The plan is written there, the run report is posted
+        back there, and the loop closes without touching the repo. Turning a check into a permanent
+        regression test is a separate, deliberate step — and a different skill.
+        <code>smoke-plan</code> and <code>smoke-run</code> are the kinoa-qa plugin's skills.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- PLAN -->
+  <section>
+    <h2>Step one — plan it</h2>
+    <div class="say"><b>you say</b>/kinoa-qa:smoke-plan KING-21500</div>
+    <ol class="steps">
+      <li><span class="b">Claude reads the <b>Story, its acceptance criteria, its comments</b>, and any linked Confluence PRD.</span></li>
+      <li><span class="b">It opens the <b>Figma design</b> and reads the real UI copy — labels, states, validation text, empty and error states.</span></li>
+      <li><span class="b">It <b>cross-checks those sources against each other</b>. Where they disagree, that becomes an open question — never a quiet guess.</span></li>
+      <li><span class="b">It shows you a draft and <b>stops</b>. Nothing reaches Jira until you say go.</span></li>
+      <li><span class="b">On your yes: the sub-task is created, and open questions are commented onto the Story for the PO.</span></li>
+    </ol>
+    <div class="cards">
+      <div class="card">
+        <span class="t">What you get</span>
+        <span class="d">Numbered steps, one expected result each, and every result tagged with where it came from — <code>[AC-2]</code>, <code>[PRD: section]</code>, <code>[Figma: frame]</code>. Steps that prove the feature is live are tagged <code>[GATE]</code>.</span>
+      </div>
+      <div class="card">
+        <span class="t">What to expect</span>
+        <ul>
+          <li>It will not invent expected results</li>
+          <li>Untraceable things become questions for the PO</li>
+          <li>Nothing written before you confirm</li>
+          <li>Expect to edit it — it's a strong first draft</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- RUN -->
+  <section>
+    <h2>Step two — run it</h2>
+    <div class="say"><b>you say</b>/kinoa-qa:smoke-run KING-22281</div>
+    <p>
+      Claude drives a real browser through the steps on TEST, judging each against its expected result,
+      then posts the report back to the sub-task and hands you an artifact link. Anything that looks
+      like a product defect is raised as a Sub-bug on the Story — <strong>with the screenshots
+      attached to it</strong>, so the bug arrives complete rather than needing evidence chased later.
+    </p>
+    <div class="note" style="border-left-color:var(--petrol);background:var(--petrol-sunk)">
+      <span class="l" style="color:var(--petrol)">On evidence</span>
+      <p>
+        A screenshot has to show the <em>failure</em>, not the setup for it. If the bug is "the
+        conflict persists <em>after</em> the field is deleted", a picture of the conflict
+        <em>before</em> the deletion shows correct behaviour — it looks like evidence and proves
+        nothing. Files are named after what they show, and attached to whichever ticket they belong
+        to: run evidence on the sub-task, defect evidence on the bug.
+      </p>
+    </div>
+    <h3>Two verdicts — and the difference matters</h3>
+    <div class="verd">
+      <div class="vc v1">
+        <span class="h">Feature verdict</span>
+        <span class="q"><b>live / partially live / not live.</b> Is it deployed, reachable, does the main path work — can deeper tests be written now?</span>
+      </div>
+      <div class="vc v2">
+        <span class="h">Conformance verdict</span>
+        <span class="q"><b>passed / failed / blocked.</b> Does each expected result match what the spec says it should be?</span>
+      </div>
+    </div>
+    <div class="note">
+      <span class="l">The pairing people misread</span>
+      <p>
+        <b>live + failed is normal and useful.</b> It means the feature works, but something disagrees
+        with a written spec — which may be a defect, or may be a stale spec. It does <em>not</em> block
+        deeper testing. Only <code>not live</code> stops everything.
+      </p>
+    </div>
+    <p>
+      Each step gets <code>pass</code>, <code>fail</code> or <code>blocked</code>, with evidence on
+      every non-pass. <code>blocked</code> is not a soft <code>fail</code>: <code>fail</code> says
+      something about the product, <code>blocked</code> says something about the run.
+    </p>
+  </section>
+
+  <!-- WORKED EXAMPLE -->
+  <section>
+    <h2>What it found on the first real Story</h2>
+    <p>
+      KING-19550, <em>"Export In-App to a different project"</em> — a Story already marked Completed.
+      The run returned <strong>feature: live</strong>, and turned up four things a human review had not:
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Finding</th><th>Why it mattered</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Wrong status in the AC</td><td>The AC and the PRD both said exported In-Apps are created as <code>Draft</code>. They are created as <code>In-Review</code>. The Story's own notes said so too — the AC contradicted its own Story</td></tr>
+          <tr><td class="k">A stale PRD</td><td>The PRD named a modal and three sections that <em>do not exist</em> in the product. Anyone writing tests from it would have written them wrong</td></tr>
+          <tr><td class="k">A product bug</td><td>Deleting a conflicting field in the destination doesn't clear the conflict — it's a soft delete, and the validator still counts it. The operator is left with no way forward. Filed as KING-22355, screenshots attached, and picked up by a developer within days</td></tr>
+          <tr><td class="k">No test attributes</td><td>The export dialog exposes no <code>data-testid</code>, so everything is reached by text — which is why automating it isn't worth it yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.95rem;color:var(--ink-soft)">
+      None of these were found by being clever. They were found by insisting every expected result cite
+      a source, then checking those sources against each other and against the running product.
+    </p>
+  </section>
+
+  <!-- BEFORE -->
+  <section>
+    <h2>Before your first run</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>You need</th><th>For</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td class="k">The kinoa-qa plugin</td><td>Everything</td><td>Both skills ship in it — see the <a href="https://github.com/Kinoa-Labs-LTD/kinoa-qa/blob/develop/README.md">kinoa-qa plugin README</a></td></tr>
+          <tr><td class="k">Atlassian MCP</td><td>Everything</td><td>Connect via <code>/mcp</code>. Tokens expire — reconnect, then restart the session</td></tr>
+          <tr><td class="k">Playwright MCP</td><td>kinoa-qa smoke-run</td><td>Already declared in <code>.mcp.json</code> inside kinoa-test-automation; elsewhere see the kinoa-qa plugin README</td></tr>
+          <tr><td class="k">Figma — team membership <em>and</em> a Dev seat</td><td>kinoa-qa smoke-plan only</td><td>See below. This is the one that catches people</td></tr>
+          <tr><td class="k">Jira API token</td><td>The kinoa-qa plugin's smoke-run — report and evidence — required at start</td><td><code>JIRA_EMAIL</code> + <code>JIRA_API_TOKEN</code> in <code>~/.zshrc</code>. Pick the <strong>classic</strong> scopes — see below</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="l">The Jira token trap</span>
+      <p>
+        Creating the token, you'll be offered <strong>granular</strong> scopes like
+        <code>write:attachment:jira</code>. They look exactly right and they <b>do not work</b> —
+        Atlassian's gateway rejects every upload with <code>401 "scope does not match"</code> no matter
+        what you grant. It's a confirmed Atlassian bug, not your setup.
+      </p>
+      <p>
+        Choose the <strong>classic</strong> scopes instead: <code>read:jira-work</code> +
+        <code>write:jira-work</code>. Broader than anyone would like — they also permit editing and
+        deleting issues — but it is the only combination that can upload today.
+      </p>
+      <p>
+        Put the exports in <code>~/.zshrc</code>, <b>not</b> <code>~/.zprofile</code>: only login
+        shells read the latter, so tooling won't see your token. Without a token
+        the kinoa-qa plugin's smoke-run stops at the start and names what is missing.
+      </p>
+    </div>
+    <div class="note">
+      <span class="l">The Figma trap</span>
+      <p>
+        Being able to open the design <b>in your browser is not enough</b>. The integration also needs
+        you to be a <b>member of the team that owns the file</b> — a direct share or a link gives you
+        browser access without membership, and the tool then refuses with a misleading
+        <code>"you don't have edit access to this file"</code>. It is not asking for edit rights.
+      </p>
+      <p>
+        Ask to be <b>added to the Kinoa Figma team with a Dev seat</b>. A View seat is capped at six API
+        calls a <em>month</em>. Everyone authenticates as themselves — no account is shared. Only
+        <code>smoke-plan</code> needs Figma; <code>smoke-run</code> needs none (both in the kinoa-qa plugin).
+      </p>
+    </div>
+  </section>
+
+  <!-- LIMITS -->
+  <section>
+    <h2>What it will not do</h2>
+    <div class="cards">
+      <div class="card"><span class="t">Decide what "correct" means</span><span class="d">It surfaces contradictions between the Story, the PRD, the design and the build. A human resolves them.</span></div>
+      <div class="card"><span class="t">Replace the regression suite</span><span class="d">Smoke means "does the new thing work". Nothing wider.</span></div>
+      <div class="card"><span class="t">Write code by default</span><span class="d">The deliverable is a report. Ask explicitly if you want a committed spec — and prefer promoting to a real regression test instead.</span></div>
+      <div class="card"><span class="t">Guarantee the expectations are right</span><span class="d">They are <em>traceable to a source</em> — a weaker claim. On the first Story the most official-looking source was the wrong one. Precedence: live UI &gt; design &gt; PRD.</span></div>
+    </div>
+    <div class="note">
+      <span class="l">One safety note</span>
+      <p>
+        The kinoa-qa plugin's <code>smoke-run</code> works against <b>real data on TEST</b> — it creates and modifies
+        entities. Point it at a sandbox project, not one the CI suite depends on.
+      </p>
+    </div>
+  </section>
+
+  <p class="foot">
+    The whole plugin, including <code>testplan</code>: the <a href="https://claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S">kinoa-qa plugin guide</a>
+    &middot; full reference, prerequisites and troubleshooting: the <a href="https://github.com/Kinoa-Labs-LTD/kinoa-qa/blob/develop/README.md">kinoa-qa plugin README</a>
+    &middot; skills built under KING-22213, KING-22214 and KING-22127, moved into the plugin under KING-23103
+    &middot; source: <code>docs/guides/smoke-testing-guide.html</code> in kinoa-qa.
+  </p>
+
+</div>
