@@ -112,8 +112,9 @@ class UnnamedSkills(unittest.TestCase):
 class DescriptionsNameEverySkill(unittest.TestCase):
     """plugin.json and every marketplace entry describe the plugin by naming each of its skills."""
 
-    def test_the_real_tree_has_the_three_skills(self):
-        self.assertEqual(["smoke-plan", "smoke-run", "testplan"], skill_names(ROOT))
+    def test_the_real_tree_has_the_five_skills(self):
+        self.assertEqual(["mcp-plan", "mcp-run", "smoke-plan", "smoke-run", "testplan"],
+                         skill_names(ROOT))
 
     def test_plugin_json_and_marketplace_entry_name_every_skill(self):
         with open(PLUGIN_JSON, encoding="utf-8") as f:

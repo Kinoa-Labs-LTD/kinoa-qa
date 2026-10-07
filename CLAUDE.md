@@ -11,6 +11,10 @@ flow, skill, flag or path is named as planned, never as if it already runs.
 A skill names every plugin file the agent reads or runs as `<plugin>/skills/…` — a
 repo-root path resolves only inside this repo, never for a plugin user.
 
+A skill never writes inside `<plugin>/` — the install folder is replaced on every update.
+Plans, reports and other user data live under `~/.kinoa-qa/`, and an eval points HOME at a
+scratch home instead of touching the real one.
+
 Every `## Section` the test-plan format declares required must be enforced by
 `validate_test_plan.py`, or the format doc is lying to the generator that
 reads it.

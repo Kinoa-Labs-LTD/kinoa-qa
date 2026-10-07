@@ -9,6 +9,51 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.6.0 — 2026-10-07
+
+**Two new skills, `/kinoa-qa:mcp-plan` and `/kinoa-qa:mcp-run`, moved in from the shared
+`qa-mcp-skill` copy, where they were `mcp-qa-plan` and `mcp-qa-execute`** (KING-23152). They keep
+their plan rules, case format and report format; what changed is below.
+
+- **New skill `/kinoa-qa:mcp-plan`.** Writes or revises the test plan of a Kinoa MCP story: new
+  `kinoa_*` tools, tested black-box through the deployed stand's `kinoa` connector. Its rules live
+  in `<plugin>/skills/mcp-plan/references/`.
+- **New skill `/kinoa-qa:mcp-run`.** Runs such a plan through the connector and writes the test
+  report. It has no references of its own: it reads `mcp-plan`'s, through relative links inside
+  the plugin.
+- **Plans and reports live in `~/.kinoa-qa/mcp/`.** Plans in `~/.kinoa-qa/mcp/plans/`, reports in
+  `~/.kinoa-qa/mcp/reports/`, outside the plugin folder, so a plugin update keeps them. Both skills
+  create the two folders first and stop, naming the path, when they cannot.
+- **Plans and reports name the references as plain text**, e.g. `mcp-plan references/rules.md`,
+  never as a link into the plugin. A report still links to its plan, `../plans/<plan file>`.
+- **Connector check.** `mcp-run` looks for the connector's `kinoa_*` tools (e.g.
+  `kinoa_system_ping`) before anything else, with no call. With none, it says the `kinoa`
+  connector is missing or not logged in, and stops before it writes a report file.
+- **No zip.** The skills ship with the plugin; no `.skill` file or zip is built or shipped.
+- **`check-layout.sh [<data folder>]`.** `bash <plugin>/skills/mcp-plan/scripts/check-layout.sh`
+  checks the two skill folders and the plans and reports of a data folder, by default
+  `~/.kinoa-qa/mcp/`; it fails, naming the path, when that folder does not exist. It no longer
+  checks links in the data folder or in `evals/`, and the `--dist` flag (check 8) is gone.
+- **Eval fixtures.** The plans and reports the evals use sit in
+  `<plugin>/skills/mcp-run/evals/plans/` and `…/evals/reports/`: the fictional widgets and
+  user-lists examples and the redacted KING-22304 webhooks plan with its report. Every eval of
+  both skills copies them into `<scratch home>/.kinoa-qa/mcp/` and runs the skill with
+  `HOME=<scratch home>`, so the real `~/.kinoa-qa/mcp/` stays untouched; CI runs
+  `check-layout.sh` on them.
+- **`check-distribution.sh <folder>...` guards the skill folders.** CI runs it on
+  `skills/mcp-plan` and `skills/mcp-run`, fixtures included: it fails on an e-mail outside
+  `example.com/org/net` and on a non-fictional uuid used as a game, player or user id, also inside
+  a confirm token. The fictional values are read from the "Fictional values" section of
+  `mcp-plan references/fixed-data.md`. It no longer takes `.skill` or zip archives.
+
+**Rollout:** **update the plugin first** (`/plugin marketplace update kinoa-qa`, then
+`/plugin update kinoa-qa@kinoa-qa`). Then move your plans and reports into
+`~/.kinoa-qa/mcp/plans/` and `~/.kinoa-qa/mcp/reports/`, and then delete only the `mcp-qa-plan`
+and `mcp-qa-execute` folders from `~/.claude/skills` or `<kinoa-mcp checkout>/.claude/skills`,
+wherever you installed them.
+`mcp-qa-ready` is a separate skill and not part of this plugin: keep it where it is, but after the
+move it no longer finds the plans, the reports or the `mcp-plan` references.
+
 ## 0.5.0 — 2026-09-28
 
 **`/kinoa-qa:testplan --from-smoke <SUBTASK-KEY>` pushes a Story's smoke plan to Allure
