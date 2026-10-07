@@ -1,12 +1,12 @@
 {
   "name": "kinoa-qa",
-  "description": "QA plugin: testplan (Jira Story + PRD + OpenSpec specs -> Allure TestOps test cases), smoke-plan and smoke-run (Story smoke test in Jira)",
+  "description": "QA plugin: testplan (Jira Story + PRD + OpenSpec specs -> Allure TestOps test cases), smoke-plan and smoke-run (Story smoke test in Jira), mcp-plan and mcp-run (Kinoa MCP story test plan and run)",
   "owner": { "name": "Dmytro Kapeliukh", "email": "d.kapeliukh@kinoa.io" },
   "plugins": [
     {
       "name": "kinoa-qa",
       "source": "./",
-      "description": "QA skills: /kinoa-qa:testplan (test plan + TestOps case generator), /kinoa-qa:smoke-plan (Story -> Smoke test sub-task) and /kinoa-qa:smoke-run (runs the smoke plan via the Playwright MCP, reports to Jira)",
+      "description": "QA skills: /kinoa-qa:testplan (test plan + TestOps case generator), /kinoa-qa:smoke-plan (Story -> Smoke test sub-task), /kinoa-qa:smoke-run (runs the smoke plan via the Playwright MCP, reports to Jira), /kinoa-qa:mcp-plan (test plan for a Kinoa MCP story) and /kinoa-qa:mcp-run (runs that plan through the kinoa connector, writes the test report)",
       "homepage": "https://github.com/Kinoa-Labs-LTD/kinoa-qa",
       "author": { "name": "Dmytro Kapeliukh", "email": "d.kapeliukh@kinoa.io" }
     }

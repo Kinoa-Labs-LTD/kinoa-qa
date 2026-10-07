@@ -1,8 +1,8 @@
 # test_skill_docs.py
 """The skill's markdown is its implementation (CLAUDE.md): a reference that misdescribes the
 validator is a defect. These tests keep the retired taxonomy vocabulary out of the docs an
-agent reads, keep every fenced plugin command runnable and every kinoa-test-automation-only
-command or path labelled as such, and keep the evals and their fixtures loadable and
+agent reads, keep every fenced plugin command runnable and every repo-only command (of
+kinoa-test-automation or kinoa-mcp) and kinoa-test-automation path labelled as such, and keep the evals and their fixtures loadable and
 consistent with the scopes the validator accepts."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -79,17 +79,23 @@ def rel(path):
 
 
 def plugin_skill_docs():
-    """Every skills/*/SKILL.md and every file under skills/shared/."""
+    """Every skills/*/SKILL.md, every file under skills/shared/, and mcp-plan's references, which
+    mcp-run reads as its own."""
     paths = sorted(glob.glob(os.path.join(ROOT, "skills", "*", "SKILL.md")))
     paths += sorted(glob.glob(os.path.join(ROOT, "skills", "shared", "**", "*"), recursive=True))
+    paths += sorted(glob.glob(os.path.join(ROOT, "skills", "mcp-plan", "references", "**", "*"),
+                              recursive=True))
     return [p for p in paths if os.path.isfile(p)]
 
 
 _FENCE = re.compile(r"^\s*(```|~~~)")
-_PLUGIN_COMMAND = re.compile(r"\b(?:node|python3)\s+<plugin>/(\S+)")
+_PLUGIN_COMMAND = re.compile(r"\b(?:node|python3|bash)\s+<plugin>/(\S+)")
 _MAIN_BLOCK = 'if __name__ == "__main__":'
 _REPO_COMMAND = re.compile(r"^(?:npx |git |node scripts/)")
 REPO = "kinoa-test-automation"
+# The repos a fenced repo-only command may be labelled with: kinoa-test-automation for the smoke
+# skills, kinoa-mcp for mcp-plan's branch check of the server source.
+REPO_LABELS = (REPO, "kinoa-mcp")
 
 
 def fenced_lines(text):
@@ -104,7 +110,7 @@ def fenced_lines(text):
 
 
 def missing_command_targets(text, root):
-    """Every fenced `node|python3 <plugin>/<path>` whose <path> is not a file under `root`, or is a
+    """Every fenced `node|python3|bash <plugin>/<path>` whose <path> is not a file under `root`, or is a
     `.py` without a `__main__` block, as [(line number, path, reason)]."""
     hits = []
     for number, line, _ in fenced_lines(text):
@@ -122,15 +128,16 @@ def missing_command_targets(text, root):
 
 
 def unlabelled_repo_commands(text):
-    """Every fenced `npx `/`git `/`node scripts/` line with no `kinoa-test-automation` on the three
-    non-blank lines above its opening fence, as [(line number, line)]."""
+    """Every fenced `npx `/`git `/`node scripts/` line with no repo label (`kinoa-test-automation`
+    or `kinoa-mcp`, REPO_LABELS) on the three non-blank lines above its opening fence, as
+    [(line number, line)]."""
     lines = text.splitlines()
     hits = []
     for number, line, opening in fenced_lines(text):
         if not _REPO_COMMAND.match(line.strip()):
             continue
         above = [l for l in lines[:opening - 1] if l.strip()][-3:]
-        if not any(REPO in l for l in above):
+        if not any(label in l for l in above for label in REPO_LABELS):
             hits.append((number, line.strip()))
     return hits
 
@@ -193,12 +200,15 @@ class StaleHitsChecker(unittest.TestCase):
 
 
 NEW_SKILL_DOCS = ("skills/smoke-plan/SKILL.md", "skills/smoke-run/SKILL.md",
-                  "skills/shared/step-outcome-contract.md")
+                  "skills/shared/step-outcome-contract.md",
+                  "skills/mcp-plan/SKILL.md", "skills/mcp-run/SKILL.md",
+                  "skills/mcp-plan/references/rules.md", "skills/mcp-plan/references/stand-facts.md")
 
 
 def assert_scans_every_skill(case, paths):
-    """`paths` holds testplan's and the smoke skills' SKILL.md, the shared contract, and every
-    skills/*/SKILL.md on disk."""
+    """`paths` holds testplan's, the smoke skills' and the mcp skills' SKILL.md, the shared
+    contract, mcp-plan's references (which mcp-run reads too), and every skills/*/SKILL.md on
+    disk."""
     scanned = {rel(p) for p in paths}
     on_disk = {rel(p) for p in glob.glob(os.path.join(ROOT, "skills", "*", "SKILL.md"))}
     for expected in sorted({TESTPLAN_SKILL} | set(NEW_SKILL_DOCS) | on_disk):
@@ -305,7 +315,8 @@ class FencedCommandsExistChecker(unittest.TestCase):
         os.makedirs(scripts)
         for name, body in (("ok.py", 'def main():\n    pass\n\nif __name__ == "__main__":\n    main()\n'),
                            ("nomain.py", "def main():\n    pass\n"),
-                           ("tool.mjs", "console.log(1);\n")):
+                           ("tool.mjs", "console.log(1);\n"),
+                           ("tool.sh", "#!/usr/bin/env bash\necho ok\n")):
             with open(os.path.join(scripts, name), "w", encoding="utf-8") as f:
                 f.write(body)
 
@@ -331,6 +342,13 @@ class FencedCommandsExistChecker(unittest.TestCase):
     def test_an_indented_fence_under_a_list_item_is_checked(self):
         text = "1. Post it:\n\n   ```bash\n   node <plugin>/skills/x/scripts/gone.mjs a\n   ```\n"
         self.assertEqual([4], [h[0] for h in missing_command_targets(text, self.root)])
+
+    def test_a_fenced_bash_command_is_checked_like_node_and_python3(self):
+        text = ("Run `bash <plugin>/skills/x/scripts/prose.sh` in prose.\n```bash\n"
+                "bash <plugin>/skills/x/scripts/tool.sh ~/.kinoa-qa/mcp\n"
+                "bash <plugin>/skills/x/scripts/missing.sh\n```\n")
+        self.assertEqual([(4, "skills/x/scripts/missing.sh", "no such file")],
+                         missing_command_targets(text, self.root))
 
 
 class FencedCommandsExist(unittest.TestCase):
@@ -360,9 +378,22 @@ class RepoOnlyCommandsChecker(unittest.TestCase):
         too_far = "Inside kinoa-test-automation only:\none\ntwo\nthree\n```bash\nnpx eslint x\n```\n"
         self.assertEqual([(6, "npx eslint x")], unlabelled_repo_commands(too_far))
 
+    def test_a_git_fence_labelled_kinoa_mcp_passes(self):
+        text = ("If this chat can see the\nkinoa-mcp source, run one check first:\n\n```bash\n"
+                "git -C <repo root> fetch --quiet\n```\n")
+        self.assertEqual([], unlabelled_repo_commands(text))
+
+    def test_a_git_fence_with_kinoa_mcp_too_far_above_or_no_label_fails(self):
+        too_far = ("The kinoa-mcp source.\none\ntwo\nthree\n```bash\n"
+                   "git -C <repo root> fetch --quiet\n```\n")
+        self.assertEqual([(6, "git -C <repo root> fetch --quiet")],
+                         unlabelled_repo_commands(too_far))
+        unlabelled = "If this chat can see the source:\n```bash\ngit -C <repo root> fetch\n```\n"
+        self.assertEqual([(3, "git -C <repo root> fetch")], unlabelled_repo_commands(unlabelled))
+
 
 class RepoOnlyCommandsAreLabelled(unittest.TestCase):
-    def test_every_repo_command_in_the_docs_names_kinoa_test_automation(self):
+    def test_every_repo_command_in_the_docs_names_its_repo(self):
         docs = agent_docs()
         assert_scans_every_skill(self, docs)
         for path in docs:
@@ -517,7 +548,7 @@ SMOKE_PUSH_STALE = ("planned (KING-23102)", "(KING-23102), not built",
 
 
 def fenced_plugin_commands(text):
-    """Every `<plugin>/…` path a fenced `node|python3` command runs, in order."""
+    """Every `<plugin>/…` path a fenced `node|python3|bash` command runs, in order."""
     return [m.group(1) for _, line, _ in fenced_lines(text)
             for m in _PLUGIN_COMMAND.finditer(line)]
 
@@ -703,6 +734,84 @@ class SmokePushDocsMatchTheScripts(unittest.TestCase):
         for heading in ("`## Preconditions`", "`## Steps`", "`## Open questions`"):
             with self.subTest(heading=heading):
                 self.assertIn(heading, layout)
+
+
+MCP_PLAN_USAGE = "Usage: `/kinoa-qa:mcp-plan`"
+MCP_RUN_USAGE = "Usage: `/kinoa-qa:mcp-run`"
+MCP_MIGRATION = "Moving from the zip copy of the MCP skills"
+CHECK_LAYOUT = "skills/mcp-plan/scripts/check-layout.sh"
+
+
+class McpSkillsAreDocumented(unittest.TestCase):
+    """The README documents mcp-plan and mcp-run, their prerequisites, the data folder, the
+    layout check and the move from the zip copy, as the skills and CHANGELOG 0.6.0 state them."""
+
+    def setUp(self):
+        self.readme = read_flat("README.md")
+
+    def test_the_intro_lists_five_skills_with_their_usage_anchors(self):
+        intro = self.readme[:self.readme.index("## Prerequisites")]
+        self.assertIn("QA plugin for Claude Code. Five skills:", intro)
+        for anchor in ("(#usage-kinoa-qamcp-plan)", "(#usage-kinoa-qamcp-run)"):
+            with self.subTest(anchor=anchor):
+                self.assertIn(anchor, intro)
+
+    def test_both_usage_headings_exist(self):
+        for heading in (MCP_PLAN_USAGE, MCP_RUN_USAGE):
+            with self.subTest(heading=heading):
+                self.assertIn("## " + heading + " ", self.readme)
+
+    def test_the_prerequisites_have_the_kinoa_connector_and_bash_and_perl_rows(self):
+        prerequisites = section(self.readme, "Prerequisites")
+        for phrase in ("| **`kinoa` connector** | `mcp-run` — required |",
+                       "**Checked at the start**: with no `kinoa_*` tool, `mcp-run` says the "
+                       "`kinoa` connector is missing or not logged in and stops, with no report "
+                       "file",
+                       "| **`kinoa` connector** | `mcp-plan` — optional |",
+                       "`not done: no connector in this chat`",
+                       "| **bash** and **perl** | `mcp-plan`, `mcp-run` — required |",
+                       "`check-layout.sh`"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, prerequisites)
+
+    def test_each_usage_section_names_the_data_folder_and_the_layout_check(self):
+        for heading in (MCP_PLAN_USAGE, MCP_RUN_USAGE):
+            self.assertIn("## " + heading + " ", self.readme)
+            body = section(self.readme, heading)
+            for phrase in ("~/.kinoa-qa/mcp/plans/", "~/.kinoa-qa/mcp/reports/", "check-layout.sh"):
+                with self.subTest(heading=heading, phrase=phrase):
+                    self.assertIn(phrase, body)
+
+    def test_the_layout_check_is_a_fenced_runnable_command_with_its_data_folder_argument(self):
+        with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn(CHECK_LAYOUT, fenced_plugin_commands(text))
+        self.assertIn("check-layout.sh [<data folder>]", self.readme)
+        self.assertIn("defaults to `~/.kinoa-qa/mcp/`", self.readme)
+
+    def test_the_migration_moves_the_data_and_deletes_only_the_two_folders(self):
+        self.assertIn("## " + MCP_MIGRATION + " ", self.readme)
+        migration = section(self.readme, MCP_MIGRATION)
+        for phrase in ("~/.kinoa-qa/mcp/plans/", "~/.kinoa-qa/mcp/reports/",
+                       "mcp-qa-plan/docs/plans/", "mcp-qa-execute/docs/reports/",
+                       "delete only the `mcp-qa-plan` and `mcp-qa-execute` folders",
+                       "`~/.claude/skills`", "`<kinoa-mcp checkout>/.claude/skills`"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, migration)
+
+    def test_the_migration_warns_that_mcp_qa_ready_no_longer_finds_its_inputs(self):
+        self.assertIn("## " + MCP_MIGRATION + " ", self.readme)
+        migration = section(self.readme, MCP_MIGRATION)
+        self.assertIn("`mcp-qa-ready` is a separate skill and not part of this plugin", migration)
+        self.assertIn("no longer finds the plans, the reports or the `mcp-plan` references",
+                      migration)
+
+    def test_the_install_check_names_all_five_commands(self):
+        install = section(self.readme, "Install")
+        for command in ("/kinoa-qa:testplan", "/kinoa-qa:smoke-plan", "/kinoa-qa:smoke-run",
+                        "/kinoa-qa:mcp-plan", "/kinoa-qa:mcp-run"):
+            with self.subTest(command=command):
+                self.assertIn(command, install)
 
 
 if __name__ == "__main__":

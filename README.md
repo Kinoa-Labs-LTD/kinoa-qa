@@ -1,6 +1,6 @@
 # kinoa-qa
 
-QA plugin for Claude Code. Three skills:
+QA plugin for Claude Code. Five skills:
 
 - **`/kinoa-qa:testplan`** turns a Jira Story (+ optional Confluence PRD + optional linked
   Figma mockups + optional service-repo OpenSpec specs) into a validator-checked QA **Test
@@ -14,15 +14,23 @@ QA plugin for Claude Code. Three skills:
   through the Playwright MCP, and reports whether the feature is **live** and whether it
   **conforms** — as a comment on the sub-task, with the evidence attached, plus a published
   artifact. See [Usage: `/kinoa-qa:smoke-run`](#usage-kinoa-qasmoke-run).
+- **`/kinoa-qa:mcp-plan`** writes or revises the **test plan of a Kinoa MCP story** — a story
+  whose deliverable is new `kinoa_*` MCP tools, tested black-box through the deployed stand's
+  `kinoa` connector — into `~/.kinoa-qa/mcp/plans/`. See
+  [Usage: `/kinoa-qa:mcp-plan`](#usage-kinoa-qamcp-plan).
+- **`/kinoa-qa:mcp-run`** runs such a plan against the deployed stand through the `kinoa`
+  connector, one case at a time, and writes the **test report** into `~/.kinoa-qa/mcp/reports/`.
+  See [Usage: `/kinoa-qa:mcp-run`](#usage-kinoa-qamcp-run).
 
 A smoke plan is a Jira sub-task, not a `test-plan.md`. `testplan` reads one only when you ask
 it to push that sub-task to TestOps as one case, with `/kinoa-qa:testplan --from-smoke
 <SUBTASK-KEY>` — see [Pushing a smoke sub-task to TestOps](#pushing-a-smoke-sub-task-to-testops).
 
-**Presenting this to someone?** Two guide pages tell the story for people who will not open this
+**Presenting this to someone?** Three guide pages tell the story for people who will not open this
 repo: the [kinoa-qa plugin guide](https://claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S) (the whole
 plugin) and the [smoke testing guide](https://claude.ai/code/artifact/a92e7012-7787-46ba-8404-19a9b2a62cc7)
-(the smoke pair). Their sources are in [`docs/guides/`](docs/guides/README.md); this README stays
+(the smoke pair), plus the [MCP skills guide](https://claude.ai/artifact/AxAcqMXs3qA5psYGuTJxzW)
+(`mcp-plan` and `mcp-run`). Their sources are in [`docs/guides/`](docs/guides/README.md); this README stays
 the reference you use mid-task.
 
 Standalone and decoupled from `kinoa-dev`: it depends only on the artifacts kinoa-dev
@@ -45,6 +53,9 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 | **Artifact tool** | `smoke-run` | Publishing the readable mirror of every run report (one artifact per plan, updated in place) | Claude Code's built-in `Artifact` tool, not an MCP server. Not checked at the start. |
 | **Jira REST (attachments)** | `testplan` — optional, Step A | Reading image attachments on the Story | Without `JIRA_EMAIL` + `JIRA_API_TOKEN` the run continues and the header records `images: none (jira credentials not set)`. |
 | **Jira REST (remote link)** | `testplan --from-smoke` — optional, after Step E | Writing the sub-task's one `Allure TestOps case <id>` remote link (`jira_remote_link.py`), on your yes at the gate | Without `JIRA_EMAIL` + `JIRA_API_TOKEN`, or when Jira refuses the write, the pushed case stays and `testplan` prints the link title and URL for you to add by hand. See [Jira API token](#jira-api-token). |
+| **`kinoa` connector** | `mcp-run` — required | The deployed stand's MCP server (HTTP `/mcp`, OAuth login): the plan's cases call the `kinoa_*` tools through it | **Checked at the start**: with no `kinoa_*` tool, `mcp-run` says the `kinoa` connector is missing or not logged in and stops, with no report file. It looks the tools up in the session's tool list (e.g. `kinoa_system_ping`) and calls none. It never falls back to the local stdio server. See [The `kinoa` connector](#the-kinoa-connector-for-the-mcp-skills). |
+| **`kinoa` connector** | `mcp-plan` — optional | Comparing the tools the story names with the stand's `tools/list`, before the plan is written | The plan's header decisions say `not done: no connector in this chat`, and the run's inventory cases check the tools instead. `tools/list` then comes from the server source when it is open (`skills/mcp-plan/references/plan-template.md`, "Without a connector"). |
+| **bash** and **perl** | `mcp-plan`, `mcp-run` — required | `check-layout.sh`, which both skills run on the skill folders and the data folder (bash 3.2 or newer, `perl -CSD`, plus awk, sed and grep) | The layout check cannot run. macOS and most Linux systems ship both. |
 | **Jira REST (`JIRA_EMAIL` + `JIRA_API_TOKEN`)** | `smoke-run` — required | `jiraReport.mjs` posts the run report as a comment; `jiraAttach.mjs` uploads the evidence screenshots | **Checked at the start**: `smoke-run` names the missing variable and stops. A `jiraReport.mjs … --dry-run` rehearsal needs neither. See [Jira API token](#jira-api-token). |
 
 `smoke-run`'s two scripts are Node (18 or newer) and are run as
@@ -52,6 +63,14 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 
 OpenSpec specs are read with the `gh` CLI, not an MCP server; a repo with no OpenSpec file
 is the ordinary path, not a degradation.
+
+### The `kinoa` connector, for the MCP skills
+
+The `kinoa` connector is the deployed stand's own MCP server: HTTP, at the stand's `/mcp`, with an
+OAuth login. The plugin does not declare it — add it in your Claude Code MCP settings with the
+`claude mcp add --transport http kinoa …` command from the kinoa-mcp repo's README, then log in
+to it through `/mcp`. Both skills call it the `kinoa` connector; `mcp-run` finds it by its
+`kinoa_*` tools.
 
 ### Playwright MCP, for smoke-run
 
@@ -122,11 +141,13 @@ rather than GitHub — and you can equally well write it by hand:
 For a local checkout the source is `{ "source": "directory", "path": "/path/to/kinoa-qa" }`.
 
 Verify with `/plugin` — `kinoa-qa` should be listed as enabled, and `/kinoa-qa:testplan`,
-`/kinoa-qa:smoke-plan` and `/kinoa-qa:smoke-run` should complete as commands.
+`/kinoa-qa:smoke-plan`, `/kinoa-qa:smoke-run`, `/kinoa-qa:mcp-plan` and `/kinoa-qa:mcp-run`
+should complete as commands.
 
 ## Configure
 
-`config.json` and `services.json` are `testplan`'s; the smoke skills read neither.
+`config.json` and `services.json` are `testplan`'s; the smoke skills and the MCP skills read
+neither.
 
 `config.json` ships with the three Allure custom-field defaults **empty on purpose**, so no
 run inherits another team's values by accident:
@@ -520,6 +541,128 @@ See `skills/smoke-run/SKILL.md` for the full workflow.
 | `Kinoa Team is required` | Jira mandates `customfield_10131` on the sub-task. `smoke-plan` reads it off a sibling sub-task on the same Story, never guesses it |
 | Jira body renders as literal `h2.` | Wiki markup in a Markdown field — bodies must be Markdown |
 | `requires re-authorization` (Atlassian) | The MCP token expired. Reconnect via `/mcp`, then restart the session |
+
+## Usage: `/kinoa-qa:mcp-plan`
+
+```
+/kinoa-qa:mcp-plan <JIRA URL of the story>
+```
+
+**Use it when** a Kinoa MCP story — new `kinoa_*` tools — needs a test plan, or when a run has
+reported and the plan needs its next version ("v2", "fold the report findings into the plan").
+The plan is written for a separate execution chat, `/kinoa-qa:mcp-run`, and has to run there from
+the file alone.
+
+**What it does**
+
+1. If the chat can see the kinoa-mcp source, checks first that it is on `develop` or `master`
+   and not behind its remote, and stops on any other line: only you pull or switch the branch.
+2. Creates the data folder and looks for the story's earlier plans and reports in
+   `~/.kinoa-qa/mcp/plans/` and `~/.kinoa-qa/mcp/reports/`. With a plan there, it writes the next
+   version as a new file and keeps the old case ids; the earlier reports' findings, notes and
+   plan defects are folded in.
+3. Asks the whole interview in one message: the fixed test data (no default), the story and its
+   tool names, the artifact policy, delete semantics, irreversible tools, checkpoints, replicas
+   and write mode, which roles may call which tool, and the story's known issues.
+4. With the `kinoa` connector in the chat, compares the story's tools with the stand's
+   `tools/list` and shows you every difference.
+5. Runs `check-layout.sh`, then writes the plan in pieces: CRUD, validations, role-based access,
+   and the grey-box layer from the source last. Part A runs unattended; Part B holds the role
+   checkpoints.
+
+It changes no file of the plugin: it adds only its new plan to `~/.kinoa-qa/mcp/plans/`, and
+lessons about the rules go into its hand-over as **Rule change proposals**.
+
+### The data folder
+
+Plans and reports live outside the plugin, so a plugin update keeps them:
+
+| What | Folder | Written by | Read by |
+|---|---|---|---|
+| Test plans | `~/.kinoa-qa/mcp/plans/` | `mcp-plan` | `mcp-run`, and `mcp-plan` for the next version |
+| Test reports | `~/.kinoa-qa/mcp/reports/` | `mcp-run` | `mcp-plan`, and `mcp-run` for the baseline |
+
+Both skills create the two folders on first use (`mkdir -p ~/.kinoa-qa/mcp/plans
+~/.kinoa-qa/mcp/reports`), and stop, naming the path, when one cannot be created or written. A
+plan is `<KEY>-<domain>-test-plan.md`, or `…-test-plan-v<N>.md` for version `N`; a report is
+`<KEY>-<domain>-test-report-<STAMP>.md`, one file per run. Plans and reports name the rules as
+plain text, e.g. `mcp-plan references/rules.md`, never as a link into the plugin. See
+`skills/mcp-plan/references/file-layout.md`.
+
+### Checking the layout
+
+`check-layout.sh [<data folder>]` checks the two skill folders and the plans and reports of a
+data folder, which defaults to `~/.kinoa-qa/mcp/`. Both skills run it themselves; to run it by
+hand:
+
+```bash
+bash <plugin>/skills/mcp-plan/scripts/check-layout.sh                 # ~/.kinoa-qa/mcp/
+bash <plugin>/skills/mcp-plan/scripts/check-layout.sh <data folder>   # another folder with plans/ and reports/
+```
+
+It prints one `PROBLEM` line per failure and exits 1 on any, 2 on a usage error, and fails,
+naming the path, when the data folder does not exist. `LEGACY`, `REDACTED` and `OLDER` lines are
+information, not failures. It does not check links in the data folder or in an `evals/` folder.
+
+See `skills/mcp-plan/SKILL.md` for the full workflow.
+
+## Usage: `/kinoa-qa:mcp-run`
+
+```
+/kinoa-qa:mcp-run <KEY or plan file>
+```
+
+**Use it when** a plan from `mcp-plan` is to be run against the deployed stand: a first run, a
+re-run after fixes, a regression check, a partial run of named cases, Part B only, or a run
+resumed after a pause ("continue", or the name of the report file). It also writes the report of
+a run from a captured transcript, and compares a run with the previous report.
+
+**Start checks.** It reads `rules.md` from `mcp-plan`'s references, then looks for the
+connector's `kinoa_*` tools in the session's tool list, without calling one. With none, it says
+the `kinoa` connector is missing or not logged in, writes no report file and stops — add the
+connector or log in to it ([The `kinoa` connector](#the-kinoa-connector-for-the-mcp-skills)).
+A plan whose §0 is missing fixed data is blocked before case 1 too, with no report file.
+
+**What it does** — picks the plan (the file you name, else the highest version in
+`~/.kinoa-qa/mcp/plans/`), picks the baseline report from `~/.kinoa-qa/mcp/reports/`, asks for
+the run reason if you did not give it, and creates
+`~/.kinoa-qa/mcp/reports/<KEY>-<domain>-test-report-<STAMP>.md` before case 1. Then it runs the
+preflight, Part A to completion, and Part B one role checkpoint at a time, restoring the roles at
+the end; every response is written into the report at the call. Before the report is finished it
+runs `check-layout.sh` ([Checking the layout](#checking-the-layout)). The hand-over gives the
+overall status, each `RED` item and the **Rule change proposals**.
+
+**It runs against the deployed stand.** It creates and changes entities through the connector,
+and Part B changes your roles through the admin role API, then restores them. Its rules, and
+every reference it reads, are `mcp-plan`'s, in `<plugin>/skills/mcp-plan/references/`; it has
+none of its own.
+
+See `skills/mcp-run/SKILL.md` for the full workflow.
+
+### Moving from the zip copy of the MCP skills
+
+Before 0.6.0 these skills were shared as a zip, installed as the folders `mcp-qa-plan` and
+`mcp-qa-execute` in `~/.claude/skills` or in `<kinoa-mcp checkout>/.claude/skills`, with the
+plans in `mcp-qa-plan/docs/plans/` and the reports in `mcp-qa-execute/docs/reports/`. To move:
+
+1. **Update the plugin first** ([Versions and updating](#versions-and-updating)), so
+   `/kinoa-qa:mcp-plan` and `/kinoa-qa:mcp-run` are there.
+2. **Move your plans and reports** into `~/.kinoa-qa/mcp/plans/` and `~/.kinoa-qa/mcp/reports/`.
+   With `<skills>` the folder you installed the zip copy in:
+
+   ```bash
+   mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports
+   mv <skills>/mcp-qa-plan/docs/plans/*-test-plan*.md ~/.kinoa-qa/mcp/plans/
+   mv <skills>/mcp-qa-execute/docs/reports/*-test-report-*.md ~/.kinoa-qa/mcp/reports/
+   ```
+
+3. **Then delete only the `mcp-qa-plan` and `mcp-qa-execute` folders**, from `~/.claude/skills`
+   or from `<kinoa-mcp checkout>/.claude/skills`, wherever you installed them. Leave every other
+   folder there as it is.
+
+`mcp-qa-ready` is a separate skill and not part of this plugin: keep it where it is, but after
+the move it no longer finds the plans, the reports or the `mcp-plan` references, until it moves
+too.
 
 ## Versions and updating
 
