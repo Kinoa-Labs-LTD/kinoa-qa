@@ -8,13 +8,15 @@ committed so they are versioned with the skills they describe. The published cop
 | --- | --- | --- |
 | `qa-plugin-guide.html` | [claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S](https://claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S) | The whole plugin: the three skills, the `testplan` pipeline, the smoke/e2e taxonomy, honest status |
 | `smoke-testing-guide.html` | [claude.ai/code/artifact/a92e7012…](https://claude.ai/code/artifact/a92e7012-7787-46ba-8404-19a9b2a62cc7) | Onboarding a QA to `smoke-plan` and `smoke-run`, or presenting the smoke flow to the team |
+| `mcp-skills-guide.html` | [claude.ai/artifact/AxAcqMXs3qA5psYGuTJxzW](https://claude.ai/artifact/AxAcqMXs3qA5psYGuTJxzW) | Using `mcp-plan` and `mcp-run`: the plan → run → report loop, the `kinoa` connector, the data folder, moving from the zip copy |
 
-The two pages link to each other. Both live pages are shared with the Kinoa organization.
+The plugin guide and the smoke testing guide link to each other; the MCP skills guide stands alone.
+All three live pages are shared with the Kinoa organization.
 
 ## Viewing a page
 
 Open the file in a browser. Each page is self-contained apart from web fonts: no build step and no
-scripts. Both adapt to light and dark.
+scripts. Every page adapts to light and dark.
 
 ## Changing a page
 

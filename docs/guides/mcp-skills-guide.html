@@ -1,0 +1,361 @@
+<title>MCP Plan and Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; the plan → run → report loop is the spine, everything else hangs off it. */
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5a6876;
+  --line: #d9e0e6;
+  --accent: #1d5fd0;
+  --accent-soft: #e6eefb;
+  --code-bg: #eef2f5;
+  --ok: #1d7a46;
+  --ok-soft: #e3f3ea;
+  --bad: #b3261e;
+  --bad-soft: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-soft: #fbf1dc;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #18202a; --ink: #e3e9ef; --muted: #9aa8b5; --line: #2b3643;
+    --accent: #7aa7ff; --accent-soft: #1c2b45; --code-bg: #1f2833;
+    --ok: #6fcf97; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1d1b;
+    --warn: #f2c46d; --warn-soft: #3a2f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #18202a; --ink: #e3e9ef; --muted: #9aa8b5; --line: #2b3643;
+  --accent: #7aa7ff; --accent-soft: #1c2b45; --code-bg: #1f2833;
+  --ok: #6fcf97; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1d1b;
+  --warn: #f2c46d; --warn-soft: #3a2f17;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 0 64px;
+}
+.wrap { max-width: 980px; margin: 0 auto; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+:not(pre) > code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Header */
+header { padding-block: 48px 28px; display: grid; gap: 14px; border-bottom: 1px solid var(--line); }
+.lede { font-size: 1.2rem; color: var(--muted); max-width: 62ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--font-mono); font-size: 0.78rem; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.chip.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+section { padding-block: 44px 0; display: grid; gap: 18px; }
+section > .head { display: grid; gap: 6px; }
+
+/* The loop */
+.loop {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.node { padding: 18px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; position: relative; }
+.node + .node { border-left: 1px solid var(--line); }
+.node .k { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.node .t { font-family: var(--font-display); font-weight: 700; font-size: 1.02rem; }
+.node .d { font-size: 0.92rem; color: var(--muted); }
+.node.skill { background: var(--accent-soft); }
+.node.skill .t { color: var(--accent); }
+.node + .node::before {
+  content: "→"; position: absolute; left: -9px; top: 18px; width: 18px; height: 18px;
+  display: grid; place-items: center; font-size: 13px; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 50%;
+}
+.loopback {
+  font-size: 0.95rem; color: var(--muted); display: flex; gap: 10px; align-items: baseline;
+  padding: 10px 14px; border: 1px dashed var(--line); border-radius: 8px;
+}
+.loopback b { color: var(--ink); font-weight: 600; }
+
+/* Skill cards */
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 22px; display: grid; gap: 14px; align-content: start; min-width: 0;
+}
+.card .who { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.card .role { font-size: 0.95rem; color: var(--muted); }
+
+/* Command blocks */
+.cmd { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--code-bg); min-width: 0; }
+.cmd pre { margin: 0; padding: 10px 12px; overflow-x: auto; flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.55; }
+.cmd .c { color: var(--muted); }
+
+/* Steps */
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: s; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; }
+ol.steps > li::before {
+  content: counter(s); font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--accent); color: var(--accent); margin-top: 1px;
+}
+ol.steps b { font-weight: 600; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 11px 14px; vertical-align: top; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.need { font-family: var(--font-mono); font-size: 0.74rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.need.req { background: var(--bad-soft); color: var(--bad); }
+.need.opt { background: var(--warn-soft); color: var(--warn); }
+
+/* Statuses */
+.statuses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.status { border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; border: 1px solid var(--line); background: var(--surface); }
+.status .s { font-family: var(--font-mono); font-weight: 600; font-size: 0.95rem; }
+.status.green { border-left: 4px solid var(--ok); } .status.green .s { color: var(--ok); }
+.status.red { border-left: 4px solid var(--bad); } .status.red .s { color: var(--bad); }
+.status.blocked { border-left: 4px solid var(--warn); } .status.blocked .s { color: var(--warn); }
+.status p { font-size: 0.92rem; color: var(--muted); }
+
+.parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.part { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 6px; }
+.part p { font-size: 0.95rem; color: var(--muted); }
+
+.callout {
+  border: 1px solid var(--warn); background: var(--warn-soft); color: var(--ink);
+  border-radius: 10px; padding: 14px 16px; font-size: 0.96rem;
+}
+.callout b { color: var(--warn); }
+
+footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+
+@media (max-width: 820px) {
+  .loop { grid-template-columns: minmax(0, 1fr); }
+  .node + .node { border-left: 0; border-top: 1px solid var(--line); }
+  .node + .node::before { content: "↓"; left: 16px; top: -9px; }
+  .pair, .parts { grid-template-columns: minmax(0, 1fr); }
+  .statuses { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">kinoa-qa plugin · 0.6.0</span>
+    <h1>MCP Plan and Run</h1>
+    <p class="lede">Two QA skills for stories that ship new <code>kinoa_*</code> MCP tools. <code>mcp-plan</code> writes a black-box test plan. <code>mcp-run</code> runs it against the deployed stand through the <code>kinoa</code> connector and writes the report.</p>
+    <div class="meta">
+      <span class="chip accent">/kinoa-qa:mcp-plan</span>
+      <span class="chip accent">/kinoa-qa:mcp-run</span>
+      <span class="chip">data: ~/.kinoa-qa/mcp/</span>
+      <span class="chip">source: docs/guides/mcp-skills-guide.html</span>
+    </div>
+  </header>
+
+  <section id="loop" aria-labelledby="loop-h">
+    <div class="head">
+      <span class="eyebrow">How it fits together</span>
+      <h2 id="loop-h">One loop: plan, run, report, next plan</h2>
+    </div>
+    <div class="loop" role="list">
+      <div class="node" role="listitem">
+        <span class="k">Input</span>
+        <span class="t">Jira story</span>
+        <span class="d">A story whose deliverable is new <code>kinoa_*</code> tools.</span>
+      </div>
+      <div class="node skill" role="listitem">
+        <span class="k">Skill</span>
+        <span class="t">mcp-plan</span>
+        <span class="d">Interviews you once, then writes the plan in pieces.</span>
+      </div>
+      <div class="node" role="listitem">
+        <span class="k">File</span>
+        <span class="t">Test plan</span>
+        <span class="d"><code>~/.kinoa-qa/mcp/plans/</code><br><code>&lt;KEY&gt;-&lt;domain&gt;-test-plan-v&lt;N&gt;.md</code></span>
+      </div>
+      <div class="node skill" role="listitem">
+        <span class="k">Skill</span>
+        <span class="t">mcp-run</span>
+        <span class="d">Calls the tools through the <code>kinoa</code> connector, case by case.</span>
+      </div>
+      <div class="node" role="listitem">
+        <span class="k">File</span>
+        <span class="t">Test report</span>
+        <span class="d"><code>~/.kinoa-qa/mcp/reports/</code><br><code>&lt;KEY&gt;-&lt;domain&gt;-test-report-&lt;STAMP&gt;.md</code></span>
+      </div>
+    </div>
+    <p class="loopback"><span aria-hidden="true">↺</span><span><b>The report feeds the next plan version.</b> Run <code>mcp-plan</code> again after a run, and it folds the findings, notes and plan defects into <code>-v2</code>, keeping the old case ids. The next <code>mcp-run</code> uses the newest report as its baseline.</span></p>
+  </section>
+
+  <section id="skills" aria-labelledby="skills-h">
+    <div class="head">
+      <span class="eyebrow">The two skills</span>
+      <h2 id="skills-h">What each one is for</h2>
+    </div>
+    <div class="pair">
+      <article class="card">
+        <div class="who"><h3>mcp-plan</h3><span class="role">writes the plan</span></div>
+        <div class="cmd"><pre>/kinoa-qa:mcp-plan &lt;Jira URL of the story&gt;</pre></div>
+        <p>Use it when an MCP story needs a test plan, or when a run has reported and the plan needs its next version ("fold the report findings into the plan").</p>
+        <p class="role">The plan has to work in a separate chat from the file alone. It never edits the plugin: it only adds its new plan to the data folder.</p>
+      </article>
+      <article class="card">
+        <div class="who"><h3>mcp-run</h3><span class="role">runs it and reports</span></div>
+        <div class="cmd"><pre>/kinoa-qa:mcp-run &lt;KEY or plan file&gt;</pre></div>
+        <p>Use it for a first run, a re-run after fixes, a regression check, a partial run of named cases, Part B only, or to resume a paused run ("continue").</p>
+        <p class="role">It runs against the deployed stand: it creates and changes real entities, and in Part B it changes your roles, then restores them.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="setup" aria-labelledby="setup-h">
+    <div class="head">
+      <span class="eyebrow">Before you start</span>
+      <h2 id="setup-h">What you need</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What</th><th>For</th><th>Why</th><th>If it is missing</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>kinoa-qa plugin</b>, 0.6.0 or newer</td>
+            <td><span class="need req">both</span></td>
+            <td>The skills ship in the plugin.</td>
+            <td>The <code>/kinoa-qa:mcp-*</code> commands do not exist.</td>
+          </tr>
+          <tr>
+            <td><b><code>kinoa</code> connector</b> (the stand's MCP server, HTTP <code>/mcp</code>, OAuth)</td>
+            <td><span class="need req">mcp-run</span></td>
+            <td>Every case calls a <code>kinoa_*</code> tool through it.</td>
+            <td>Checked at start. It says the connector is missing or not logged in, writes no report and stops.</td>
+          </tr>
+          <tr>
+            <td><b><code>kinoa</code> connector</b></td>
+            <td><span class="need opt">mcp-plan</span></td>
+            <td>Compares the story's tools with the stand's <code>tools/list</code>.</td>
+            <td>The plan records <code>not done: no connector in this chat</code>, and the run's inventory cases check the tools instead.</td>
+          </tr>
+          <tr>
+            <td><b>bash</b> and <b>perl</b></td>
+            <td><span class="need req">both</span></td>
+            <td>Both skills run <code>check-layout.sh</code>.</td>
+            <td>The layout check cannot run.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose" style="display:grid; gap:10px">
+      <p>Install or update the plugin:</p>
+      <div class="cmd"><pre>claude plugin marketplace add Kinoa-Labs-LTD/kinoa-qa
+claude plugin install kinoa-qa@kinoa-qa</pre></div>
+      <p>Add the <code>kinoa</code> connector with the <code>claude mcp add --transport http kinoa …</code> command from the kinoa-mcp repo's README, then log in to it through <code>/mcp</code>. The plugin does not add it for you.</p>
+    </div>
+  </section>
+
+  <section id="plan" aria-labelledby="plan-h">
+    <div class="head">
+      <span class="eyebrow">mcp-plan, step by step</span>
+      <h2 id="plan-h">How a plan gets written</h2>
+    </div>
+    <ol class="steps prose">
+      <li><span><b>Checks the source branch.</b> If the chat can see the kinoa-mcp source, it checks it is on <code>develop</code> or <code>master</code> and not behind its remote. Otherwise it stops: only you pull or switch branches.</span></li>
+      <li><span><b>Looks for earlier work.</b> It creates the data folder and looks for the story's plans and reports. With a plan there, it writes the next version as a new file.</span></li>
+      <li><span><b>Asks everything in one message.</b> Fixed test data (there is no default), the tool names, artifact policy, delete semantics, irreversible tools, checkpoints, replicas and write mode, which roles may call which tool, and known issues.</span></li>
+      <li><span><b>Compares tools with the stand.</b> With the connector in the chat, it compares the story's tools with the stand's <code>tools/list</code> and shows you every difference.</span></li>
+      <li><span><b>Writes the plan in pieces.</b> CRUD, validations, role-based access, and the grey-box layer from the source last. Then it runs <code>check-layout.sh</code>.</span></li>
+    </ol>
+    <div class="parts">
+      <div class="part"><h3>Part A</h3><p>Everything that needs no permission change. It runs unattended, start to finish.</p></div>
+      <div class="part"><h3>Part B</h3><p>Role-gated checks, grouped into checkpoints. Each one changes your roles through the admin role API, and the run restores them at the end.</p></div>
+    </div>
+  </section>
+
+  <section id="run" aria-labelledby="run-h">
+    <div class="head">
+      <span class="eyebrow">mcp-run, step by step</span>
+      <h2 id="run-h">How a run goes</h2>
+    </div>
+    <ol class="steps prose">
+      <li><span><b>Start checks.</b> It reads the rules, then looks for <code>kinoa_*</code> tools (e.g. <code>kinoa_system_ping</code>) in the session without calling one. If there are none, or if the plan's fixed data is missing, it stops before case 1 and writes no report file.</span></li>
+      <li><span><b>Picks the plan and the baseline.</b> The plan is the file you name, or else the highest version. The baseline is the newest report for the same story. If you did not give a run reason, it asks for one.</span></li>
+      <li><span><b>Creates the report file</b> before case 1, so a run can pause and resume ("continue", or the report's file name).</span></li>
+      <li><span><b>Runs the cases.</b> The preflight, then Part A to completion, then Part B one checkpoint at a time. Every response goes into the report at the call.</span></li>
+      <li><span><b>Hands over.</b> It runs <code>check-layout.sh</code>, then gives you the overall status, each red item, and any rule change proposals.</span></li>
+    </ol>
+    <div class="statuses">
+      <div class="status green"><span class="s">GREEN</span><p>At least one case ran, with no <code>FAIL</code> and no finding.</p></div>
+      <div class="status red"><span class="s">RED</span><p>The run saw at least one defect: a <code>FAIL</code> or a finding.</p></div>
+      <div class="status blocked"><span class="s">BLOCKED — reason</span><p>No case ran, so nothing was tested.</p></div>
+    </div>
+  </section>
+
+  <section id="data" aria-labelledby="data-h">
+    <div class="head">
+      <span class="eyebrow">Where files live</span>
+      <h2 id="data-h">The data folder</h2>
+      <p class="prose">Plans and reports live outside the plugin, so a plugin update never deletes them. Both skills create the folders on first use.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What</th><th>Folder</th><th>Written by</th><th>Read by</th></tr></thead>
+        <tbody>
+          <tr><td>Test plans</td><td><code>~/.kinoa-qa/mcp/plans/</code></td><td>mcp-plan</td><td>mcp-run, and mcp-plan for the next version</td></tr>
+          <tr><td>Test reports</td><td><code>~/.kinoa-qa/mcp/reports/</code></td><td>mcp-run</td><td>mcp-plan, and mcp-run for the baseline</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose" style="display:grid; gap:10px">
+      <p>To check the plans and reports by hand (<code>&lt;plugin&gt;</code> is the plugin's install folder):</p>
+      <div class="cmd"><pre>bash &lt;plugin&gt;/skills/mcp-plan/scripts/check-layout.sh                <span class="c"># ~/.kinoa-qa/mcp/</span>
+bash &lt;plugin&gt;/skills/mcp-plan/scripts/check-layout.sh &lt;data folder&gt;  <span class="c"># another folder with plans/ and reports/</span></pre></div>
+      <p>It prints one <code>PROBLEM</code> line per failure, exits 1 if there is any, and exits 2 on a usage error. <code>LEGACY</code>, <code>REDACTED</code> and <code>OLDER</code> lines are information only.</p>
+    </div>
+  </section>
+
+  <section id="move" aria-labelledby="move-h">
+    <div class="head">
+      <span class="eyebrow">If you used the zip copy</span>
+      <h2 id="move-h">Moving to the plugin</h2>
+      <p class="prose">Before 0.6.0 the skills were the folders <code>mcp-qa-plan</code> and <code>mcp-qa-execute</code>, in <code>~/.claude/skills</code> or <code>&lt;kinoa-mcp checkout&gt;/.claude/skills</code>.</p>
+    </div>
+    <ol class="steps prose">
+      <li><span><b>Update the plugin first,</b> so <code>/kinoa-qa:mcp-plan</code> and <code>/kinoa-qa:mcp-run</code> are there.</span></li>
+      <li><span><b>Move your plans and reports.</b> Here, <code>&lt;skills&gt;</code> is the folder you installed the zip copy in:
+        <div class="cmd" style="margin-top:8px"><pre>mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports
+mv &lt;skills&gt;/mcp-qa-plan/docs/plans/*-test-plan*.md ~/.kinoa-qa/mcp/plans/
+mv &lt;skills&gt;/mcp-qa-execute/docs/reports/*-test-report-*.md ~/.kinoa-qa/mcp/reports/</pre></div></span></li>
+      <li><span><b>Delete only <code>mcp-qa-plan</code> and <code>mcp-qa-execute</code>.</b> Leave every other folder in that skills folder as it is.</span></li>
+    </ol>
+    <p class="callout prose"><b>mcp-qa-ready is not part of this plugin.</b> Keep it where it is. After the move it no longer finds the plans, the reports or the <code>mcp-plan</code> references, until it moves too.</p>
+  </section>
+
+  <footer>
+    <span>kinoa-qa 0.6.0</span>
+    <span>Source: <a href="https://github.com/Kinoa-Labs-LTD/kinoa-qa">Kinoa-Labs-LTD/kinoa-qa</a>, <code>docs/guides/mcp-skills-guide.html</code></span>
+    <span>Full workflows: <code>skills/mcp-plan/SKILL.md</code>, <code>skills/mcp-run/SKILL.md</code></span>
+  </footer>
+</div>

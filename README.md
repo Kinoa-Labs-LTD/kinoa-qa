@@ -26,10 +26,11 @@ A smoke plan is a Jira sub-task, not a `test-plan.md`. `testplan` reads one only
 it to push that sub-task to TestOps as one case, with `/kinoa-qa:testplan --from-smoke
 <SUBTASK-KEY>` — see [Pushing a smoke sub-task to TestOps](#pushing-a-smoke-sub-task-to-testops).
 
-**Presenting this to someone?** Two guide pages tell the story for people who will not open this
+**Presenting this to someone?** Three guide pages tell the story for people who will not open this
 repo: the [kinoa-qa plugin guide](https://claude.ai/artifact/WDruZqhHZKEtAxTjabUS9S) (the whole
 plugin) and the [smoke testing guide](https://claude.ai/code/artifact/a92e7012-7787-46ba-8404-19a9b2a62cc7)
-(the smoke pair). Their sources are in [`docs/guides/`](docs/guides/README.md); this README stays
+(the smoke pair), plus the [MCP skills guide](https://claude.ai/artifact/AxAcqMXs3qA5psYGuTJxzW)
+(`mcp-plan` and `mcp-run`). Their sources are in [`docs/guides/`](docs/guides/README.md); this README stays
 the reference you use mid-task.
 
 Standalone and decoupled from `kinoa-dev`: it depends only on the artifacts kinoa-dev
