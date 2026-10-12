@@ -27,9 +27,9 @@ Two consequences worth stating, because both were review findings:
 
 - **Re-runs are normal, so a known defect must not read like a new one.** Annotate it — see below.
 - **Retire it deliberately.** When the Story ships, either the check earns permanent coverage and
-  becomes a regression test via kinoa-test-automation's `testops-to-playwright`, or it stops being
-  run. A plan nobody has run in a month, still showing a red conformance verdict, teaches people to
-  ignore red.
+  becomes a regression test via `/kinoa-aqa:testops-to-playwright` (kinoa-aqa plugin, inside
+  kinoa-test-automation), or it stops being run. A plan nobody has run in a month, still showing a red
+  conformance verdict, teaches people to ignore red.
 
 ## Use when
 
@@ -40,8 +40,8 @@ Two consequences worth stating, because both were review findings:
 ## Not this skill
 
 - **Writing** the plan → `smoke-plan` (`/kinoa-qa:smoke-plan`, `<plugin>/skills/smoke-plan/SKILL.md`).
-- Automating a full manual regression case from TestOps → kinoa-test-automation's
-  `testops-to-playwright`.
+- Automating a full manual regression case from TestOps → `/kinoa-aqa:testops-to-playwright`
+  (kinoa-aqa plugin, inside kinoa-test-automation).
 - Running existing manual cases with the model in the loop every time → kinoa-test-automation's
   `testops-manual-run` (the KING-22127 POC — the inverse mechanism, deliberately).
 
@@ -437,7 +437,7 @@ Two things make this concrete in this product:
 
 **When a smoke check has earned permanent coverage** — a core feature, re-run every release — do not
 grow this skill into a regression suite. Use
-`.claude/skills/testops-to-playwright/SKILL.md` in kinoa-test-automation, which already does that job
+`/kinoa-aqa:testops-to-playwright` (kinoa-aqa plugin, inside kinoa-test-automation), which already does that job
 properly: it creates the TestOps case, wires `@allure.id`, and produces a
 regression test rather than a smoke test wearing one's clothes.
 
@@ -475,8 +475,8 @@ Follow the repo's rules — they are not relaxed for smoke tests:
 - **Page objects** for all UI interaction, in `pages/`. Extend an existing page object rather than
   creating a new one. Locators are class-level private fields, never inline. Methods that `fill`/`click`
   assert their post-condition. Decorate user-facing methods with `@step`. Invoke
-  `.claude/skills/page-object-author/SKILL.md` in kinoa-test-automation for this part instead of
-  reasoning from scratch.
+  `/kinoa-aqa:page-object-author` (kinoa-aqa plugin, inside kinoa-test-automation) for this part
+  instead of reasoning from scratch.
 - **Locator priority**: unique id / `data-testid` / `name` first, then `getByRole` / `getByLabel` /
   `getByPlaceholder`. **Never XPath.** If phase A only worked via a fragile CSS path, record a
   `data-testid` request for FE rather than committing the fragile locator.

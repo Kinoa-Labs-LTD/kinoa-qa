@@ -31,7 +31,8 @@ questions this skill raises are the evidence.
   test only.
 - The OpenSpec `flow-test-plan` stage in the kinoa-dev plugin (KING-21852) — different artifact,
   different repo.
-- Automating an existing TestOps case → kinoa-test-automation's `testops-to-playwright`.
+- Automating an existing TestOps case → `/kinoa-aqa:testops-to-playwright` (kinoa-aqa plugin, inside
+  kinoa-test-automation).
 
 This skill lives in the kinoa-qa plugin, beside `testplan`, never in the kinoa-dev plugin: kinoa-dev
 skills must never write into a service repo, and the smoke pair is QA tooling. It runs from any working
@@ -367,8 +368,8 @@ Collect these into an **FE requests** section on the sub-task:
 > accessible name is the country code, which changes per row.
 
 kinoa-test-automation's locator priority is unique id/attribute first, then role/label/placeholder,
-and never XPath (see `.claude/skills/page-object-author/SKILL.md` in kinoa-test-automation). Raising the
-request at plan time is much cheaper than discovering it mid-run.
+and never XPath — see `/kinoa-aqa:page-object-author` (kinoa-aqa plugin, inside kinoa-test-automation).
+Raising the request at plan time is much cheaper than discovering it mid-run.
 
 ### 6) Show the draft and stop
 
@@ -404,7 +405,7 @@ separate command run on the sub-task afterwards: `/kinoa-qa:testplan --from-smok
 converts the sub-task into one `Draft` case, pushes it after its own review gate, and records the case
 id as the sub-task's `Allure TestOps case <id>` remote link. It reads only the three headed sections
 named in step 3, and refuses a sub-task with no or an empty `## Preconditions`. When a smoke check is
-being promoted to permanent coverage, use kinoa-test-automation's `.claude/skills/testops-to-playwright/SKILL.md`,
+being promoted to permanent coverage, use `/kinoa-aqa:testops-to-playwright` (kinoa-aqa plugin, inside kinoa-test-automation),
 which owns that job properly and wires `@allure.id` as part of it.
 
 Report back: the sub-task key, the open-question count, and the testability verdict.
