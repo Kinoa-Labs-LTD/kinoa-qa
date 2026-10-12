@@ -9,6 +9,16 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.6.1 — 2026-10-12
+
+**`smoke-plan`, `smoke-run` and the README point to the kinoa-aqa plugin for automation and page
+objects** (KING-23157).
+
+- **Promoting a smoke check** to a regression test → `/kinoa-aqa:testops-to-playwright` (kinoa-aqa
+  plugin, inside kinoa-test-automation).
+- **Page object rules** → `/kinoa-aqa:page-object-author`, the same way.
+- The smoke-testing guide's flow diagram names `/kinoa-aqa:testops-to-playwright`.
+
 ## 0.6.0 — 2026-10-07
 
 **Two new skills, `/kinoa-qa:mcp-plan` and `/kinoa-qa:mcp-run`, moved in from the shared

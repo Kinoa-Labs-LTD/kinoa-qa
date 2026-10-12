@@ -492,9 +492,9 @@ applies:
 
 **It does not write code by default.** The deliverable is the report. A Story smoke test runs a
 handful of times and is then done; when a check earns permanent coverage, use
-kinoa-test-automation's `testops-to-playwright` skill rather than growing the smoke test. If you
-do ask for a `*.smoke.ts`, **never name it `*.test.ts`** — the suffix is what keeps it out of
-kinoa-test-automation's sharded CI run.
+`/kinoa-aqa:testops-to-playwright` (kinoa-aqa plugin, inside kinoa-test-automation) rather than
+growing the smoke test. If you do ask for a `*.smoke.ts`, **never name it `*.test.ts`** — the suffix
+is what keeps it out of kinoa-test-automation's sharded CI run.
 
 Inside kinoa-test-automation the repo also keeps the operator password out of Claude's reach
 (its `.claudeignore` and `.claude/settings.json`). Outside it nothing does: `smoke-run` never echoes a
