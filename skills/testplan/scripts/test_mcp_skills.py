@@ -462,6 +462,371 @@ class CheckLayoutOnFixtures(TempTree):
         self.assertNotIn("docs/reports", script)
         self.assertNotIn("grep -v '^https\\?", script)
 
+    # --- the checks added by KING-23440 (B.5, B.8, B.9, B.10, C.3) ---
+
+    def check(self, files):
+        data = self.data_folder(files)
+        result = run_bash(CHECK_LAYOUT, data)
+        return result.returncode, result.stdout + result.stderr
+
+    def test_a_minimal_current_plan_passes(self):
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan()})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_accepts_a_side_by_side_suffix_in_a_report_name(self):
+        code, out = self.check({"reports/KING-99001-widgets-test-report-20261012-0741-opu.md": "# r\n"})
+        self.assertNotIn("PROBLEM: bad report name: KING-99001-widgets-test-report-20261012-0741-opu.md",
+                         out.splitlines(), out)
+        self.assertEqual(0, code, out)
+
+    def test_an_earlier_run_with_a_suffix_is_found_for_the_known_issues_check(self):
+        report = "reports/KING-99001-widgets-test-report-20261012-0741-opu.md"
+        plan = current_plan(
+            earlier_runs="`KING-99001-widgets-test-report-20261012-0741-opu.md`",
+            known_issues="### 1.2 Known issues and the cases that cover them\n\n"
+                         "| Finding | Filed as | What it is | Cases |\n|---|---|---|---|\n"
+                         "| F1 (0741) | — | the create loses the size | `create-ok-01` |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan,
+                                report: "# r\n\n## 4. Findings\n\n### F1 — the create loses the size   [severity: minor]\n"
+                                        "### F2 — the get answers 500   [severity: major]\n"})
+        self.assertEqual(["PROBLEM: plans/KING-99001-widgets-test-plan.md: §1.2 has no row for F2 (0741) of "
+                          "KING-99001-widgets-test-report-20261012-0741-opu.md"],
+                         [l for l in flagged_lines(out) if "earlier run" in l or "§1.2" in l], out)
+
+    def test_warns_when_a_plan_says_no_earlier_runs_but_a_report_exists(self):
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan(),
+                                "reports/KING-99001-widgets-test-report-20261012-0900.md": "# r\n"})
+        self.assertIn("WARN: plans/KING-99001-widgets-test-plan.md: **Earlier runs:** none, but reports/ holds "
+                      "KING-99001-widgets-test-report-20261012-0900.md — a new plan version is due",
+                      out.splitlines(), out)
+        self.assertEqual(0, code, out)
+
+    def test_20_does_not_warn_for_a_report_whose_run_is_paused(self):
+        report = "# r\n\n## 2. Overall status\n\npaused — the run is in progress.\n\n## 3. What was done, per part\n"
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan(),
+                                "reports/KING-99001-widgets-test-report-20261012-0900.md": report})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_flags_a_name_literal_missing_from_the_artifacts_table(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": "7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b", "name": "NAME-b", "size": 3}`')
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: `NAME-b` in the Call cell of `create-ok-01` "
+                      "is not in the §0 artifacts table (plan-template.md, cases are data)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_flags_a_length_probe_whose_value_has_another_length(self):
+        row = ('| `create-schema-01` | `kinoa_widget_create {"game_id": "7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b", '
+               '"name": "len20-0123456789", "size": 3}` | `error.code` = `VALIDATION_FAILED` |\n')
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan(extra_rows=row)})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: `create-schema-01` sends a `len20-` value of "
+                      "16 characters, not 20 (plan-template.md, cases are data)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_a_length_probe_is_counted_in_characters_not_bytes(self):
+        row = ('| `create-schema-01` | `kinoa_widget_create {"game_id": "7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b", '
+               '"name": "len8-ü01", "size": 3}` | `error.code` = `VALIDATION_FAILED` |\n')
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan(extra_rows=row)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    # check 21: research inputs and §1.3 (C.3)
+
+    SEC13 = ("### 1.3 Research results and the cases that cover them\n\n"
+             "| Source | Rule | Served contract | Cases |\n|---|---|---|---|\n")
+
+    def test_flags_research_inputs_with_no_section_1_3(self):
+        plan = current_plan(header_extra="**Research inputs:** KING-99006 — [FE] Research validations for Widgets\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: the header names research inputs, but the plan "
+                      "has no ### 1.3 section (plan-template.md, the skeleton)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_flags_a_section_1_3_nobody_named(self):
+        plan = current_plan(header_extra="**Research inputs:** none\n",
+                            extra_sections=self.SEC13 + "| KING-99006, Form rules | `name` required | same | `create-ok-01` |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: the header says **Research inputs:** none, but "
+                      "the plan has a ### 1.3 section — a research input nobody named (plan-template.md, the skeleton)",
+                      out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_flags_a_section_1_3_row_with_an_empty_cases_cell(self):
+        plan = current_plan(header_extra="**Research inputs:** KING-99006 — [FE] Research validations for Widgets\n",
+                            extra_sections=self.SEC13 + "| KING-99006, Form rules | `name` required | same | |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: the §1.3 row `KING-99006, Form rules` has no case id "
+                      "and no `not reachable:` (plan-template.md, the skeleton)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_flags_a_section_1_3_case_that_is_no_row_of_the_plan(self):
+        plan = current_plan(header_extra="**Research inputs:** KING-99006 — [FE] Research validations for Widgets\n",
+                            extra_sections=self.SEC13 + "| KING-99006, Form rules | `name` required | same | `create-schema-09` |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan.md: §1.3 names `create-schema-09`, which is no case "
+                      "row of the plan (plan-template.md, the skeleton)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_a_backticked_not_reachable_cell_passes(self):
+        plan = current_plan(header_extra="**Research inputs:** KING-99006 — [FE] Research validations for Widgets\n",
+                            extra_sections=self.SEC13 +
+                            "| KING-99006, UI-only limits | the add button is hidden at the limit | absent | `not reachable: a UI-only control` |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_warns_when_the_earlier_runs_none_line_carries_a_tail(self):
+        plan = current_plan(earlier_runs="none — this is the first plan and the first run for this story")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan,
+                                "reports/KING-99001-widgets-test-report-20261012-0900.md": "# r\n"})
+        self.assertTrue(any(l.startswith("WARN: plans/KING-99001-widgets-test-plan.md: **Earlier runs:** none, but reports/ holds "
+                                         "KING-99001-widgets-test-report-20261012-0900.md") for l in out.splitlines()), out)
+
+    def test_a_covered_section_1_3_passes(self):
+        plan = current_plan(header_extra="**Research inputs:** KING-99006 — [FE] Research validations for Widgets\n",
+                            extra_sections=self.SEC13 +
+                            "| KING-99006, Form rules | `name` required | same | `create-ok-01` |\n"
+                            "| KING-99006, UI-only limits | the add button is hidden at the limit | absent | not reachable: a UI-only control |\n\n")
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    # --- the checks added after the eval run of 2026-10-16 (0.7.1): 18 reads KEY_ literals, 22-25 are new ---
+
+    PLAN = "plans/KING-99001-widgets-test-plan.md"
+    P = "PROBLEM: plans/KING-99001-widgets-test-plan.md: "
+
+    def test_18_flags_a_key_literal_missing_from_the_artifacts_table(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", "key": "KEY_b"}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertIn(self.P + "`KEY_b` in the Call cell of `create-ok-01` is not in the §0 artifacts table "
+                      "(plan-template.md, cases are data)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_18_reads_the_call_cells_of_part_b_too(self):
+        part_b = ("# PART B — role-gated checks\n\n## B1. Checkpoint 1 — GAME Viewer on `P1`\n\n"
+                  "| Id | Call | Expected |\n|---|---|---|\n"
+                  '| `role-create-01` | `kinoa_widget_create {"game_id": P1, "name": "NAME-a", "key": "KEY_role_b"}` | '
+                  "`error.code` = `PERMISSION_DENIED` |\n\n# REPORT")
+        code, out = self.check({self.PLAN: current_plan().replace("# REPORT", part_b)})
+        self.assertIn(self.P + "`KEY_role_b` in the Call cell of `role-create-01` is not in the §0 artifacts table "
+                      "(plan-template.md, cases are data)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_18_a_key_inside_a_longer_token_is_not_a_key_literal(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", "ref": "CONFIRM_KEY_x"}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    REPORT_V1 = "reports/KING-99001-widgets-test-report-20261010-0900.md"
+    PLAN_V2 = "plans/KING-99001-widgets-test-plan-v2.md"
+
+    def v2_pair(self, status_rows):
+        plan = current_plan(earlier_runs="`KING-99001-widgets-test-report-20261010-0900.md`").replace(
+            "**Plan version:** 1 (2026-10-16)", "**Plan version:** 2 (2026-10-16)")
+        report = ("# r\n\n## 3. What was done, per part\n\n### Case status\n\n"
+                  "| Case | Status | Finding / note / blocked row |\n|---|---|---|\n" + "\n".join(status_rows) + "\n")
+        return {self.PLAN_V2: plan, self.REPORT_V1: report}
+
+    def test_22_flags_a_graded_row_the_next_version_dropped(self):
+        code, out = self.check(self.v2_pair(["| `pre-01` | `PASS` | — |", "| `create-ok-01` | `PASS` | — |",
+                                             "| `create-ok-02` | `PASS` | — |", "| `list-ok-01` | `BLOCKED` | section 8 |"]))
+        self.assertEqual(["PROBLEM: plans/KING-99001-widgets-test-plan-v2.md: `create-ok-02` was graded `PASS` in "
+                          "KING-99001-widgets-test-report-20261010-0900.md but is no case row of this version "
+                          "(plan-template.md, soundness rules)"], flagged_lines(out), out)
+        self.assertEqual(1, code, out)
+
+    def test_22_reads_a_status_cell_without_backticks(self):
+        code, out = self.check(self.v2_pair(["| pre-01 | PASS | — |", "| create-ok-01 | PASS | — |",
+                                             "| get-ok-01 | FAIL | F1 |"]))
+        self.assertIn("PROBLEM: plans/KING-99001-widgets-test-plan-v2.md: `get-ok-01` was graded `FAIL` in "
+                      "KING-99001-widgets-test-report-20261010-0900.md but is no case row of this version "
+                      "(plan-template.md, soundness rules)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_23_flags_a_spread_in_an_argument_object(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", '
+                                        '"params": [...SYS_R without SYS_R0, {"id": SYS_R0.id}]}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertTrue(any(l.startswith(self.P + "`create-ok-01` has an argument object that is not JSON once the "
+                                         "handles are strings: ") and l.endswith("(plan-template.md, cases are data)")
+                            for l in out.splitlines()), out)
+        self.assertEqual(1, code, out)
+
+    def test_23_accepts_handles_placeholders_and_braces_inside_strings(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", "label": "${x} }", '
+                                        '"confirm_token": <token of step 1>, "q": "a\\|b", "n": null, "on": true}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    ISO_ROW = '| `list-iso-03` | `kinoa_widget_list {"game_id": "not-a-game"}` | EXPECTED |\n'
+
+    def test_24_flags_a_game_id_that_is_no_zero_value(self):
+        code, out = self.check({self.PLAN: current_plan(extra_rows=self.ISO_ROW.replace("EXPECTED", "`ok: false`"))})
+        self.assertIn(self.P + '`list-iso-03` sends game_id "not-a-game", which is no §0 value and not named in its '
+                      "Expected cell (plan-template.md, cases are data)", out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_24_accepts_a_probe_named_in_its_expected_cell(self):
+        row = self.ISO_ROW.replace("EXPECTED", "`ok: false`: the probe `not-a-game` is no uuid")
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_24_flags_a_target_game_id_handle_that_is_not_in_zero(self):
+        row = '| `export-ok-01` | `kinoa_widget_export {"game_id": P1, "target_game_id": P9}` | `ok: true` |\n'
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertIn(self.P + "`export-ok-01` sends target_game_id P9, which is no §0 value and not named in its "
+                      "Expected cell (plan-template.md, cases are data)", out.splitlines(), out)
+
+    def test_25_flags_a_described_call_and_an_ellipsis_in_an_object(self):
+        row = ('| `list-sem-01` | 1. `kinoa_widget_list {"game_id": P1, "page": 1}` 2. the call of step 1 with '
+               '`"page": 2`, and so on: one step per page, up to the last page | `ok: true` |\n'
+               '| `list-sem-02` | `kinoa_widget_list {"game_id": P1, "ids": [{"a": 1}, …]}` | `ok: true` |\n')
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        lines = out.splitlines()
+        for line in (self.P + '`list-sem-01` describes calls instead of writing them: "and so on" (plan-template.md, cases are data)',
+                     self.P + '`list-sem-01` describes calls instead of writing them: "up to the last page" (plan-template.md, cases are data)',
+                     self.P + '`list-sem-02` describes calls instead of writing them: "…" (plan-template.md, cases are data)'):
+            with self.subTest(line=line):
+                self.assertIn(line, lines, out)
+        self.assertEqual(1, code, out)
+
+    # --- the fix pass after the whole-branch review (0.7.1) ---
+
+    def test_18_a_stamp_scoped_search_prefix_of_an_artifact_is_not_an_artifact(self):
+        row = '| `list-sem-01` | `kinoa_widget_list {"game_id": P1, "search": "KEY_a"}` | `ok: true` |\n'
+        plan = current_plan(artifacts="| `W_A` | `NAME-a`, key `KEY_a_one` | `P1` | the widget | `create-ok-01` | exists | yes |",
+                            extra_rows=row)
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_25_an_ellipsis_inside_a_json_string_is_a_value(self):
+        row = ('| `create-rule-01` | `kinoa_widget_create {"game_id": P1, "name": "NAME-a", "description": "Loading…", '
+               '"note": "a.....b"}` | `ok: true` |\n')
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_24_reads_the_expected_cell_of_a_row_with_trailing_spaces(self):
+        row = self.ISO_ROW.replace("EXPECTED", "`ok: false`: the probe `not-a-game` is no uuid").rstrip("\n") + "   \n"
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_15_a_paused_report_is_checked_once_the_run_finishes(self):
+        report = ("# r\n\n## 1. Header\n\n- Run: `20261016-0900`\n\n## 2. Overall status\n\n"
+                  "paused — handed over after `create-ok-01`; the counts follow when the run finishes\n\n"
+                  "## 3. What was done, per part\n\n### Case status\n\n"
+                  "| Case | Status | Finding / note / blocked row |\n|---|---|---|\n| `pre-01` | `PASS` | — |\n\n"
+                  "## 10. Role rows at the end of the run\n\n`ROLES_BEFORE`: `[]`. `not restored`.\n")
+        code, out = self.check({"reports/KING-99001-widgets-test-report-20261016-0900.md": report})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertIn("PAUSED: reports/KING-99001-widgets-test-report-20261016-0900.md: the run was handed over; "
+                      "it is checked once it finishes (report-spec.md, the overall status)", out.splitlines(), out)
+        self.assertEqual(0, code, out)
+
+    def test_15_and_20_a_line_that_only_mentions_paused_is_not_a_paused_report(self):
+        report = "# r\n\n## 2. Overall status\n\n`RED`. The run was not paused.\n"
+        code, out = self.check({"plans/KING-99001-widgets-test-plan.md": current_plan(),
+                                "reports/KING-99001-widgets-test-report-20261012-0900.md": report})
+        self.assertTrue(any(l.startswith("WARN: plans/KING-99001-widgets-test-plan.md: **Earlier runs:** none")
+                            for l in out.splitlines()), out)
+
+    # --- the deferred minors of the review, and check 26 (0.7.1, second fix pass) ---
+
+    def test_24_a_quoted_part_of_a_zero_value_is_no_zero_value(self):
+        row = '| `list-iso-04` | `kinoa_widget_list {"game_id": "7d3e"}` | `ok: false` |\n'
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertIn(self.P + '`list-iso-04` sends game_id "7d3e", which is no §0 value and not named in its '
+                      "Expected cell (plan-template.md, cases are data)", out.splitlines(), out)
+
+    def test_24_prints_a_placeholder_value_whole(self):
+        row = '| `export-ok-01` | `kinoa_widget_export {"game_id": P1, "target_game_id": <id of step 1>}` | `ok: true` |\n'
+        code, out = self.check({self.PLAN: current_plan(extra_rows=row)})
+        self.assertIn(self.P + "`export-ok-01` sends target_game_id <id of step 1>, which is no §0 value and not "
+                      "named in its Expected cell (plan-template.md, cases are data)", out.splitlines(), out)
+
+    def test_23_accepts_a_placeholder_that_holds_an_arrow(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", '
+                                        '"confirm_token": <token of step 1 -> preview>}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+
+    def test_18_a_key_after_a_hyphen_is_not_a_key_literal(self):
+        plan = current_plan(create_call='`kinoa_widget_create {"game_id": P1, "name": "NAME-a", "ref": "a-KEY_q"}`')
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+
+    PLAN_V1 = "plans/KING-99001-widgets-test-plan.md"
+
+    def schema_rows(self, *numbers):
+        return "".join('| `create-schema-{:02d}` | `kinoa_widget_create {{"game_id": P1, "size": {}}}` | '
+                       "`error.code` = `VALIDATION_FAILED` |\n".format(n, n) for n in numbers)
+
+    def v2(self, rows):
+        return current_plan(extra_rows=rows).replace("**Plan version:** 1 (2026-10-16)", "**Plan version:** 2 (2026-10-16)")
+
+    def test_26_flags_a_new_id_that_skips_the_next_free_number(self):
+        code, out = self.check({self.PLAN_V1: current_plan(extra_rows=self.schema_rows(1, 2, 3)),
+                                self.PLAN_V2: self.v2(self.schema_rows(1, 2, 3, 5))})
+        self.assertEqual(["PROBLEM: plans/KING-99001-widgets-test-plan-v2.md: `create-schema-05` is not the next free "
+                          "number of `create-schema`: KING-99001-widgets-test-plan.md ends the group at 03, so the "
+                          "next is 04 (plan-template.md, stable case ids)"], flagged_lines(out), out)
+        self.assertEqual(1, code, out)
+
+    def test_26_a_new_group_starts_at_01_and_the_next_free_number_passes(self):
+        rows = self.schema_rows(1, 2, 3, 4) + ('| `create-gap-01` | `kinoa_widget_create {"game_id": P1, "size": 0}` | '
+                                               '`ok: false` |\n')
+        code, out = self.check({self.PLAN_V1: current_plan(extra_rows=self.schema_rows(1, 2, 3)),
+                                self.PLAN_V2: self.v2(rows)})
+        self.assertEqual([], [l for l in flagged_lines(out) if "next free number" in l], out)
+
+    def test_the_new_row_checks_skip_a_plan_dated_before_2026_10_16(self):
+        row = ('| `list-sem-01` | 1. `kinoa_widget_list {"game_id": "not-a-game", "page": 1}` 2. and so on, up to the '
+               'last page, with `"key": "KEY_b"` | `ok: true` |\n')
+        plan = current_plan(extra_rows=row).replace("**Plan version:** 1 (2026-10-16)", "**Plan version:** 1 (2026-10-15)")
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+
+
+def current_plan(create_call='`kinoa_widget_create {"game_id": "7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b", "name": "NAME-a", "size": 3}`',
+                 artifacts="| `W_A` | `NAME-a` | `P1` | the widget | `create-ok-01` | exists | yes |",
+                 earlier_runs="none", known_issues="", header_extra="", extra_rows="",
+                 extra_sections=""):
+    """A minimal plan under the current layout (version date 2026-10-16) that passes every check of
+    check-layout.sh as written; a test breaks one thing in it and looks for the line it gets."""
+    return ("# KING-99001 — widgets via the AI agent: Test Plan\n\n"
+            "**Story:** https://kinoadev.atlassian.net/browse/KING-99001\n"
+            "**Under test:** `kinoa_widget_create`, on the **deployed test stand**\n"
+            "**Plan version:** 1 (2026-10-16)\n"
+            "**Earlier runs:** " + earlier_runs + "\n"
+            "**Decisions from the interview:** artifacts are kept\n" + header_extra +
+            "**Checked against:** `tools/list of 2026-10-16; server source not available`\n\n"
+            "## 0. Fixed test data\n\n| Constant | Value |\n|---|---|\n"
+            "| `P1` | `7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b` — *Widget sandbox* |\n"
+            "| `NAME` | `KING99001-QA-<STAMP>` |\n\n"
+            "| Handle | `name` | Game | What it is | Created in | Intended end state | Expected |\n"
+            "|---|---|---|---|---|---|---|\n" + artifacts + "\n\n"
+            "**Name limit:** 30 — no `maxLength`; longest name 28, longest key 0\n\n"
+            "## 1. Execution rules\n\n`mcp-plan references/rules.md`.\n\n"
+            "### 1.1 Known deviations to confirm through the protocol\n\n"
+            "| # | AC / expectation | What `tools/list` says | Cases |\n|---|---|---|---|\n\n"
+            + known_issues + extra_sections +
+            "# PART A — everything that needs no permission change\n\n## A0. Preflight\n\n"
+            "| Id | Call | Expected |\n|---|---|---|\n"
+            "| `pre-01` | `tools/list` | `kinoa_widget_create` is listed |\n"
+            "| `pre-02` | `kinoa_system_ping {}` | `data.userId` present. `Record: USER_ID` |\n\n"
+            "## A1. `kinoa_widget_create`\n\n| Id | Call | Expected |\n|---|---|---|\n"
+            "| `create-ok-01` | 1. " + create_call + " 2. the call of step 1 plus `\"confirm_token\": <token of step 1>` "
+            "| 1. `meta.confirmToken` present. 2. `data.created` = `true`. `Record: W_A` |\n" + extra_rows +
+            "\n# REPORT\n\nThe report contract is `mcp-plan references/report-spec.md`.\n")
 
 class EvalFixturesExist(TempTree):
     def test_the_closure_follows_relative_links_from_the_seeds(self):
@@ -696,6 +1061,97 @@ class DistributionScan(TempTree):
         self.assertIn("CI runs it on <plugin>/skills/mcp-plan and <plugin>/skills/mcp-run", header)
         self.assertIn("fixed-data.md", header)
         self.assertNotIn("check-layout.sh calls it", header)
+
+
+class RulesPass20261016(unittest.TestCase):
+    """The rules the eval run of 2026-10-16 added (0.7.1): every printed command has its line in
+    the closed list of rules.md, and the two SKILL files print them."""
+
+    GIT_LINE = ("git -C <repo root> fetch --quiet && git -C <repo root> status --branch --porcelain | head -1"
+                " && git -C <repo root> rev-parse --short HEAD")
+    GREP_REPORT = "grep -nE '^## |^### Case status|Plan defect' ~/.kinoa-qa/mcp/reports/<report file>"
+    SEEDED = FIXTURE_TREE + "/reports/KING-99003-user-lists-test-report-20260923-1400.md"
+
+    def test_the_printed_heading_search_finds_the_headings_of_a_report(self):
+        line = next(l.split(" #")[0].strip() for _, l, _ in fenced_lines(read(PLAN_SKILL))
+                    if l.startswith("grep -n"))
+        command = line.replace("~/.kinoa-qa/mcp/reports/<report file>", self.SEEDED)
+        result = subprocess.run(["bash", "-c", command], cwd=ROOT, capture_output=True, text=True, timeout=30)
+        self.assertEqual(0, result.returncode, command + "\n" + result.stdout + result.stderr)
+        found = result.stdout.splitlines()
+        self.assertTrue(any(":## 1. Header" in l for l in found), result.stdout)
+        self.assertTrue(any(":### Case status" in l for l in found), result.stdout)
+
+    def test_the_closed_list_names_the_search_with_extended_patterns(self):
+        method = section(read_flat(REFERENCES + "/rules.md"), "Target and method")
+        self.assertIn("`grep -nE '<pattern>' <file>`", method)
+        self.assertNotIn("`grep -n '<pattern>' <file>`", method)
+
+    def test_the_review_fixes_of_0_7_1_are_in_their_homes(self):
+        template = read_flat(REFERENCES + "/plan-template.md")
+        self.assertIn("check 18 reads the `NAME-`, `NAME_S-` and `KEY_` literals", template)
+        self.assertIn("check 24", section(template, "Cases are data, prose is commentary"))
+        self.assertIn("stays in its clause's row", template)
+        self.assertIn("`paused — handed over after <case id>`",
+                      section(read_flat(REFERENCES + "/report-spec.md"), "The overall status"))
+        self.assertIn("its §1.2 row", section(read_flat(REFERENCES + "/file-layout.md"), "Comparing runs"))
+        self.assertIn("shows no re-read", section(read_flat(REFERENCES + "/rules.md"), "Statuses"))
+        plan_skill = read_flat(PLAN_SKILL)
+        self.assertNotIn("the eval run of 2026-10-16", plan_skill)
+        self.assertNotIn("section 8 from its first plan-defect row", plan_skill)
+        self.assertIn("no command", section(read_flat(RUN_SKILL), "3. Finish"))
+        for doc in (PLAN_SKILL, RUN_SKILL):
+            with self.subTest(doc=doc):
+                self.assertIn('"A quick `ls -la` or `echo` changes nothing"', read_flat(doc))
+
+    def test_the_second_fix_pass_of_0_7_1_is_in_its_homes(self):
+        template = read_flat(REFERENCES + "/plan-template.md")
+        for check in ("check 23", "check 25"):
+            with self.subTest(check=check):
+                self.assertIn(check, section(template, "Cases are data, prose is commentary"))
+        self.assertIn("check 26", section(template, "Stable case ids"))
+        part_ab = section(read_flat(REFERENCES + "/rules.md"), "Part A / Part B")
+        self.assertIn("measured like the pause between write blocks", part_ab)
+        self.assertIn("the rows in effect are unknown", part_ab)
+        run = section(read_flat(RUN_SKILL), "1. Find the files")
+        self.assertIn("Each command runs at the step that names it", run)
+        self.assertNotIn("no snapshot `GET` of its own before B1", run)
+
+    def test_the_plan_skill_prints_the_sha_with_the_branch_state(self):
+        self.assertTrue(fences_command(read(PLAN_SKILL), self.GIT_LINE))
+        self.assertIn("`git rev-parse`", section(read_flat(REFERENCES + "/rules.md"), "Target and method"))
+
+    def test_the_plan_skill_prints_the_heading_search_for_a_harness_with_no_file_search_tool(self):
+        self.assertTrue(fences_command(read(PLAN_SKILL), self.GREP_REPORT))
+        method = section(read_flat(REFERENCES + "/rules.md"), "Target and method")
+        for form in ("`grep -nE '<pattern>' <file>`", "`grep -rlE '<pattern>' <folder>`",
+                     "no file-search tool"):
+            with self.subTest(form=form):
+                self.assertIn(form, method)
+
+    def test_the_planner_reads_the_case_status_table_and_reports_what_it_only_read(self):
+        skill = read_flat(PLAN_SKILL)
+        self.assertIn("`### Case status` table of section 3", section(skill, "1. Find what exists"))
+        self.assertIn("`checked by reading, not verified`", section(skill, "3. Check the tree"))
+
+    def test_the_research_rows_are_one_per_clause_and_whitespace_rules_get_two_cases(self):
+        template = read_flat(REFERENCES + "/plan-template.md")
+        self.assertIn("One row per clause that a case can check on its own", template)
+        self.assertIn("a whitespace-only value", template)
+        readers = read_flat(REFERENCES + "/story-readers.md")
+        self.assertIn("about another surface", readers)
+
+    def test_a_report_from_a_transcript_has_its_rules(self):
+        run = section(read_flat(RUN_SKILL), "1. Find the files")
+        for phrase in ("takes the stamp the operator gives and runs no `date`",
+                       "says the file was created, not resumed",
+                       "A plan with no Part B"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, run)
+        self.assertIn("as `not captured`", section(read_flat(REFERENCES + "/rules.md"), "Statuses"))
+        label = "`not re-checked (last seen: status <x> in <case>)`"
+        self.assertIn(label, section(read_flat(REFERENCES + "/report-blocks.md"), "The artifact contract"))
+        self.assertIn(label, read_flat(REFERENCES + "/language.md"))
 
 
 if __name__ == "__main__":

@@ -22,7 +22,8 @@ Some text must stay exactly as it is, because a reader or a tool copies it:
 - every fixed label the contracts define. Do not reword them, and do not translate them into
   simpler words, because `check-layout.sh` and the comparison of two reports match them by their
   exact text: the ten report section names, the artifact labels (`exists (status: <x>)`,
-  `soft-deleted (status: <x>, still gettable)`, `hard-deleted (id no longer resolves)`), the
+  `soft-deleted (status: <x>, still gettable)`, `hard-deleted (id no longer resolves)`,
+  `not re-checked (last seen: status <x> in <case>)`), the
   finding-block field names (`Case:` / `Tool:` / `Part:`, and `Steps to reproduce`, `Expected`,
   `Actual`, `Isolation`, and the per-step `Request:` / `Response:` lines), the note-block field
   names (`Case:` / `Tool:` / `Part:`, and `What was seen`, `Why it is not a finding`,

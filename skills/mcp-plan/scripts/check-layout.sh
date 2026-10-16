@@ -73,11 +73,13 @@ for plan in "$PLANS"/*-test-plan*.md; do
   is_stable_plan "$plan" || echo "LEGACY: ${plan#$DATA/} predates the fixed section order and stable ids; rebuild it before the next run"
 done
 
-# 3. Report file names carry a UTC stamp. Whether a report was edited in place cannot be checked
-#    here, so only the name shape is.
+# 3. Report file names carry a UTC stamp, with an optional `-<letters>` suffix after it for a
+#    side-by-side run (file-layout.md, file names). Whether a report was edited in place cannot be
+#    checked here, so only the name shape is.
+REPORT_NAME='-test-report-[0-9]{8}-[0-9]{4}(-[a-z]+)?\.md$'
 for report in "$REPORTS"/*-test-report-*.md; do
   [ -e "$report" ] || continue
-  [[ "$(basename "$report")" =~ -test-report-[0-9]{8}-[0-9]{4}\.md$ ]] || problem "bad report name: $(basename "$report")"
+  [[ "$(basename "$report")" =~ $REPORT_NAME ]] || problem "bad report name: $(basename "$report")"
 done
 
 # 4. No SKILL file and no reference restates a rule section that has a home in another reference.
@@ -246,9 +248,9 @@ plan_known_issues() {  # $1 = plan; prints one problem per line, for check 13
   local plan="$1" rep hhmm id sec12 ids
   sec12="$(awk '/^### 1\.2/ { f = 1; next } f && /^#/ { exit } f' "$plan")"
   ids="$(grep -oE '^\| `[a-z0-9-]+` \|' "$plan" | tr -d '|` ')"
-  for rep in $(sed -n '1,/^## 0\./p' "$plan" | grep -oE 'KING-[0-9]+-[a-z-]+-test-report-[0-9]{8}-[0-9]{4}\.md' | sort -u); do
+  for rep in $(sed -n '1,/^## 0\./p' "$plan" | grep -oE 'KING-[0-9]+-[a-z-]+-test-report-[0-9]{8}-[0-9]{4}(-[a-z]+)?\.md' | sort -u); do
     [ -f "$REPORTS/$rep" ] || { echo "earlier run $rep is not in $REPORTS/"; continue; }
-    hhmm="${rep%.md}"; hhmm="${hhmm##*-}"
+    hhmm="$(echo "$rep" | sed -E 's/.*-[0-9]{8}-([0-9]{4})(-[a-z]+)?\.md$/\1/')"
     for id in $(grep -oE '^### [FN][0-9]+ — ' "$REPORTS/$rep" | awk '{ print $2 }'); do
       echo "$sec12" | grep -qF "$id ($hhmm)" || echo "§1.2 has no row for $id ($hhmm) of $rep"
     done
@@ -285,6 +287,11 @@ done
 #     An older report predates the table: it is history, never edited, and not checked. A report
 #     with no `## 10.` heading is a run still in progress: IN PROGRESS, not a problem.
 REPORTS_FROM=20261006
+#     A report whose section 2 opens with `paused` (report-spec.md, the overall status) is a run
+#     handed over before it ended: PAUSED, not a problem, checked once the run finishes.
+is_paused_report() {  # $1 = report: the first non-blank line of its section 2 starts with `paused`
+  awk '/^## 2\./ { f = 1; next } f && /^## / { exit } f && NF { gsub(/[`*]/, ""); print; exit }' "$1" | grep -q '^paused'
+}
 SECTIONS='1. Header
 2. Overall status
 3. What was done, per part
@@ -301,6 +308,7 @@ for report in "$REPORTS"/*-test-report-*.md; do
   [ -n "$stamp" ] && [ "$stamp" -ge "$REPORTS_FROM" ] || continue
   r="${report#$DATA/}"
   grep -q '^## 10\. ' "$report" || { echo "IN PROGRESS: $r has no section 10 yet; it is checked once the run finishes"; continue; }
+  is_paused_report "$report" && { echo "PAUSED: $r: the run was handed over; it is checked once it finishes (report-spec.md, the overall status)"; continue; }
   grep -qE '^\| *Case *\| *Status *\| *Finding / note / blocked row *\|' "$report" || { problem "$r: no case status table in section 3 (report-spec.md, the case status table)"; continue; }
   got="$(awk '/^[ \t]*```/ { f = !f; next } !f && /^## / { sub(/^## +/, ""); sub(/ +$/, ""); print }' "$report")"
   [ "$got" = "$SECTIONS" ] || problem "$r: the ## sections are not the ten of report-spec.md in order (found: $(echo "$got" | tr '\n' ';'))"
@@ -365,6 +373,198 @@ for plan in "$PLANS"/*-test-plan*.md; do
   [ -n "$pdate" ] && [ "$pdate" -ge "$WIRING_FROM" ] || continue
   while IFS= read -r w; do [ -n "$w" ] && echo "WARN: ${plan#$DATA/}: $w"; done < <(plan_long_cells "$plan")
   while IFS= read -r p; do [ -n "$p" ] && problem "${plan#$DATA/}: $p"; done < <(plan_bad_labels "$plan"; plan_unwired "$plan")
+done
+
+# 18–19 and 22–25. Row checks on a stable-id plan whose **Plan version:** date is 2026-10-16 or
+#    later; an older plan is skipped, as for checks 9–17 (a plan is never edited once written).
+#    18. Every `NAME-…` / `NAME_S-…` / `KEY_…` literal in a `Call` cell, of Part A and of Part B, is
+#        in the §0 artifacts table: every artifact inside the stamp scope, probes and twins
+#        included, has a row there (plan-template.md, cases are data). A literal starts where no
+#        letter, digit, `_` or `-` precedes it, so `CONFIRM_KEY_x` and `a-KEY_q` are not ones. A literal that starts a
+#        literal of the table passes: a search scoped to the stamp (`"search": "KEY_create"`) names
+#        no artifact of its own. PROBLEM per literal.
+#    19. Every `"len<N>-…"` string literal in a `Call` cell is exactly N characters long, counted as
+#        characters, not bytes (plan-template.md, cases are data). PROBLEM per literal.
+#    22. A plan of version 2 or later keeps every case the newest report graded: every id of that
+#        report's `### Case status` table whose status is `PASS`, `FAIL` or `OBSERVED` is still a
+#        case row (plan-template.md, soundness rules; mcp-plan/SKILL.md, §1). The newest report is
+#        the last by name for the plan's `<KEY>-<domain>`, side-by-side reports (`-<letters>`)
+#        left out; a report with no such table (written before 2026-10-06) is not checked.
+#        PROBLEM per id.
+#    23. Every `{…}` argument object of a `Call` cell parses as JSON once the plan's handles are
+#        taken as strings: outside JSON strings, a `<…>` placeholder and every token that starts
+#        with a capital letter (`P1`, `W_A`, `BASE_P1`, not `true`/`false`/`null`) becomes `"X"`,
+#        then the object is decoded. An object is cut from `{` to its matching `}`, braces inside
+#        JSON strings not counted (plan-template.md, cases are data). PROBLEM per object, with the
+#        start of the decoder's message.
+#    24. Every `game_id` and `target_game_id` value of a `Call` cell is a §0 value: a bare handle
+#        that §0 names (`P1`, `P2`, `FOREIGN` …) or a quoted literal that §0 holds, as a whole token
+#        (`"7d3e"` is no §0 value although a uuid of §0 starts with it). Any other value
+#        is a PROBLEM unless the row's `Expected` cell names it as the probe, by its text
+#        (plan-template.md, cases are data).
+#    25. No `Call` cell describes its calls instead of writing them: `and so on` or `up to the
+#        last page` anywhere in the cell, `...` or `…` inside an argument object and outside its JSON
+#        strings (plan-template.md, cases are data). PROBLEM per phrase.
+#    26. A plan of version 2 or later numbers its new ids from the next free number: in every
+#        `<tool>-<kind>` group (and `pre`, `grey`, `handoff`, `role-<tool>`), the ids no earlier version
+#        of the plan holds are the numbers after the highest one any earlier version used, with no
+#        gap (plan-template.md, stable case ids). PROBLEM for the first id of a group that skips.
+NAMES_FROM=20261016
+plan_unlisted_names() {  # $1 = plan; prints one problem per line, for check 18
+  local plan="$1" zero lit id
+  zero="$(awk '/^## 0\./ { f = 1; next } f && /^## / { exit } f' "$plan")"
+  while IFS=$'\t' read -r id lit; do
+    [ -n "$lit" ] || continue
+    echo "$zero" | grep -qE "(^|[^A-Za-z0-9_-])${lit}" \
+      || echo "\`$lit\` in the Call cell of \`$id\` is not in the §0 artifacts table (plan-template.md, cases are data)"
+  done < <(hold_pipes "$plan" | perl -CSD -F'\|' -lane '
+    next unless defined $F[1] && $F[1] =~ /^ *`?([a-z][a-z0-9-]*-[0-9]{2})`? *$/;
+    my $id = $1; my $c = $F[2] // "";
+    print "$id\t$1" while $c =~ /(?<![A-Za-z0-9_-])((?:NAME(?:_S)?-|KEY_)[A-Za-z0-9_-]+)/g;' | sort -u)
+}
+plan_graded_rows() {  # $1 = plan; prints one problem per line, for check 22
+  local plan="$1" name kd rep ids id st
+  name="$(basename "$plan" .md)"
+  [[ "$name" =~ -v([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 2 ] || return 0
+  kd="${name%%-test-plan*}"
+  rep="$(ls "$REPORTS/$kd"-test-report-*.md 2>/dev/null | grep -E -- '-test-report-[0-9]{8}-[0-9]{4}\.md$' | sort | tail -1)"
+  [ -n "$rep" ] && grep -q '^### Case status' "$rep" || return 0
+  ids="$(grep -oE '^\| `[a-z0-9-]+` \|' "$plan" | tr -d '|` ')"
+  while IFS=$'\t' read -r id st; do
+    [ -n "$id" ] || continue
+    echo "$ids" | grep -qx "$id" \
+      || echo "\`$id\` was graded \`$st\` in $(basename "$rep") but is no case row of this version (plan-template.md, soundness rules)"
+  done < <(awk '/^### Case status/ { f = 1; next } f && /^#/ { exit } f' "$rep" | hold_pipes | awk -F'|' '
+    /^\|/ { id = $2; gsub(/[ `]/, "", id); st = $3; gsub(/[ `]/, "", st)
+            if (id == "Case" || id ~ /^:?-+:?$/) next
+            if (st == "PASS" || st == "FAIL" || st == "OBSERVED") print id "\t" st }')
+}
+plan_nn_numbers() {  # $1 = plan; prints one problem per line, for check 26
+  local plan="$1" name base n earlier=()
+  name="$(basename "$plan" .md)"
+  [[ "$name" =~ ^(.*-test-plan)-v([0-9]+)$ ]] && [ "${BASH_REMATCH[2]}" -ge 2 ] || return 0
+  base="${BASH_REMATCH[1]}"
+  [ -f "$PLANS/$base.md" ] && earlier+=("$PLANS/$base.md")
+  for (( n = 2; n < ${BASH_REMATCH[2]}; n++ )); do [ -f "$PLANS/$base-v$n.md" ] && earlier+=("$PLANS/$base-v$n.md"); done
+  [ ${#earlier[@]} -gt 0 ] || return 0
+  perl -e '
+    my ($plan, @old) = @ARGV; my (%max, %where, %seen);
+    for my $f (@old) { open my $h, "<", $f or next; (my $b = $f) =~ s{.*/}{};
+      while (<$h>) { next unless /^\| `([a-z][a-z0-9-]*)-([0-9]{2})` \|/; $seen{"$1-$2"} = 1;
+        if (!defined $max{$1} || $2 > $max{$1}) { $max{$1} = $2 + 0; $where{$1} = $b } } }
+    open my $h, "<", $plan or exit; my %new;
+    while (<$h>) { next unless /^\| `([a-z][a-z0-9-]*)-([0-9]{2})` \|/; push @{$new{$1}}, $2 + 0 unless $seen{"$1-$2"} }
+    for my $g (sort keys %new) { my $next = ($max{$g} // 0) + 1;
+      for my $num (sort { $a <=> $b } @{$new{$g}}) {
+        if ($num != $next) { my $was = defined $max{$g} ? "$where{$g} ends the group at " . sprintf("%02d", $max{$g})
+                                                          : "no earlier version has a case of the group";
+          printf "`%s-%02d` is not the next free number of `%s`: %s, so the next is %02d (plan-template.md, stable case ids)\n",
+                 $g, $num, $g, $was, $next; last }
+        $next++ } }' "$plan" "${earlier[@]}"
+}
+plan_call_objects() {  # $1 = plan; prints one problem per line, for checks 23–25
+  local zero
+  zero="$(awk '/^## 0\./ { f = 1; next } f && /^## / { exit } f' "$1")"
+  hold_pipes "$1" | ZERO="$zero" perl -CSD -MJSON::PP -F'\|' -lane '
+    BEGIN { $zero = $ENV{ZERO}; utf8::decode($zero); $tail = " (plan-template.md, cases are data)" }
+    next unless defined $F[1] && $F[1] =~ /^ *`?([a-z][a-z0-9-]*-[0-9]{2})`? *$/;
+    my $id = $1; my $c = $F[2] // ""; my $e = $F[3] // "";
+    s/\x1f/|/g for ($c, $e);
+    for my $p ("and so on", "up to the last page") {   # 25, anywhere in the cell
+      print "`$id` describes calls instead of writing them: \"$p\"$tail" if index($c, $p) >= 0;
+    }
+    my @objs; my ($depth, $start, $in, $esc) = (0, -1, 0, 0);   # cut every top-level {…}
+    for my $i (0 .. length($c) - 1) {
+      my $ch = substr($c, $i, 1);
+      if ($in) { if ($esc) { $esc = 0 } elsif ($ch eq "\\") { $esc = 1 } elsif ($ch eq "\"") { $in = 0 } next }
+      if ($ch eq "\"" && $depth > 0) { $in = 1; next }
+      if ($ch eq "{") { $start = $i if $depth == 0; $depth++ }
+      elsif ($ch eq "}" && $depth > 0) { $depth--; push @objs, substr($c, $start, $i - $start + 1) if $depth == 0 }
+    }
+    for my $o (@objs) {
+      (my $bare = $o) =~ s/"(?:[^"\\]|\\.)*"/"X"/g;   # 25, inside an object, outside its strings
+      for my $p ("...", "\x{2026}") {
+        print "`$id` describes calls instead of writing them: \"$p\"$tail" if index($bare, $p) >= 0;
+      }
+      (my $j = $o) =~ s/("(?:[^"\\]|\\.)*")|<[^<]*?>(?=\s*[,}\]])|\b(?!(?:true|false|null)\b)[A-Z][A-Za-z0-9_]*\b/defined $1 ? $1 : "\"X\""/ge;   # 23
+      eval { JSON::PP->new->decode($j) };
+      if ($@) { (my $m = $@) =~ s/\s+/ /g; $m =~ s/,? at (character offset|\S+ line) .*//; print "`$id` has an argument object that is not JSON once the handles are strings: " . substr($m, 0, 60) . $tail }
+    }
+    while ($c =~ /"((?:target_)?game_id)"\s*:\s*("(?:[^"\\]|\\.)*"|<[^<]*?>(?=\s*[,}\]])|[^,}\s]+)/g) {   # 24
+      my ($k, $v) = ($1, $2); my $ok;
+      my $whole = sub { my ($t, $x) = @_; $x ne "" && $t =~ /(?<![A-Za-z0-9_-])\Q$x\E(?![A-Za-z0-9_-])/ };
+      if ($v =~ /^"(.*)"$/) { my $lit = $1; $ok = $whole->($zero, $lit) || $whole->($e, $lit) }
+      else { $ok = $whole->($zero, $v) || $whole->($e, $v) }
+      $ok ||= $v eq "\"\"" && index($e, "\"\"") >= 0;
+      print "`$id` sends $k $v, which is no \x{a7}0 value and not named in its Expected cell (plan-template.md, cases are data)" unless $ok;
+    }' | give_pipes
+}
+plan_len_probes() {  # $1 = plan; prints one problem per line, for check 19
+  hold_pipes "$1" | perl -CSD -F'\|' -lane '
+    next unless defined $F[1] && $F[1] =~ /^ *`?([a-z][a-z0-9-]*-[0-9]{2})`? *$/;
+    my $id = $1; my $c = $F[2] // "";
+    while ($c =~ /"(len([0-9]+)-[^"]*)"/g) {
+      my ($v, $n) = ($1, $2); my $l = length $v;
+      print "`$id` sends a `len$n-` value of $l characters, not $n (plan-template.md, cases are data)" if $l != $n;
+    }' | give_pipes
+}
+for plan in "$PLANS"/*-test-plan*.md; do
+  [ -e "$plan" ] || continue
+  is_stable_plan "$plan" || continue
+  pdate="$(grep -m1 -oE '^\*\*Plan version:\*\* *[0-9]+ *\([0-9]{4}-[0-9]{2}-[0-9]{2}' "$plan" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tr -d -)"
+  [ -n "$pdate" ] && [ "$pdate" -ge "$NAMES_FROM" ] || continue
+  while IFS= read -r p; do [ -n "$p" ] && problem "${plan#$DATA/}: $p"; done < <(plan_unlisted_names "$plan"; plan_len_probes "$plan"; plan_graded_rows "$plan"; plan_call_objects "$plan"; plan_nn_numbers "$plan")
+done
+
+# 20. A plan older than its report: a runnable plan whose header says `**Earlier runs:** none`
+#     while reports/ holds a report for its `<KEY>-<domain>` gets a WARN, not a failure — the run
+#     says in its first message that a new plan version is due and runs as the rules say
+#     (mcp-run/SKILL.md, §1 step 4). A redacted plan is skipped: it cannot be run at all. A report
+#     whose section 2 opens with `paused` is a run of this plan still in progress (report-spec.md,
+#     the overall status; is_paused_report above), not an earlier run: it gives no WARN.
+for plan in "$PLANS"/*-test-plan*.md; do
+  [ -e "$plan" ] || continue
+  grep -q '^\*\*Fixed data:\*\* redacted' "$plan" && continue
+  grep -qE '^\*\*Earlier runs:\*\* *none( |$)' "$plan" || continue   # `none` alone or with a tail
+  kd="$(basename "$plan" .md)"; kd="${kd%%-test-plan*}"
+  for report in "$REPORTS/$kd"-test-report-*.md; do
+    [ -e "$report" ] || continue
+    is_paused_report "$report" && continue
+    echo "WARN: ${plan#$DATA/}: **Earlier runs:** none, but reports/ holds $(basename "$report") — a new plan version is due"
+  done
+done
+
+# 21. Research inputs and §1.3 (plan-template.md, the skeleton). A plan whose header has a
+#     `**Research inputs:**` line: when it is not `none`, the heading `### 1.3` exists, every table
+#     row under it has a `Cases` cell holding one or more ids of the shape check 5 defines or
+#     starting with `not reachable:`, and every id named there is a case row of the plan; when it
+#     is `none`, there is no `### 1.3` heading (a research input nobody named). A plan with no such
+#     header line predates KING-23440 and is skipped, as check 5 skips legacy plans. PROBLEM each.
+plan_research() {  # $1 = plan; prints one problem per line, for check 21
+  local plan="$1" line ids src cases id
+  line="$(sed -n '1,/^## 0\./p' "$plan" | grep -m1 -E '^\*\*Research inputs:\*\*')"
+  [ -n "$line" ] || return 0
+  if echo "$line" | grep -qE '^\*\*Research inputs:\*\* *none *$'; then
+    grep -q '^### 1\.3' "$plan" && echo "the header says **Research inputs:** none, but the plan has a ### 1.3 section — a research input nobody named (plan-template.md, the skeleton)"
+    return 0
+  fi
+  grep -q '^### 1\.3' "$plan" || { echo "the header names research inputs, but the plan has no ### 1.3 section (plan-template.md, the skeleton)"; return 0; }
+  ids="$(grep -oE '^\| `[a-z0-9-]+` \|' "$plan" | tr -d '|` ')"
+  while IFS=$'\t' read -r src cases; do
+    [ -n "$src" ] || continue
+    case "${cases#\`}" in "not reachable:"*) continue;; esac   # the label may be in backticks
+    found="$(echo "$cases" | grep -oE '`[a-z][a-z0-9-]*-[0-9]{2}`' | tr -d '`' | sort -u)"
+    [ -n "$found" ] || { echo "the §1.3 row \`$src\` has no case id and no \`not reachable:\` (plan-template.md, the skeleton)"; continue; }
+    for id in $found; do
+      echo "$ids" | grep -qx "$id" || echo "§1.3 names \`$id\`, which is no case row of the plan (plan-template.md, the skeleton)"
+    done
+  done < <(awk '/^### 1\.3/ { f = 1; next } f && /^#/ { exit } f' "$plan" | hold_pipes | awk -F'|' '
+    /^\|/ { if ($2 ~ /^ *(Source|-+|:?-+:?) *$/) next
+            s = $2; gsub(/^ +| +$/, "", s); c = $(NF - 1); gsub(/^ +| +$/, "", c); print s "\t" c }' | give_pipes)
+}
+for plan in "$PLANS"/*-test-plan*.md; do
+  [ -e "$plan" ] || continue
+  while IFS= read -r p; do [ -n "$p" ] && problem "${plan#$DATA/}: $p"; done < <(plan_research "$plan")
 done
 
 if [ "$fail" = 0 ]; then echo "OK: layout checks passed"; fi
