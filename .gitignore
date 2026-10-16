@@ -3,3 +3,6 @@ __pycache__/
 .DS_Store
 skills/testplan/evals/_runs/
 .kinoa/
+
+# superpowers working plans: local only (specs are tracked design history)
+docs/superpowers/plans/

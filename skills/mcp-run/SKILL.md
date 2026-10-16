@@ -19,7 +19,7 @@ reconstructed afterwards:
 
 - [`rules.md`](../mcp-plan/references/rules.md) — the whole file: target and method, Part A /
   Part B, statuses, partial runs, writes, subjects, delete semantics, capture at the call, pauses
-  and the hand-over to a new chat.
+  (the hand-over to a new chat, the in-chat reconnect and the post-compaction checklist).
 - [`fixed-data.md`](../mcp-plan/references/fixed-data.md) — which constants the plan's §0 must
   hold, and what a missing one does to the run.
 - [`stand-facts.md`](../mcp-plan/references/stand-facts.md) — the admin role API (the three
@@ -44,15 +44,17 @@ reconstructed afterwards:
 Plans and reports live in `~/.kinoa-qa/mcp/`, outside the plugin, so a plugin update keeps them
 (`file-layout.md`). The `mkdir` creates the two folders on a first use and changes nothing after.
 If either folder cannot be created or written, stop before case 1 and name the path: a report
-that cannot be saved loses the run's evidence.
+that cannot be saved loses the run's evidence. Each command runs at the step that names it, and
+none runs before step 1.
 
 ```bash
 mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports
 ls ~/.kinoa-qa/mcp/plans/ | grep -- '<KEY>-'   # pick the highest -v<N>
 ls ~/.kinoa-qa/mcp/reports/ | grep -- '<KEY>-' # the runs so far, oldest first
-date -u +%Y%m%d-%H%M                         # the STAMP, once, at the start of a new run
+date -u +%Y%m%d-%H%M                         # the STAMP, once, at the start of a new run; not for a report from a transcript (step 7)
 grep -cE '^\| `[a-z0-9-]+` \|' ~/.kinoa-qa/mcp/plans/<plan file>   # the plan's case count
 bash <plugin>/skills/mcp-plan/scripts/check-layout.sh                # before the report is finished (§3)
+sleep 60                                     # a wait between write blocks, only where the harness runs it in the foreground (stand-facts.md, budgets)
 ```
 
 1. **Check that the references and the connector are there.** Read
@@ -71,21 +73,37 @@ bash <plugin>/skills/mcp-plan/scripts/check-layout.sh                # before th
    constants.
 4. **Pick the baseline** — the newest report for the same `<KEY>-<domain>` in which a case ran, or
    none (`file-layout.md`, finding the files). Read its findings and its notes and write down the
-   ids to re-check (older reports have no Notes section, see `file-layout.md`).
+   ids to re-check (older reports have no Notes section, see `file-layout.md`). When the plan says
+   `**Earlier runs:** none` and a report for its `<KEY>-<domain>` exists, say in the first
+   message that a new plan version is due, then run as the rules say: an id with no §1.2 row is
+   re-run from its old block (`file-layout.md`, comparing runs).
 5. **For a partial run, write down what runs** before case 1: the slice the operator named, the
    preflight, the cases the slice pulls in along its `Record:` values, the checkpoints that hold
    any of them, and which baseline ids it re-checks and which stay `not re-tested` (`rules.md`,
    partial runs). Every
    other case gets the exclusion label of that section.
 6. **Ask one question if it is missing**: the `Run reason` value (`file-layout.md`, many reports
-   for one plan). Nothing else in Part A asks anything.
+   for one plan). In the same message, print the three `curl` lines of the admin role API in the
+   shapes of `stand-facts.md`. Write the plan's literal `ADMIN_API` in double quotes and `USER_ID`
+   as a wildcard. Ask the operator to allow exactly those shapes before case 1. The Claude Code
+   `permissions.allow` entry of the form `Bash(curl …)` is the one known example of how to allow
+   them, not the rule. Nothing else in Part A asks anything. A plan with no Part B: print no
+   `curl` line and send no snapshot `GET` beyond a `pre-` case that sends it; section 10 says no
+   checkpoint ran. A plan with Part B but no
+   `ADMIN_API` in §0: print no `curl` line, write a `Plan defect for the next version` row in
+   section 8, and the operator applies the rows (`fixed-data.md`, games and players; `rules.md`,
+   Part A / Part B).
 7. **Resume, when the operator names an existing report file or says "continue".** The run is
-   the one that file records: reuse its `Run` stamp, skip the `date` command, and read its
-   section 1, section 3 (its `Record:` values and the last row of its case status table, or in a
-   report with no table the last case with a status) and section 10 for `ROLES_BEFORE`. Start
-   from the next case, in the plan's order; the baseline and the slice stay the ones the file
-   names. Section 3 records where the run paused and where it resumed; a resume inside Part B
-   follows `rules.md`, pauses. Then go to §2.
+   the one that file records: reuse its `Run` stamp, skip the `date` command, and read what
+   step 3 of the post-compaction checklist lists (`rules.md`, pauses; in a report with no case
+   status table, the last case with a status). Start from the next case, in the plan's order;
+   the baseline and the slice stay the ones the file names. Section 3 records where the run
+   paused and where it resumed; a resume inside Part B follows `rules.md`, pauses. Then go to
+   §2. When the operator names a report file that is not in the folder, create it under the
+   given stamp from the captured envelopes, and section 3 says the file was created, not
+   resumed. A report written from a transcript takes the stamp the operator gives and runs no
+   `date`; with no stamp given, ask for it before the file is created (`rules.md`, statuses, the
+   transcript rule).
 8. **Otherwise create the report file** `<KEY>-<domain>-test-report-<STAMP>.md` in
    `~/.kinoa-qa/mcp/reports/` before case 1, with section 1 only and its run lines
    filled in; add each later heading when its section is first written. Never overwrite an earlier report (`file-layout.md`, file names).
@@ -112,9 +130,8 @@ bash <plugin>/skills/mcp-plan/scripts/check-layout.sh                # before th
 **One case at a time**, with the harness's file write and edit tools: what goes into the file
 before the next call is in `rules.md`, capture at the call.
 
-**Hand over before the context runs out.** Keep a count of this chat's tool calls, and hand over
-at the next safe point when `rules.md`, pauses (when, where, how), says so. After a compaction,
-check the case status table against the cases run before the next call.
+**Pauses, compactions and connector drops**: `rules.md`, pauses. Read it again before the next
+call when the context was compacted or the connector dropped.
 
 ## 3. Finish
 
@@ -131,7 +148,8 @@ check the case status table against the cases run before the next call.
    of the plan's checkpoints (plus the snapshot `GET` and the restore `PUT`s), that no script was
    written anywhere, and that no file of the project changed (`rules.md`, target and method). In
    `~/.kinoa-qa/mcp/reports/` only the report file was added or changed, and no file of the
-   plugin changed (`file-layout.md`, maintaining the rules).
+   plugin changed (`file-layout.md`, maintaining the rules). This is checked from the chat's own
+   record of what it ran and wrote; no command is run for it.
    If anything else changed, say so in the hand-over.
 6. Hand over: the overall status, each `RED` item with steps, expected and actual, and the
    notes one line each. Then **Rule change proposals**: each rule that misled the run or was
@@ -152,6 +170,7 @@ borrowed bearer, a local server. The report then describes the chat's work, not 
 | Thought | What it actually is |
 |---|---|
 | "The plan restates the rules, I don't need the references" | The plan holds pointers; the rules may have changed since (`file-layout.md`, where each rule lives). |
+| "A quick `ls -la` or `echo` changes nothing" | The shell runs only the printed commands; a no-op is a script too (`rules.md`, target and method). |
 | "A curl or a quick SQL query would settle this faster" | Only protocol envelopes are evidence (`rules.md`, target and method). |
 | "A curl loop with the connector's bearer fits 61 calls into a minute" | The flood goes out as the connector's own calls (`stand-facts.md`, how the flood is sent). |
 | "The `kinoa` connector is missing or not logged in — the local stdio server will do" | Whole run `BLOCKED`; the stdio server resolves roles from a property (`stand-facts.md`, connector). |
@@ -179,6 +198,7 @@ A status not read off an envelope is invented, and a note in place of a finding 
 | "The cell lists five fields and one differs, so the case is `FAIL`" | Grade on the clause before `Also record:`; a mismatch after it is a note (`rules.md`, statuses). |
 | "The wrong-type value came back `ok`, so the schema check is missing" | The connector converted it: `BLOCKED — the connector converts the argument type` (`stand-facts.md`, connector). |
 | "Nothing could run, but there are no FAILs, so the report is `GREEN`" | A run with no case run is `BLOCKED — <reason>` (`report-spec.md`, the overall status). |
+| "The preview never validates, so I'll grade the rule rows on the confirm leg" | A row that expects a refusal with no token is graded on the preview leg; a token there fails it (`rules.md`, writes). |
 | "The 11th write went through, so the limit is broken" | Limits count per replica: `OBSERVED` unless the stand runs a single replica (`stand-facts.md`, budgets). |
 
 ### Pace
@@ -230,7 +250,8 @@ What the chat forgets after a compaction is gone unless it is already in the fil
 | Thought | What it actually is |
 |---|---|
 | "I'll write up this section's cases once it is done" | One case at a time, before the next call (`rules.md`, capture at the call). |
-| "The connector dropped, but the captured envelopes are enough to finish the report" | Hand over at once: the report file, the last row of the case status table, `continue <report file>` (`rules.md`, pauses). |
-| "The context was compacted, but I remember what that response said" | Run it again or `BLOCKED — response not captured`; never graded from memory (`rules.md`, pauses). |
-| "The context warning came in the middle of a checkpoint, so I hand over now" | A checkpoint is never split between chats: finish its cases first. In Part A any case is a safe point (`rules.md`, pauses). |
+| "The connector dropped, but the captured envelopes are enough to finish the report" | Ping and send the lost call again in place when it comes back; hand over only when it does not (`rules.md`, pauses). |
+| "The context was compacted, but I remember what that response said" | Run the post-compaction checklist; a case with no envelope in the file is run again or `BLOCKED — response not captured` (`rules.md`, pauses). |
+| "The context warning came in the middle of a checkpoint, so I hand over now" | The warning changes nothing. A checkpoint is split only by a compaction (step 8) or a connector that does not come back (`rules.md`, pauses). |
+| "The chat has made many calls, I will hand over now" | There is no call limit; hand over only for a connector that does not come back or when the operator asks (`rules.md`, pauses). |
 | "The references are not next to this skill, but I know the rules" | Stop before case 1 and ask for the plugin to be updated or reinstalled (§1, step 1). |

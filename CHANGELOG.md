@@ -9,6 +9,123 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.7.1 — 2026-10-16
+
+**`mcp-plan` and `mcp-run`: the gaps the 0.7.0 eval run found** (KING-23440, the eval run of
+2026-10-16: 31 of 42 `mcp-plan` assertions passed, 42 of 42 `mcp-run`; two `mcp-run` evals
+were refused by the API). The references and both SKILL files changed; update the plugin before
+the next plan or run. The plan and report shapes do not change; the new checks are date-gated.
+
+- **`mcp-plan/SKILL.md`.** §0: the branch-state line also prints `git rev-parse --short HEAD`,
+  the sha of `**Checked against:**` (no allowed command printed it before). §1: the planner
+  reads the `### Case status` table of each report too (which rows were sent and graded; a
+  report without it: all of section 8), and finds the parts with the printed `grep -nE` line
+  where the harness has no file-search tool. §2: a question the request answered is listed once under **From
+  your request** and not asked; the checkpoint number counts role states only, the restore
+  comes on top; a key that only a sub-entity's links or text name is never cited. §3: the
+  hand-over says which check numbers ran, and a property checked only by reading is
+  `checked by reading, not verified`. Three red-flag rows here and one in `mcp-run/SKILL.md`
+  (a quick `ls -la` or `echo` is a script too); §3 step 5 of `mcp-run` is checked from the
+  chat's own record, with no command.
+- **`rules.md`.** Target and method: `git rev-parse` joins the planning chat's list; where the
+  harness has no file-search tool, `grep -nE '<pattern>' <file>` and
+  `grep -rlE '<pattern>' <folder>` are the one allowed search (extended patterns, so `|`
+  separates alternatives) (no `wc`, `cat`, `sed`, `head`,
+  `find`, `ls -la`, `echo`). Statuses: a report written from a transcript writes the write
+  list's source, `USER_ID` and `ROLES_BEFORE` as `not captured` and infers nothing. Pauses (b):
+  a row graded on the preview leg gets its row when that envelope is captured; Part A / Part B:
+  the 20 s role-cache wait is measured like the pause between write blocks and recorded, and
+  after a failed or timed-out `PUT`/`DELETE` the rows in effect are unknown until a `GET`
+  answers; "the case in
+  flight gets no row" applies when the deciding envelope was not. A hand-over opens report
+  section 2 with the `paused` line, which `report-spec.md` (the overall status) defines.
+- **`plan-template.md`.** §1.3 has one row per clause a case can check on its own (with an
+  example; a qualifier in brackets, the schema's type and a UI default stay in their clause's
+  row); a rule about trimming or whitespace gets two cases, one of them whitespace-only;
+  Part B opens with `<N> role checkpoints, then the restore`; every `game_id` and
+  `target_game_id` is a §0 value or a probe its `Expected` cell names (check 24).
+- **`file-layout.md`.** A finding the owner ruled expected keeps its §1.2 row, which says so.
+- **`story-readers.md`.** A linked issue about another surface is `nothing`, not a fact; a key
+  that only a sub-entity's links or text name stays inside the quoted row.
+- **`report-blocks.md`, `language.md`.** Fourth artifact label
+  `not re-checked (last seen: status <x> in <case>)`, only when no call is allowed.
+- **`mcp-run/SKILL.md`.** §1: a report from a transcript takes the operator's stamp and runs no
+  `date`; a report file the operator names but that is missing is created under the given
+  stamp and section 3 says so; a plan with no Part B gets no `curl` lines and no snapshot
+  `GET`; a plan with Part B but no `ADMIN_API` gets a plan-defect row and the operator applies
+  the rows. The commands of the §1 block run at the step that names them, none before step 1.
+- **`check-layout.sh`.** Check 18 reads `NAME_S-` and `KEY_…` literals too, in Part A and
+  Part B; a literal that only starts an artifact's name (a search scoped to the stamp) passes.
+  New checks, for plans dated 2026-10-16 or later: 22 (a plan of version 2 or later keeps every
+  row the newest report's case status table graded), 23 (every `{…}` argument object is JSON
+  once the handles are strings), 24 (every `game_id` / `target_game_id` is a §0 value or named
+  in its `Expected` cell as the probe), 25 (no `and so on` or `up to the last page` in a `Call`
+  cell, and no `...` or `…` inside an argument object outside its strings). A report whose
+  section 2 opens with `paused` is PAUSED for check 15 and gives no WARN for check 20. New
+  check 26: a plan of version 2 or later numbers each new id from the next free number of its
+  group, with no gap. Check 24 matches a value as a whole token and prints a `<…>` placeholder
+  whole; check 23 accepts a placeholder that holds `->`.
+- **Evals.** `mcp-plan`: eval 3 uses KING-99104 with the story text pasted; eval 0's row
+  assertion is split into five; eval 1's id assertion into four, plus one for the graded rows; new assertions for the
+  graded rows, the cited keys, the `grep -n` read, the `game_id` values, the honest hand-over
+  and the §1.3 row count (11). `mcp-run`: eval 3 gets its seeded report
+  `KING-99003-user-lists-test-report-20260923-1400.md` and the hand-over observables; the "no
+  script" clause reads "writes no script and runs only the commands SKILL.md prints"; new
+  assertions for the order of step 1, the early stop, `tools/list` fidelity, the plan-defect
+  rows, the fourth artifact label, the 16-row table and the unread role. Eval 7's oracle answers
+  the listing differently before and after the `-r` create; eval 5's unrun B2/B3 cases must be
+  `BLOCKED` rows; eval 2 grades every finding block, not one.
+
+## 0.7.0 — 2026-10-16
+
+**`mcp-plan` and `mcp-run`: no tool-call limit, a pruning pass of the rules, and every sub-entity
+of a story is a plan input** (KING-23440). The references in
+`<plugin>/skills/mcp-plan/references/` changed; both skills read them, so update the plugin
+before the next plan or run.
+
+- **No limit on tool calls** (`rules.md`, pauses). An `mcp-run` chat no longer hands over because
+  of a call count, a large context or a compaction; the "about 120 tool calls" line is gone. The
+  report file is always current, and a compaction starts the **post-compaction checklist**
+  (re-read the rules and the plan, reconcile the case status table, rebuild the handles from the
+  file, reuse a confirm token while it is valid). A connector that drops and comes back in the
+  same chat gets the lost call again in place; a hand-over happens only for a connector that
+  does not come back or when the operator asks. `mcp-run` §1 step 7 (resume) points at the
+  checklist; its command block gains `sleep 60`, allowed only where the harness runs it in the
+  foreground (`stand-facts.md`, budgets), and the pause between write blocks is measured with
+  `kinoa_system_ping`.
+- **Rules from the runs of 2026-10-12 … 2026-10-15.** A row that expects a refusal with no token
+  is graded on the preview leg, and "the preview approves what the confirm refuses" is one
+  finding per tool; after a refused executing leg the subject is read back (`rules.md`, writes).
+  Finding ids stay in discovery order and section 4 opens with the ids by severity
+  (`report-blocks.md`, `report-spec.md`). Partial runs: a handle anywhere in the row pulls in
+  its recording case, a read with a missing handle is still sent and `BLOCKED`, a precondition
+  wired to no handle is a plan defect (`rules.md`, partial runs). A checkpoint block whose rows
+  are already in place is not sent (`rules.md`, Part A / Part B); a case after the restore
+  expects the answer the same call got in Part A. An empty string for a string-or-null argument
+  is converted by the connector (`stand-facts.md`). Plan shape (`plan-template.md`): the §0
+  artifacts table has an `Expected` column, a `BASE_<X> + n` count names its handles, a wait is
+  its own numbered step, a length probe is `len<N>-…` of exactly `N` characters, and a violation
+  `path` has no leading slash (verified at kinoa-mcp commit `e375f2d`). A report name may carry
+  `-<letters>` after the stamp for a side-by-side run (`file-layout.md`). `mcp-run` §1 step 6
+  prints the three `curl` shapes to allow before case 1.
+- **Every sub-entity of the story is a plan input** (`mcp-plan`). The planning chat reads the
+  story itself and dispatches **readers** — sub-agents on the model in `config.json`
+  (`mcp.reader_model`, default `sonnet`) — one per batch of at most ten keys, to read every
+  sub-task, sub-bug and linked issue whole (new reference `story-readers.md`). The first message
+  lists each one as `read`, `empty` or `unreadable` with the bugs, rules and facts taken from it.
+  The plan header gets `**Research inputs:**` and the plan a **§1.3 Research results** table:
+  one row per rule, its `Served contract`, and the cases that cover it; a rule the served schema
+  contradicts is a §1.1 hypothesis whose deciding case reads the entity back, and every
+  happy-path case sends every field the research marks required. Question 10's no-search rule is
+  unchanged.
+- **`check-layout.sh`**: four new checks — `NAME-` literals of `Call` cells must be in the §0
+  artifacts table (18), `len<N>-` probes are counted (19), a runnable plan that says
+  `**Earlier runs:** none` while a report exists gets a WARN (20; a redacted plan is skipped), and `**Research inputs:**` / §1.3 are checked
+  against each other (21). Checks 3 and 13 accept the side-by-side suffix. Checks 18 and 19 apply
+  to plans dated 2026-10-16 or later.
+- **Eval**: `mcp-plan` gains `new-plan-with-research-subtask` (a fictional story with a research
+  sub-task, a work item that carries a rule, an empty sub-task and a linked issue).
+
 ## 0.6.1 — 2026-10-12
 
 **`smoke-plan`, `smoke-run` and the README point to the kinoa-aqa plugin for automation and page

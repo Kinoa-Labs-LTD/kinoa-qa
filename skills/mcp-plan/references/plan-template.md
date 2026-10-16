@@ -30,6 +30,9 @@ each shape) · [the fixed section order](#the-fixed-section-order) · [the prefl
 through the admin role API), replica count, write mode, the role-to-tool mapping the plan was built on, the
 story-vs-stand tool check (tools missing, extra or renamed, and the operator's answer — or
 `not done: no connector in this chat`) — one line each
+**Research inputs:** <KEY> — <title>, one per sub-entity of the story that gave §1.3 at least one
+row, whatever its type, or "none". A sub-entity read and found empty or rule-less is not listed
+here; it is in the interview message only (`mcp-plan SKILL.md`, §2)
 **Checked against:** `commit <sha>` and the files read, when the server source was open, else
 `tools/list of <date>; server source not available` (see "With and without the server source")
 
@@ -37,9 +40,12 @@ story-vs-stand tool check (tools missing, extra or renamed, and the operator's a
 The constants table, per `mcp-plan references/fixed-data.md`, with the **literal value** the interview
 gave for every constant — a `<…>` placeholder or an empty cell here makes the plan not runnable —
 plus the **artifacts table**: one row per
-subject the plan creates — handle, the **actual `name` / `key` it will be created with** (the
-`NAME`/`KEY` stamp plus a descriptive suffix, not the handle), game, what it is, intended end state.
-The report cites those real names, not the handles, so the plan fixes them up front.
+artifact inside the stamp scope, probes and twins included — handle, the **actual `name` / `key`
+it will be created with** (the `NAME`/`KEY` stamp plus a descriptive suffix, not the handle),
+game, what it is, intended end state, and `Expected`: `yes`, or `no` for a name sent for an
+expected refusal. The report cites those real names, not the handles, so the plan fixes them up
+front; the run grades a leftover against the `Expected` mark (`mcp-plan references/rules.md`,
+writes).
 
 ## 1. Execution rules
 Pointers only: `mcp-plan references/rules.md`, `mcp-plan references/report-spec.md`,
@@ -74,16 +80,68 @@ least one case, and what counts as covering depends on the row:
 A new case goes in the tool section it belongs to (order of work: `mcp-plan SKILL.md`). The subsection
 is left out, heading included, only when the story has no known issue and there is no earlier run.
 
+### 1.3 Research results and the cases that cover them
+| Source | Rule | Served contract | Cases |
+One row per clause that a case can check on its own, of every research input the header names,
+written as the input states it (quote as written, `mcp-plan references/language.md`). A field
+whose rule holds several clauses gives several rows, one per clause, so each clause traces to
+its own case; a sentence that states two rules gives two rows. Example, the table of a
+research sub-task: `name — required; 1..255 characters; not trimmed (whitespace counts)` is
+three rows (`name` required / `name` 1..255 / `name` not trimmed); `slots[].title — required;
+unique among siblings` is two; the sentence "the status of a new widget is always DRAFT; a
+status sent on create is refused" is two. A qualifier in brackets such as `(case-sensitive)`,
+the type the schema already gives the field, and the UI default of a required field each stays in its clause's row:
+`slots[].level — number, required, the UI sets 1` is one row. `Source` is the key and the place in its text (a table
+name, a heading, a comment's date and author). `Served contract` says what `tools/list` or the
+served schema says about the same thing: `same`, `absent`, the differing text, or
+`not checked: no connector` when the planning chat has no connector (the run's inventory and
+schema cases settle it). `Cases` holds at least one case id, or `not reachable: <why>` for a rule
+the protocol cannot exercise (a UI-only control such as a hidden button, a modal's confirmation
+text). A field the input marks "no rule" is not a rule and gets no row. A row with an empty
+`Cases` cell means the plan is not finished. Three rules decide which cases cover a row:
+- **a rule the served contract agrees with** (same limit, same charset, same requiredness) is
+  covered by a `schema` or `rule` case of layer 2 that sends the boundary the research names — the
+  research gives the values, the case sends them. It may be a case that already exists for the AC;
+  then only the id is added;
+- **a rule the served contract contradicts or does not carry** is a hypothesis. Examples: the
+  research says required and the schema says optional; the research names a charset the schema
+  does not declare; the research gives a UI default the tool does not set. It gets a §1.1 row
+  whose `AC / expectation` column cites the research row, plus the cases that settle it, and the
+  §1.3 row names the same ids. A rule that expects a refusal (a limit, a duplicate, an argument
+  the entity does not take) is decided on the refusal envelope, like any `rule` case. A rule about
+  a **stored value** (a required field, a default) is decided on the **entity read back through
+  the protocol**, never on the write's envelope. After a write that omits the field, the read
+  shows a value the research calls valid: a number for a required numeric field such as a
+  `level`, the default for a UI default. The read is the entity's `_get`, or its `_list` row when
+  the tool set has no `_get`. When no read exposes the field, the row says
+  `not reachable: no read exposes <field>`. A `PASS` on the write with no read-back proves nothing
+  about what the dashboard will load;
+- **every happy-path `ok` case sends every field the research marks required**, with the
+  research's default where the served schema leaves it optional, so the entities the run creates
+  are the entities a dashboard user would create. The omit-the-field probe lives in its own `gap`
+  case on its own subject, never in the `ok` case;
+- **a rule about trimming or whitespace** ("not trimmed", "whitespace counts") is covered by two
+  cases: a value with surrounding whitespace, read back as sent, and a whitespace-only value,
+  whose `Expected` follows the research (for "whitespace counts": accepted and stored as sent).
+  Only the whitespace-only value tells "trimmed, then refused as empty" from "whitespace
+  counts".
+The subsection is left out, heading included, only when the header says `**Research inputs:** none`.
+`check-layout.sh` check 21 reads the header line and the rows.
+
 # PART A — everything that needs no permission change
 §A0 Preflight, opened by the tool inventory (see "The preflight"), then one section per tool in
 the fixed order below, then §Grey, then §Hand-off.
 
 # PART B — role-gated checks
+Opens with one line that states both numbers: `<N> role checkpoints, then the restore`
+(`mcp-plan SKILL.md`, §2, question 6: the operator's number counts role states only).
 One checkpoint per role state, built by `mcp-plan references/rules.md` (Part A / Part B): the rows
 wanted as the complete state, then the request block that puts them in place (the three request
 shapes: `mcp-plan references/stand-facts.md`, the admin role API), then the table. The last checkpoint
 restores `ROLES_BEFORE`. Grey-box probes under a restricted role go last, reusing the final
-checkpoint's state.
+checkpoint's state. A case that runs after the restore expects the answer the same call got in
+Part A, named by its case id (`as get-ok-01`), never a fixed role: Part A ran under
+`ROLES_BEFORE`, whatever those rows were.
 
 # REPORT
 A pointer to `mcp-plan references/report-spec.md` plus what only this domain knows: the AC bullets for
@@ -107,7 +165,7 @@ Every case is one row of a three-column table, and the row holds nothing else:
 | Column | Holds | Never holds |
 |---|---|---|
 | `Id` | the stable id, see below | — |
-| `Call` | the tool name and the **full JSON arguments**. Several calls are numbered `1.` `2.` inside the cell, and both legs of a write are two numbered steps | a description of a value instead of the value |
+| `Call` | the tool name and the **full JSON arguments**. Several calls are numbered `1.` `2.` inside the cell, and both legs of a write are two numbered steps | a description of a value instead of the value, or of calls instead of the calls (`and so on`, `...`) |
 | `Expected` | the deciding assertion first, then the literal label `Also record:` and the rest (see below); numbered like the calls when there are several; plus `Record: <handle>` when a later case needs a value from this one | the reason for the case, the AC it comes from, the hypothesis it settles, what an earlier run found |
 
 Everything that is not a call or an assertion is **commentary**, and commentary lives in the short
@@ -134,17 +192,36 @@ pulls in earlier cases only along `Record:` values (`rules.md`, partial runs).
 **A count is never an absolute number.** Artifacts are kept, so the fixture games hold the
 leftovers of earlier runs. An assertion on a count, or on "exactly N items", is written relative
 to a baseline that a preflight `pre-` case records (`BASE_<X>` + n), or on a filter scoped to this
-run's stamp (`NAME` / `KEY`). A filter that an earlier run's artifacts also match, such as
-`seed-`, is not a scope.
+run's stamp (`NAME` / `KEY`). A `BASE_<X>` + n assertion names the handles it counts,
+`BASE_P1 + 2 (W_A, W_B)`, so a refused create blocks the count instead of failing it (`rules.md`,
+partial runs). A filter that an earlier run's artifacts also match, such as `seed-`, is not a
+scope. Every artifact inside the stamp scope, probes and twins included, is a row of the §0
+artifacts table (the skeleton); `check-layout.sh` check 18 reads the `NAME-`, `NAME_S-` and `KEY_` literals
+of every `Call` cell against it, and a literal that only starts an artifact's name, such as a
+search scoped to the stamp, passes.
+
+**Every `game_id` and `target_game_id` is a §0 value**: a handle §0 names (`P1`, `P2`,
+`FOREIGN`) or a literal §0 holds. A row that probes another value — an empty string, a value
+that is no uuid, a uuid in capitals — writes that value in its `Expected` cell too, so a reader
+sees it is the probe. `check-layout.sh` check 24 reads them.
 
 **A length or volume probe writes its value out in full, with no handle in it**, so a reader can
-count it: for example `len255-` and then `0123456789` blocks up to exactly 255 characters. Never a
-description such as "255 characters of `A`".
+count it. The value starts with `len<N>-`, where `N` is the length of the whole value in
+characters, prefix included, then counted filler blocks of `0123456789` up to exactly `N`
+characters. The shape is required, not an example: `check-layout.sh` check 19 counts every
+`"len<N>-…"` literal of a `Call` cell. Never a description such as "255 characters of `A`".
+
+`check-layout.sh` reads the `Call` cells for the rest of this section too: check 23 decodes every
+`{…}` argument object as JSON once the handles are taken as strings, and check 25 reports a cell
+that describes its calls (`and so on`, `up to the last page`, `...` or `…` in an argument object).
 
 Two limits keep a row atomic:
 
 - A case has one purpose. If the `Expected` cell asserts two unrelated things, it is two cases.
 - A case has at most five steps. A step is one tool call, so the two legs of a write are two steps.
+  A wait inside a case is its own numbered step in the `Call` cell — `wait 60 s` measured by
+  `kinoa_system_ping`, or `sleep 60` (`stand-facts.md`, budgets) — like the `curl` step of
+  `pre-04`, and it counts toward the five.
   A longer scenario is split, and the later case starts from a `Record:` value of the earlier one.
   The one exception is a flood probe (`stand-facts.md`, how the flood is sent): its repeated call
   is one step, written once with the count, because splitting it would reset the window it fills.
@@ -163,7 +240,7 @@ is the only example of the plan shape; do not open an old plan to see the format
 |---|---|---|
 | `get-ok-01` | `kinoa_widget_get {"game_id": P1, "widget_id": W_A}` | `data.widget.id` = `W_A`. Also record: `ok: true`; `data.widget.name` = `NAME-widget-a` |
 | `create-ok-01` | 1. `kinoa_widget_create {"game_id": P1, "name": "NAME-widget-b", "size": 3}` 2. the call of step 1 plus `"confirm_token": <token of step 1>` 3. `kinoa_widget_get {"game_id": P1, "widget_id": W_B}` | 1. `meta.confirmToken` present. Also record: `ok: true`; `data.status` = `preview`; `data.intendedChange.name` = `NAME-widget-b`. 2. `data.created` = `true`. `Record: W_B` = `data.widget.id`. 3. `data.widget.size` = `3`. Also record: `ok: true`; `data.widget.name` = `NAME-widget-b` |
-| `list-sem-01` | `kinoa_widget_list {"game_id": P1, "page_size": 100}` | `data.totalItems` = `BASE_P1` + 2. Also record: `W_A` and `W_B` are among the items |
+| `list-sem-01` | `kinoa_widget_list {"game_id": P1, "page_size": 100}` | `data.totalItems` = `BASE_P1` + 2 (`W_A`, `W_B`). Also record: `W_A` and `W_B` are among the items |
 
 ## B2. Checkpoint 2 — COMPANY Operator, GAME Viewer on `P1`
 
@@ -195,6 +272,8 @@ The report contract is `mcp-plan references/report-spec.md`. What only this doma
 Part A has one section per tool, and inside each tool section the same kinds in the same order.
 The order never changes between plans and never changes between versions of one plan, so a reader
 who knows one plan can navigate any other, and two stories can be compared section by section.
+Section 1 keeps its own order too: §1.1 hypotheses, §1.2 known issues, §1.3 research results
+(the skeleton).
 
 **Tools** in Part A are ordered read tools first, then write tools, in this order of verb:
 
@@ -218,7 +297,7 @@ Whether a tool is a read or a write is its `readOnlyHint` (`rules.md`, writes), 
 |---|---|---|
 | Happy path | `ok` | The successful call(s) on the tool's own subject. Both legs of a write. Every tool has at least one. |
 | Semantics | `sem` | What the tool really does: list inventory and paging, lifecycle transitions and `availableActions`, and the delete determination (the procedure is in `rules.md`, delete semantics). |
-| Schema | `schema` | Rejections the server makes against the declared input schema, in the error envelope: missing required, enum, range, length, `additionalProperties`, an object where an array is declared. If a row sends a top-level value of another JSON type (a string for a boolean or an integer, a number for a string) or a `null` for a string argument, the connector converts it before the call leaves, so the row cannot reach the server: it is not written, and that check belongs in a functional test (`stand-facts.md`, connector). The registry checks the schema before the tool runs and answers `ok: false`, `error.code` = `VALIDATION_FAILED`, a violation with `rule` = `input_schema` and `path` = the JSON pointer of the argument (`/name`; `null` for a root-level error). The violations are in `error.violations[]`. A missing required argument is a root-level error: its `path` is `null` and only the wording names the argument (`required property 'game_id' not found`). The `Expected` cell asserts the code, the rule and the pointer; never the violation's wording, which is the validator's and depends on the locale. |
+| Schema | `schema` | Rejections the server makes against the declared input schema, in the error envelope: missing required, enum, range, length, `additionalProperties`, an object where an array is declared. If a row sends a top-level value of another JSON type (a string for a boolean or an integer, a number for a string), a `null` for a string argument, or an empty string for an argument declared string-or-null, the connector converts it before the call leaves, so the row cannot reach the server: it is not written, and that check belongs in a functional test (`stand-facts.md`, connector). The registry checks the schema before the tool runs and answers `ok: false`, `error.code` = `VALIDATION_FAILED`, a violation with `rule` = `input_schema` and `path` = the argument path without the leading slash (`name`, `resources/0/resource_key`; `null` for a root-level error) — verified at commit `e375f2d`, 2026-10-15. The violations are in `error.violations[]`. A missing required argument is a root-level error: its `path` is `null` and only the wording names the argument (`required property 'game_id' not found`). The `Expected` cell asserts the code, the rule and the pointer; never the violation's wording, which is the validator's and depends on the locale. |
 | Tool rules | `rule` | Rejections the tool itself makes: cross-field, backend-state, semantic. |
 | Gap hunt | `gap` | Inputs the documented rules do not cover, sent to see what happens. Every row is wired to a §1.1 hypothesis or to an AC bullet (hypotheses, below). |
 | Isolation | `iso` | Unknown id, foreign game, cross-game reads, not-found shapes. |
@@ -284,7 +363,8 @@ named the checkpoint would have to change with it.
 The rules that make ids survive a rebuild:
 
 - **Never renumber.** Inserting a case does not shift its neighbours. The new case takes the next
-  free `NN` in its group, even if it sits in the middle of the table.
+  free `NN` in its group, even if it sits in the middle of the table. Free means after the highest
+  number any earlier version used, with no gap; `check-layout.sh` check 26 reads it.
 - **Never reuse.** A case removed in a later version retires its id.
 - **A plan carries no version note and no change log.** Two versions
   are compared by their stable ids: an id in one file only was added or retired, and the same id

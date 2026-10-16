@@ -23,16 +23,17 @@ kinoa-mcp source, run one cheap check first, with the repo root written in place
 the line is the evidence, the claim is not. An up-to-date line needs no question — go on with §1.
 
 ```bash
-git -C <repo root> fetch --quiet && git -C <repo root> status --branch --porcelain | head -1
+git -C <repo root> fetch --quiet && git -C <repo root> status --branch --porcelain | head -1 && git -C <repo root> rev-parse --short HEAD
 ```
 
-The line must name `develop` or `master`, and it must carry no `[behind N]`. Any other branch, or
-a branch behind its remote, means the code in front of you is not the code the plan will be
-checked against. Stop and show the operator that line as it is. Do not run `git pull`,
+The first line must name `develop` or `master`, and it must carry no `[behind N]`. Any other
+branch, or a branch behind its remote, means the code in front of you is not the code the plan
+will be checked against. Stop and show the operator that line as it is. Do not run `git pull`,
 `git checkout`, `git stash` or `git diff`, and do not read the incoming changes to work out what
 differs: only the operator pulls or switches the branch. (`git fetch` changes no file of the
 project.) Continue after the operator says the branch is updated, and run the check again first. The
-plan's `**Checked against:** commit <sha>` line names the commit that check shows.
+second line is the sha the plan's `**Checked against:** commit <sha>` line names; no other command
+prints it (`references/rules.md`, target and method).
 
 ## 1. Find what exists
 
@@ -50,18 +51,24 @@ plan that cannot be saved is lost with the chat.
 mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports
 ls ~/.kinoa-qa/mcp/plans/ | grep -- '<KEY>-'
 ls ~/.kinoa-qa/mcp/reports/ | grep -- '<KEY>-'
+grep -nE '^## |^### Case status|Plan defect' ~/.kinoa-qa/mcp/reports/<report file>   # only where the harness has no file-search tool
 ```
 
 - **Nothing there** — new plan, version 1.
 - **A plan exists** — a new version, next `N`, new file; the old file stays, and the new one keeps
   the old case ids (`plan-template.md`, stable case ids).
 - **Reports exist** — from each report of the story, newest first, read only the header
-  (section 1), the findings (section 4), the notes (section 5) and the rows labelled
-  `Plan defect for the next version` in `Not covered / blocked` (section 8); no other section
-  shapes the next version. Find the parts with the harness's file-search tool — the pattern
-  `^## |Plan defect` on the report file gives the line of every section heading and of every
-  plan-defect row — then read each part with the file read tool, from its heading to the next
-  heading (offset and limit), and section 8 from its first plan-defect row. Find the sections by
+  (section 1), the `### Case status` table of section 3 (which rows were sent and graded), the
+  findings (section 4), the notes (section 5) and, from `Not covered / blocked` (section 8), the
+  rows labelled `Plan defect for the next version` — all of section 8 when the report has no
+  case status table, because its rows are then the only record of what was sent; no other
+  section shapes the next version. A row the table grades `PASS`, `FAIL`
+  or `OBSERVED` stays a case (`plan-template.md`, soundness rules; `check-layout.sh` check 22).
+  Find the parts with the harness's file-search tool, or with the
+  `grep -nE` line printed above where the harness has none (`rules.md`, target and method) — the
+  pattern `^## |^### Case status|Plan defect` on the report file gives the line of every section
+  heading and of every plan-defect row — then read each part with the file read tool, from its heading to the next
+  heading (offset and limit). Find the sections by
   name, not by number (`file-layout.md`, comparing runs). Their findings, notes and sub-bugs go in
   §1.2 and the reports on `**Earlier runs:**` (`plan-template.md`, §1.2). Their plan-defect rows
   are fixed in the new version. Their cases are added in the mapping pass of §4, never first.
@@ -74,9 +81,11 @@ the branch line (only when it failed), the files found and the whole interview o
 Do not start writing until these are answered. All of them go out in the first message, so the
 interview takes one reply, not ten: question 1 first, then every other question the request has
 not already answered, each with its proposed default where the list below gives one. Ask the
-operator to confirm or correct them in one answer. A default is a proposal, not an answer: one
-that the reply does not confirm, by name or by a yes to all, is asked once more before writing.
-A §0 value never has a default (question 1).
+operator to confirm or correct them in one answer. A question the request answered is not asked:
+the first message lists it once under **From your request**, with the value as it will be
+written. A default is a proposal, not an answer: one that the reply does not confirm, by name or
+by a yes to all, is asked once more before writing. This applies only to defaults this chat
+proposes, never to a value the request gave. A §0 value never has a default (question 1).
 
 1. **Fixed test data** — first, with no default: the literal value of every constant
    `fixed-data.md` leaves to the operator (`P1`, `P2`, `COMPANY`, `ADMIN_API`, `PLAYER1`,
@@ -86,17 +95,29 @@ A §0 value never has a default (question 1).
    `fixed-data.md`, games and players (empty means ask).
 2. **The story** — no default: JIRA URL, and which tools it adds, each by its exact name, unless
    the request already gives both. These names are the tool inventory of the preflight
-   (`plan-template.md`, the preflight).
+   (`plan-template.md`, the preflight). This chat reads the **main story** itself: its
+   description, its acceptance criteria, and the lists of its sub-tasks, sub-bugs and linked
+   issues with their keys, types and link types — and nothing below the story. Every sub-entity
+   is read whole by readers, dispatched from this chat: read
+   [`references/story-readers.md`](references/story-readers.md) now, before the first message
+   goes out and not earlier, for the key list, the batches, the reading model, the read route,
+   the brief and the output shape. The
+   readers' lists go out in this first message: every sub-entity as `read`, `empty` or
+   `unreadable`, with the bugs, rules and facts taken from each. So the operator can move an item
+   between kinds, or overrule a row where the newer text was taken, in the one reply. A story with
+   no sub-entity and no comment gets no reader.
 3. **Artifact policy** — default: keep everything the run creates; the other choice is self-clean.
 4. **Delete semantics as known today** — hard, soft, or a status flip. Default: `unknown, the sem
    cases establish it`. It becomes a hypothesis.
 5. **Irreversible tools** — no default: publish, activate, deprecate, hard delete. Each needs its
    own subject.
-6. **Checkpoints** — how many role states Part B may put in place. Default: the number the
-   previous plan version used, else one per role state the mapping of question 9 needs, plus the
-   restore. The run applies them itself through the admin role API, reads the rows in the
-   preflight and restores them at the end (`rules.md`, Part A / Part B), so the rows in effect now
-   are not asked. Build Part B around it.
+6. **Checkpoints** — how many role states Part B puts in place. The number counts role states
+   only: the restore checkpoint always comes after them and is never counted. Default: the
+   number the previous plan version used, else one per role state the mapping of question 9
+   needs; the restore comes on top. The run applies them itself through the admin role API,
+   reads the rows in the preflight and restores them at the end (`rules.md`, Part A / Part B),
+   so the rows in effect now are not asked. Build Part B around it; its intro states both
+   numbers (`plan-template.md`, the skeleton).
 7. **Replica count, and whether writes are disabled** (`KINOA_MCP_DRY_RUN`). Default: the
    previous plan version's header decisions, else `unknown` — the rate-limit probe is then graded
    `OBSERVED`, and the run reads the write mode off its first preview (`stand-facts.md`, the
@@ -118,7 +139,11 @@ A §0 value never has a default (question 1).
    guess that a related bug or task exists: an issue the story does not name is not a known issue
    of this plan. A bug key found
    in the source — a code comment, a commit message — is not one either: the hypothesis names the
-   code line, never the key. They belong in §1.2, and they do not shape the coverage (see §4).
+   code line, never the key. A key that only a sub-entity's links or text name is not cited
+   either: the plan names the sub-entity that carries it, never that key (`story-readers.md`, the
+   brief). Known issues belong in §1.2, and they do not shape the coverage (see §4).
+   Every sub-entity of the story is read whole by the readers of question 2; the rules found
+   there are inputs of §1.3, not known issues (`plan-template.md`, §1.3).
 
 **After the answers, check the story's tools against the stand.** Compare every tool name the
 story gives with the `tools/list` of the connector this chat sees (the list, not a tool call).
@@ -137,7 +162,9 @@ bash <plugin>/skills/mcp-plan/scripts/check-layout.sh
 ```
 
 A `PROBLEM` line it prints now was not caused by the plan: do not fix it, and name it in the
-hand-over, the chat's last message to the operator.
+hand-over, the chat's last message to the operator. The hand-over says which properties of the
+plan `check-layout.sh` checked, by check number. A property the chat checked only by reading is
+written as `checked by reading, not verified`, never as checked.
 
 The planning chat changes no file of the plugin, no reference and no SKILL file, and adds only
 its own new plan to `~/.kinoa-qa/mcp/plans/`. The maintainer changes the references in one
@@ -167,7 +194,10 @@ blocks, and a plan only points at them.
 Coverage in this order, because code knowledge contaminates a black-box judgement:
 
 1. **CRUD** — a happy-path case for every tool, on its own subject.
-2. **Validations** — schema, tool rules, then the gap hunt.
+2. **Validations** — schema, tool rules, research rules, then the gap hunt. A research rule is
+   the entity's contract as the dashboard enforces it, so it is a black-box expectation like the
+   AC, not code knowledge; how a §1.3 row gets its cases is in
+   [`plan-template.md`](references/plan-template.md#the-skeleton), §1.3.
 3. **Role-based access** — one checkpoint per role state.
 4. **Grey box** — loophole hunting designed from the source. Last, never mixed into layers 1-3.
 
@@ -199,8 +229,9 @@ sections out in the fixed order and give every row a stable id, per
 
 **The file is written in pieces, and each piece is designed when it is written.** The file is
 created with the harness's file write tool, every later piece is added with the harness's file
-edit tool, and a row is checked by reading it. First write the header, §0 and §1, with §1.1 and
-§1.2 as headings only. Then append one section per write: Preflight, each tool section,
+edit tool, and a row is checked by reading it. First write the header, §0 and §1, with §1.1, §1.2
+and §1.3 as headings only (a subsection the plan does not need is left out, heading included,
+as `plan-template.md` says). Then append one section per write: Preflight, each tool section,
 §Hand-off, each Part B checkpoint, REPORT. Only then read the code: write §Grey and insert it
 before §Hand-off, add the grey-box probes of Part B, and fill §1.1. Then update §0's artifacts
 table, the `**Name limit:**` line and the header's `**Checked against:**` with what §Grey added.
@@ -238,6 +269,9 @@ the one home of that list (`file-layout.md`, maintaining the rules).
 - Each §1.2 row's case really covers it, by the rule of its row (`file-layout.md`, comparing
   runs; `plan-template.md`, §1.2), and every known issue of the story has a row. None of them
   added a section or changed the section order (§4 above, `plan-template.md`).
+- Every §1.3 row has a case id or `not reachable:`; every §1.3 row whose `Served contract` is not
+  `same` has a §1.1 hypothesis with the same ids, and that hypothesis's deciding case reads the
+  entity back (`plan-template.md`, §1.3).
 - Every §0 value came from the interview, none found by the chat (`fixed-data.md`, games and
   players).
 - The artifacts table carries the real `name`/`key` of each subject, and the `**Name limit:**`
@@ -269,10 +303,16 @@ or the chat changes a file that is not its plan.
 | "The reference is long, I remember what it says" | References change after every run. Read the current file (the read lines above). |
 | "The operator said the branch is up to date, so §0 can be skipped" | Run the check anyway; a claim is not the line (§0). |
 | "No connector, so I'll read the tools' code to learn their arguments" | Read only the served surface; the implementation is layer 4 (`plan-template.md`, without a connector). |
+| "A quick `ls -la` or `echo` changes nothing" | The shell runs only the printed commands; a no-op is a script too (`rules.md`, target and method). |
 | "A script to check my own rows is not testing the stand" | The rule covers every purpose; a row is checked by reading it (`rules.md`, target and method). |
 | "`roles.yml` disagrees with the AC, I'll offer to fix it before the run" | The code is read-only and the chat offers no edit; the case expects the AC (`rules.md`, target and method). |
 | "The last run taught a lesson, I'll fix the reference now" | The planning chat edits no reference; the lesson is a line under `Rule change proposals` in the hand-over (§3). |
 | "This plan needs an exception to a reference, the header can record it" | The plan follows the reference; the change is a line under `Rule change proposals` (§3). |
+| "The title says it is a work item, so there is nothing in it for the plan" | Every non-empty sub-entity is read whole; the kind comes from the content (`story-readers.md`). |
+| "Fifteen sub-entities — faster to skim them myself than to brief a reader" | The reader keeps this chat's context for the plan; the orchestrator reads the story only (`story-readers.md`). |
+| "The sub-tasks are work items, the story's AC is the whole input" | A rule found in any sub-entity gets a row in §1.3 (`plan-template.md`, §1.3). |
+| "The MCP schema makes the field optional, so the research row about it is settled" | The research states the dashboard's contract; the served schema is the thing under test. The disagreement is a hypothesis (`plan-template.md`, §1.3). |
+| "The key is right there in the code comment" | The hypothesis names the code line, never the key (§2, question 10). |
 
 ### Fixed data and roles
 
@@ -283,6 +323,7 @@ A guessed or discovered value makes the plan write into a game nobody chose.
 | "The operator said to look the games up myself" | Answer with the list of values you need and wait (`fixed-data.md`, empty means ask). |
 | "The last plan, or my memory, has these ids, no need to ask again" | Show them and get a yes; silence is not a yes (`fixed-data.md`, empty means ask). |
 | "The operator is leaving, an unfinished plan is worse than a guessed game" | A plan that waits for one answer is still right tomorrow (`fixed-data.md`, empty means ask). |
+| "The operator said it, but I will confirm it anyway" | A question the request answered is not asked again (§2). |
 | "The operator can set the rows in the admin panel, the block is optional" | A checkpoint without its request block makes the run stop and ask (`rules.md`, Part A / Part B). |
 
 ### Coverage — the story first
