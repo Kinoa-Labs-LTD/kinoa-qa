@@ -32,10 +32,18 @@ Contents: [target and method](#target-and-method) · [Part A / Part B](#part-a--
 - **No scripts, at any time — except the commands printed verbatim in the chat's own SKILL file,
   and the request lines of the plan's checkpoints.** That list is closed, and it is the single
   statement of what the shell may run: the planning chat runs the branch-state line (`git fetch`,
-  `git status`), the `mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports` of the data folder,
-  the two `ls` listings and `check-layout.sh`; the execution chat runs the same `mkdir`, the two
-  `ls` listings, `date` for the stamp, the one row count of the plan, `check-layout.sh`, and the
-  `curl` lines of the admin role API (the bullet above). Nothing else is run, in either phase, in
+  `git status`, `git rev-parse`), the `mkdir -p ~/.kinoa-qa/mcp/plans ~/.kinoa-qa/mcp/reports` of
+  the data folder, the two `ls` listings and `check-layout.sh`; the execution chat runs the same
+  `mkdir`, the two `ls` listings, `date` for the stamp, the one row count of the plan,
+  `check-layout.sh`, the `curl` lines of the admin role API (the bullet above), and `sleep 60`
+  for a wait between write blocks, only under the condition of
+  [`stand-facts.md`](stand-facts.md#server-budgets-and-timings) (budgets). Where the harness has
+  no file-search tool, and only then, the planning chat may also run one read-only search in two
+  forms, with extended patterns so that `|` separates alternatives: `grep -nE '<pattern>' <file>`
+  for a heading or row search in one file, and `grep -rlE '<pattern>' <folder>` to find source
+  files in the kinoa-mcp repo (layer 4). Nothing
+  else joins the list for it: no `wc`, `cat`, `sed`, `head`, `find`, `ls -la` or `echo` around
+  the search. Nothing else is run, in either phase, in
   the repo, the plugin, the data folder or a scratch folder, and for no purpose: not to check the
   chat's own plan or report, not to prepare, generate, upload or host test data such as a CSV for
   an import-by-URL tool, not to fetch a download link, not to compute a digest or a token, not to
@@ -112,16 +120,26 @@ testing", "this checks my own document, not the stand", "this link is meant to b
   timed out), or a `GET` that is not a `200` with a JSON array: send the whole block once more.
   When the second attempt does not match either, **fall back to the operator**: stop, show the
   request that failed and its answer, the rows wanted and the rows the last `GET` showed, and ask
-  the operator to apply the rows in the admin panel and paste them as the panel shows them.
+  the operator to apply the rows in the admin panel and paste them as the panel shows them. After
+  a `PUT` or `DELETE` that failed or timed out, the rows in effect are unknown until a `GET`
+  answers: the stop message and section 10 say so, and give the last `GET` that answered with its
+  time, never as the rows now.
   Compare the pasted rows the same way; when they differ, ask once more. A checkpoint that fell
   back is graded after the pasted rows match; section 3 records the fallback and its reason.
   Nothing before the match is graded: a case run against rows the `GET` or the operator has not
   shown is not a case. A `curl` line that the harness's permission check stops is not an attempt:
   ask the operator once to allow it, or to apply the rows as in the fallback, and never send it
   another way.
+- **A block whose rows wanted are already in place is not sent.** Before a checkpoint block goes
+  out, compare its rows wanted with the rows the last `GET` of this run showed; the report file
+  records every `GET` ([pauses](#pauses)). Equal, row by row → the block is not sent, nothing is
+  waited, and section 3 says so. This compares rows only: it never reads "Owner on the stand
+  satisfies a plan that wanted Operator". A plan that sets rows before Part A is a plan defect
+  (report section 8), because Part A runs under `ROLES_BEFORE`.
 - **Wait ≥ 20 s after the rows match** before asserting — twice the role cache
   ([`stand-facts.md`](stand-facts.md#server-budgets-and-timings)). The wait starts when the `GET`
-  (or the pasted rows) matched, not when the `PUT` answered.
+  (or the pasted rows) matched, not when the `PUT` answered. It is measured like the pause between
+  write blocks (`stand-facts.md`, budgets), and section 3 records when it started and ended.
 - **A change to the caller's game access runs on a different clock.** `GAME_ACCESS_DENIED` is
   decided from the `games[]` claim in the caller's own token, not from `user_role`: through the
   OAuth connector that claim is re-read only when the access token refreshes (the games-claim
@@ -157,7 +175,12 @@ the one internal error that is a note, because a retry cleared it and nothing wa
 half-done. When the retry fails too, the case
 is `FAIL`, and its finding block holds both attempts and a `kinoa_system_ping` sent right after
 them, so the reader can tell an outage from a defect. A report written from a transcript grades
-the one captured attempt and says that no retry was sent.
+the one captured attempt and says that no retry was sent. Such a report writes each value the
+transcript does not hold — the write list's source, `USER_ID`, `ROLES_BEFORE` — as
+`not captured` in section 3 and names what is missing; nothing is inferred from the plan or its
+header. A missing value is a `Plan defect for the next version` row only when the plan itself
+has no case that records it. Its section 9 uses the fourth artifact label for an artifact the
+transcript shows no re-read of (`report-blocks.md`, the artifact contract).
 
 **A tool the story names that the stand does not list.** Its tool-inventory case in the preflight
 (`plan-template.md`, the preflight) is `FAIL`, and it gets a finding block. Every other case that
@@ -218,14 +241,20 @@ the context, not the tool.
   The dry-run state is read off the first preview the run gets, as in a full run.
 - **A case pulls in the cases it depends on.** A case whose `Call` or `Expected` cell uses a
   `Record:` handle (an id, a name, a subject of the §0 handle table) needs the earlier case that
-  records that value, so that case joins the run. A state an earlier write left is pulled in the
+  records that value, so that case joins the run. A handle anywhere in the row counts, the
+  `Also record:` clause included. A state an earlier write left is pulled in the
   same way, through the handle that write records (`plan-template.md`, cases are data). Its own
   dependencies join too, back along the chain, because a value taken
   from anywhere else is a value the run picked, not the one the plan built. A pulled case runs in
   its place in the plan's order and is graded and counted under its own status.
 - **A value that was never recorded blocks the cases that use it**, in any run. When the case
   that records it failed before that point or was blocked, each case that uses the value is
-  `BLOCKED — <handle> not recorded by <case id>`.
+  `BLOCKED — <handle> not recorded by <case id>`. A read case whose `Call` needs no missing
+  handle but whose `Expected` does is still sent: its envelope goes into the third cell of its
+  status row, and its status is that label. A write is never sent for observation.
+- **A precondition the plan wired to no handle** — a state a case expects that no `Record:`
+  value of an earlier case carries — makes the case `BLOCKED — precondition not left by <case id>`,
+  plus a `Plan defect for the next version` row in section 8.
 - **Every case outside the slice and not pulled in** is `BLOCKED — excluded by the operator
   (<date>)`, with the reason `outside the slice of this partial run`. These cases share one row
   in report section 8 (`report-spec.md`, the ten sections).
@@ -278,6 +307,18 @@ says which of the two sources the write list came from.
   refused on the *first* leg and never receives a token, so expect `PERMISSION_DENIED` /
   `GAME_ACCESS_DENIED` in place of a preview rather than after one. A denied write also spends no
   preview budget.
+- **A row that expects a refusal with no token is graded on the preview leg.** A preview that
+  mints a token fails the case. The run then sends the confirm leg too, so the report shows
+  whether the rule is enforced there or not at all; an artifact that this executes goes into
+  section 9. One finding per tool, not per row, names the pattern "the preview approves what the
+  confirm refuses" (owner ruling, 2026-10-12). Such a row is never rewritten for the confirm leg,
+  and this pattern is never a note.
+- **A read after a refused executing leg.** After a refused executing leg of an update, delete or
+  lifecycle tool, send the `_get` of the subject before the next case. After a refused create,
+  send the listing filtered by the run's stamp when the tool's list takes a search; else send one
+  unfiltered listing at the end of the tool section. A row on the stand whose `Expected` cell in
+  the §0 artifacts table is `no`, or that the table does not name, is a finding; the refused case
+  keeps its status.
 - With the dry-run kill-switch on there is no second leg at all — see
   [`stand-facts.md`](stand-facts.md#the-dry-run-kill-switch).
 
@@ -350,36 +391,109 @@ none of what it holds can be reconstructed afterwards:
 
 ## Pauses
 
-The run may span hours. Everything that expires — confirm tokens, the role cache, a rate-limit
-window — is void after a pause: re-mint it and re-run the case rather than reporting the expiry as a
-defect. Record where the run paused and resumed in section 3. A
-run resumed in a new chat continues in the same report file under the same stamp
-(`mcp-run/SKILL.md`, §1): a new stamp would make the run's own artifacts look like another
-run's leftovers.
+The run may span hours. Record where the run paused and resumed in section 3. A run resumed in
+a new chat continues in the same report file under the same stamp (`mcp-run/SKILL.md`, §1): a
+new stamp would make the run's own artifacts look like another run's leftovers. After a pause
+the role cache and a rate-limit window are void. A confirm token is reused while it is valid
+([writes](#writes)); the preview leg is sent again only when the token expired. An expiry after
+a pause is never a defect: re-mint it and run the case again.
 
-**A long run hands over to a new chat before its context runs out**, because a compaction drops
-envelopes that were not yet in the file ([capture at the call](#capture-at-the-call)).
+**No limit on tool calls.** An `mcp-run` chat does not stop and does not hand over because of the
+number of tool calls, a large context or a compaction. The harness compacts the context by
+itself, when it decides to; these rules set no threshold and name none. Hand over only when
+(1) the connector does not come back or has lost its authorization (the connector, case b
+below), or (2) the operator asks. The harness's own context warning changes nothing: the file is
+already current (the before stage), and the chat goes on.
 
-- **When:** the harness warns that the context is getting full, a compaction has happened, or the
-  chat has made about 120 tool calls (connector calls, `curl` lines and file writes together).
-  The number is a guide, not a limit: a run with long envelopes hands over sooner.
-- **Where:** in Part A after any case, with the report file saved, because every `Record:` value
-  is already in the file; in Part B only after the last case of a checkpoint. A checkpoint is
-  never split between two chats: its rows, the 20 s wait and the grading of its cases belong to
-  one chat, because a role state the new chat has not seen is a role state it cannot grade against.
-- **How:** the hand-over names the report file, the last row of the case status table and the
-  next case, and tells the operator to start a new chat with `continue <report file>`.
-- **A connector that drops** or loses its authorization mid-run is handed over at once, wherever
-  the run is. The case in flight gets no row; the new chat, started once the operator has
-  connected it again, runs that case again, reading its subject first when the lost call was an
-  executing leg (statuses, retry), and inside Part B sends its checkpoint's block again (a chat
-  that resumes inside Part B, below).
-- **After a compaction**, compare the case status table with the cases run before going on. A
-  case whose grade depends on an envelope that is not in the file is run again, when it is a read
-  or its subject is still in the state the case needs. Otherwise it is `BLOCKED — response not
-  captured`. It is never graded from memory, because a summary of a response is not the response.
-- **A chat that resumes inside Part B** reads `ROLES_BEFORE` from section 10 of the file and
-  never takes the snapshot again, because a new snapshot would record a checkpoint's rows as the
-  rows to restore. Before it grades any case, it sends the block of the checkpoint that case
-  belongs to, even when an earlier chat already sent it, then compares the `GET` rows and waits
-  20 s, as in Part A / Part B above.
+- **How a hand-over goes**, in those two cases: the hand-over names the report file, the last row
+  of the case status table and the next case, and tells the operator to start a new chat with
+  `continue <report file>`. The report's section 2 then opens with the `paused` line
+  (`report-spec.md`, the overall status). The new chat resumes under the same stamp, in the same file, from the
+  next case (`mcp-run/SKILL.md`, §1).
+- **A deliberate hand-over** (the operator asks) happens in Part A after any case, with the
+  report file saved, and in Part B only after the last case of a checkpoint. It never splits a
+  checkpoint: its rows, the 20 s wait and the grading of its cases belong to one chat, because a
+  role state the new chat has not seen is a role state it cannot grade against.
+
+**Before stage — the report file is always current.** "One case at a time into the file"
+([capture at the call](#capture-at-the-call)) holds at every moment, because a compaction can
+come between any two calls. That includes: the row of the case just run; every `Record:` value
+in the section 3 paragraph of its plan section; every envelope a finding or note block needs;
+`ROLES_BEFORE` in section 10 as soon as the `GET` answers; and, in Part B, the rows each `GET`
+showed and the time of the 20 s wait. The split that capture at the call makes stays: the prose
+of a finding or note block may be finished later, its envelopes may not. Nothing else is "to be
+written later".
+
+**After stage — the post-compaction checklist.** A compaction is detected when the context
+starts with a summary of earlier work, or when the chat is not sure what it has already done.
+Then, before any tool call of the next case, in this order:
+
+1. Read again with the file tool, in full: this file and `stand-facts.md`. Read again the
+   sections the next case needs: `fixed-data.md` (games and players, naming every artifact),
+   `report-spec.md` (the case status table, the overall status), `plan-template.md` (cases are
+   data), `language.md`; `report-blocks.md` before a finding or a note. The summary paraphrases
+   the rules; the files do not.
+2. Read the plan: §0, §1, §1.1 and the section of the next case.
+3. Read the report file: section 1 (the stamp, `USER_ID`, the run lines), the section 3
+   paragraphs (the `Record:` values), the end of the case status table, section 10
+   (`ROLES_BEFORE`), and the highest finding id and note id. A chat that resumes a run reads the
+   same (`mcp-run/SKILL.md`, §1, step 7); this list has this one home.
+4. Reconcile the case status table with the plan's order. The next case is the first plan case
+   with no row. When that case is a write, read its subject first (step 8): its executing leg
+   may have gone out before its row was written. A case whose grade depends on an envelope that
+   is not in the file is run again when it is a read, or when its subject is still in the state
+   the case needs; otherwise it is `BLOCKED — response not captured`. Never grade from memory:
+   a summary of a response is not the response.
+5. Rebuild the handles from the file only. A handle the file does not hold makes the cases that
+   use it `BLOCKED — <handle> not recorded by <case id>`.
+6. Check that the connector's `kinoa_*` tools are in the tool list. Load the deferred tool
+   schemas again if they are missing.
+7. Treat the role cache and the rate-limit window as void. A confirm token minted before the
+   compaction is reused while it is valid (stateless, reusable; [writes](#writes)); the preview
+   leg is run again only when the token expired. Keep the write pace: at most 8 executing writes
+   a minute and the plan's pauses (`stand-facts.md`, budgets).
+8. If the compaction came in the middle of a checkpoint of Part B: do what "a chat that resumes
+   inside Part B" says (below; the one home of the resend). If it came after an executing leg
+   that got no answer: read the subject first, then decide the retry ([statuses](#statuses)).
+9. Write one line in section 3: the case after which the context was compacted, and
+   "reconcile done".
+
+**A checkpoint and the four ways it can be cut.** A compaction may split a checkpoint: step 8
+above applies. An in-chat reconnect (the connector, case a) resends only the lost call, never the
+block. A connector that does not come back (case b) hands over at once, and the new chat follows
+"a chat that resumes inside Part B". A deliberate hand-over never splits a checkpoint (above).
+
+**The connector.** It drops the session now and then and reconnects on the next call
+(`stand-facts.md`, connector). Two cases:
+
+(a) **A drop that comes back in the same chat.** A `session expired` answer with no envelope:
+ping; if the `kinoa_*` tools are gone from the tool list, list them again the harness's way;
+send the lost call again in place; section 3 records each drop. A lost preview or read: send it
+again. A lost executing leg: read the subject first. Applied: grade the case on its outcome read,
+the deciding clause, and write the confirm envelope as not captured. This is not the "first
+attempt took effect → `FAIL`" branch of the retry rule ([statuses](#statuses)), because the server
+never answered the chat. Not applied: send the same confirm again with the same token (stateless,
+reusable); preview again first when it expired. Inside Part B an in-chat reconnect
+resends nothing but the lost call; "send the checkpoint block again" is for a compaction
+(checklist step 8) and for a new chat (case b).
+
+(b) **A connector that does not come back, or has lost its authorization,** is handed over at
+once, wherever the run is. A connector does not come back when, after a `session expired`
+answer, the ping gets no answer for five minutes (pinged again about once a minute; these pings
+are outside any case), or when the harness shows it as needing authorization. Until then the
+drop is case (a). The case in flight gets no row, when its deciding envelope was not captured.
+A row that [writes](#writes) grades on the preview leg gets its row as soon as that envelope is
+in the file — `FAIL` when the preview minted a token — and the confirm leg that rule then sends
+is the first step of the new chat, written in the finding as "confirm leg not sent: the
+connector dropped". The new chat, started once the operator has
+connected it again, runs the case in flight again, reading its subject first when the lost call
+was an executing leg, and inside Part B follows "a chat that resumes inside Part B".
+
+**A chat that resumes inside Part B** — after a compaction (checklist step 8) or in a new chat
+(case b) — reads `ROLES_BEFORE` from section 10 of the file. It never takes the snapshot again: a
+new snapshot would record a checkpoint's rows as the rows to restore. Before it grades
+any case, it applies the comparison of [Part A / Part B](#part-a--part-b) to the checkpoint that
+case belongs to: the rows wanted against the rows the last `GET` in the report file showed.
+Equal → the block is not sent, nothing is waited, and section 3 says so. Otherwise it sends the
+whole block again, even when an earlier chat already sent it, compares the `GET` rows and waits
+20 s, as in Part A / Part B.

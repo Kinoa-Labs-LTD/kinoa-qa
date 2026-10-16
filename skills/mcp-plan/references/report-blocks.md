@@ -57,10 +57,13 @@ the second half of the same problem with clone metadata.
 Each part earns its place:
 
 - **Heading** — states the wrong behaviour in one short, plain sentence, readable with the plan
-  closed. A case id is not a description. Section 4 lists the blocks by severity, most severe
-  first. In a first run the ids follow that order, `F1..Fn`. In a re-run a defect keeps the id of
-  the previous report and a new one takes the next free id (comparing with the previous run), so
-  the ids are no longer in order; the blocks still are.
+  closed. A case id is not a description. Ids are given in discovery order, always: the case
+  status table carries `F<n>` at the call (`rules.md`, capture at the call; `report-spec.md`, the
+  case status table), and in a re-run a
+  defect keeps the id of the previous report while a new one takes the next free id
+  (`report-spec.md`, comparing with the previous run). The blocks stay in id order. Section 4
+  opens with one line that lists the ids by severity, most severe first. Nothing moves, nothing
+  is renumbered.
   The `[severity: <x>]` label takes exactly one of four values:
 
   | Severity | When |
@@ -210,13 +213,14 @@ record the state observed **then**, not the state assumed when it was created.
 
 Every row carries the entity's **real name (or key) and its id**, plus the game it lives in by name
 and uuid — the row is what someone uses to find the leftover and clean it up — and exactly one of
-three labels:
+four labels:
 
 | Label | Meaning |
 |---|---|
 | `exists (status: <x>)` | Resolves, and this is its status now |
 | `soft-deleted (status: <x>, still gettable)` | Deleted by a tool, row survives, still readable |
 | `hard-deleted (id no longer resolves)` | Gone; `_get` fails |
+| `not re-checked (last seen: status <x> in <case>)` | No `_get` was allowed — a report written from a transcript (`rules.md`, statuses); the state is the last captured envelope that showed it. Used only when no call is allowed, never to skip the re-resolve |
 
 Add `— irreversible` to anything permanently active, permanently deprecated or undeletable. Where
 the domain has child state (a test version, a computed count), record that too.

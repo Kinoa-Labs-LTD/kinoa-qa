@@ -188,7 +188,11 @@ class CheckLayoutAfterCutOff(unittest.TestCase):
     def test_passes_on_a_plan_and_a_report_after_the_cut_off(self):
         result = self.run_check()
         flagged = [l for l in result.stdout.splitlines() if l.startswith(("PROBLEM", "WARN", "IN PROGRESS"))]
-        self.assertEqual([], flagged, result.stdout + result.stderr)
+        # The plan is version 1 and the report of its first run exists, so check 20 warns that a
+        # new plan version is due (KING-23440); nothing else is flagged and the check passes.
+        self.assertEqual(["WARN: plans/{}: **Earlier runs:** none, but reports/ holds {} — a new plan "
+                          "version is due".format(PLAN_NAME, REPORT_NAME)], flagged,
+                         result.stdout + result.stderr)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     # 15. The report sections and the case status table.

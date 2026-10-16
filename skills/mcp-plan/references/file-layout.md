@@ -30,13 +30,17 @@ cannot be created or written. Each skill writes into its own folder and reads th
 - A plan carries no version note: two versions are compared by their stable case ids
   ([`plan-template.md`](plan-template.md#stable-case-ids)).
 
-**Report:** `<KEY>-<domain>-test-report-<STAMP>.md`.
+**Report:** `<KEY>-<domain>-test-report-<STAMP>.md`, or `<KEY>-<domain>-test-report-<STAMP>-<letters>.md`
+for a side-by-side run.
 
 - `STAMP` is the run stamp from [`fixed-data.md`](fixed-data.md#naming-every-artifact): UTC
   `yyyyMMdd-HHmm`, captured once at the start of execution. The same stamp names every artifact the
   run creates on the stand, so the file name and the leftovers on the stand match.
 - **One file per run. Never overwrite an earlier report.** A re-run after a bug fix is a new file
   with a new stamp.
+- **A side-by-side run** — two chats running the same plan at the same time, to compare them —
+  adds `-<letters>` after the stamp (`…-20261012-0741-opu.md`). Such a report is never the
+  baseline of a later run unless the operator names it.
 - Sorting the folder by name puts the runs of one story in time order.
 
 ## Many reports for one plan
@@ -73,7 +77,8 @@ ls ~/.kinoa-qa/mcp/reports/ | grep -- 'KING-22279-' # every run of that story, o
   a file. Say which file you picked before you start.
 - **The newest report in which a case ran is the baseline.** Take the last name in the sorted
   report list for the same `<KEY>-<domain>`, skipping a report whose overall status is
-  `BLOCKED — <reason>`. A run blocked before case 1 writes no report file at all
+  `BLOCKED — <reason>` and a side-by-side report (`-<letters>` after the stamp, file names)
+  unless the operator names it. A run blocked before case 1 writes no report file at all
   (`mcp-run/SKILL.md`, §1).
 - If the folder holds nothing for that story key, it is a first run. Say so; do not go looking in
   the repo root or anywhere else.
@@ -118,7 +123,8 @@ claim until the protocol shows it. So:
   the row rule of [`plan-template.md`](plan-template.md#the-skeleton); the report's comparison
   table takes its `fixed` / `still present` verdicts from those cases;
 - a finding the owner later ruled expected keeps its case too. Only its `Expected` cell changes,
-  to the ruling, as for a merged fix; the comparison row is `ruled expected`.
+  to the ruling, as for a merged fix, and its §1.2 row says the owner ruled it expected, with the
+  date; the comparison row is `ruled expected`.
 
 Findings keep their ids across runs of the same plan. `F3` in run 2 is the same defect as `F3` in
 run 1. A defect found for the first time in run 2 gets the next free id, counting from the highest
@@ -134,10 +140,11 @@ home and do not restate it. When a rule changes, one file changes.
 | Folders, file names, plan versions, one report per run, finding the files (worked examples included), comparing runs | `file-layout.md` (this file) |
 | History behind the rules | `background.md` — maintainer only: the pruning pass |
 | Simple English (B1–B2), and the text that must stay exact | `language.md` — read at the first write of prose |
-| The execution rules, one `##` section each: target and method, Part A / Part B, statuses (owner rulings and scope exclusions included), partial runs, writes, subjects and artifacts, delete semantics, capture at the call, pauses (the hand-over to a new chat included) | `rules.md` |
+| The execution rules, one `##` section each: target and method, Part A / Part B, statuses (owner rulings and scope exclusions included), partial runs, writes, subjects and artifacts, delete semantics, capture at the call, pauses (the hand-over to a new chat, the in-chat reconnect and the post-compaction checklist included) | `rules.md` |
 | Games and players (the constants, empty means ask, the run reads §0); naming every artifact (stamps, the name limit, short prefixes); the fictional values of the examples and fixtures | `fixed-data.md` |
 | The admin role API, server budgets and timings, the dry-run kill-switch, the connector | `stand-facts.md` |
-| The plan's shape, one section each as its contents line lists them | `plan-template.md` |
+| The plan's shape, one section each as its contents line lists them (the header's `**Research inputs:**` line and §1.3 included) | `plan-template.md` |
+| The story readers: the key list and its batches, the reading model, the read route, the brief, the output shape, the merge | `story-readers.md` — planning chat only, at interview question 2 |
 | The report sections, the overall status, comparing with the previous run, naming things | `report-spec.md` |
 | The finding block (and the tracked marker), the note block, the artifact contract, the model | `report-blocks.md` — execution chat only, at its first finding or note |
 | How a planning chat proceeds: its numbered steps, checklist and red flags | `mcp-plan/SKILL.md` |

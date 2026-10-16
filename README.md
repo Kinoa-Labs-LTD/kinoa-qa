@@ -146,8 +146,9 @@ should complete as commands.
 
 ## Configure
 
-`config.json` and `services.json` are `testplan`'s; the smoke skills and the MCP skills read
-neither.
+`config.json` and `services.json` are `testplan`'s; the smoke skills read neither, and the MCP
+skills read one key of `config.json`: `mcp.reader_model`, the model `mcp-plan` dispatches its
+story readers on (default `sonnet`; `<plugin>/skills/mcp-plan/references/story-readers.md`).
 
 `config.json` ships with the three Allure custom-field defaults **empty on purpose**, so no
 run inherits another team's values by accident:
@@ -563,7 +564,11 @@ the file alone.
    plan defects are folded in.
 3. Asks the whole interview in one message: the fixed test data (no default), the story and its
    tool names, the artifact policy, delete semantics, irreversible tools, checkpoints, replicas
-   and write mode, which roles may call which tool, and the story's known issues.
+   and write mode, which roles may call which tool, and the story's known issues. It reads the
+   story itself and has its sub-tasks, sub-bugs and linked issues read whole by readers it
+   dispatches (sub-agents on `mcp.reader_model` of `config.json`); the first message lists every
+   sub-entity with the bugs, rules and facts found in it, and the rules become rows of the plan's
+   §1.3 with the cases that cover them.
 4. With the `kinoa` connector in the chat, compares the story's tools with the stand's
    `tools/list` and shows you every difference.
 5. Runs `check-layout.sh`, then writes the plan in pieces: CRUD, validations, role-based access,

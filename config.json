@@ -9,5 +9,8 @@
       "feature": ""
     }
   },
-  "jira_base_url": "https://kinoadev.atlassian.net"
+  "jira_base_url": "https://kinoadev.atlassian.net",
+  "mcp": {
+    "reader_model": "sonnet"
+  }
 }
