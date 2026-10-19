@@ -93,6 +93,75 @@ no request block in a plan older than 2026-09-29. The audiences v6 plan (Part B)
 row of `ROLES_BEFORE` on any other scope is never touched": its 2026-09-30 run found a `GAME` row
 outside the fixture; that rule is now in `rules.md` (Part A / Part B).
 
+### The tool-call limit
+
+The line "about 120 tool calls" in `rules.md` (pauses) came in on 2026-10-06: it is in the
+`2026-10-06-before-review-fixes` snapshot of the references and absent from the
+`2026-10-05-before-experiments` and `2026-10-06-after-experiments` ones. No run was behind it,
+and it had no entry here. On 2026-10-12 the KING-22308 feature-settings chat (report
+`KING-22308-feature-settings-test-report-20261012-1535.md`, three chats under one stamp) offered
+a hand-over at about 115 calls because of it, and the operator said "proceed". The templates,
+A/B tests and feature-schemas runs of the same day went to 468, 755 and 763 calls in one chat
+(counts from the operator, not from the reports) with no compaction. KING-23440 removed the line
+on 2026-10-15: a compaction starts the post-compaction checklist, an in-chat reconnect resends
+the lost call, and only a connector that does not come back, or the operator, ends a chat. The
+connector drops were seen in the feature-settings report 20261014-1507 (`pre-20`,
+`setting-list-schema-07`, `config-create-gap-01`, `config-update-rule-02`), the feature-schemas
+report 20261014-1257 (section 8, connector drops) and the KING-22286 pushes report 20261015-1247
+(six blips in one chat, no call lost).
+
+### The pruning pass of 2026-10-12 … 2026-10-15 (KING-23440)
+
+One line per rule, with the run behind it:
+
+- **Preview-leg grading**, one finding per tool for "the preview approves what the confirm
+  refuses" (`rules.md`, writes): KING-22308 feature-settings run 20261012-1535, F10 and F11;
+  owner ruling 2026-10-12.
+- **The wait is measured with `kinoa_system_ping`; `sleep 60` only in the foreground**
+  (`stand-facts.md`, budgets): KING-22273 tags report 20261015-1107, PD-wait; KING-22288 A/B
+  tests report 20261015-0916, "Run deviations" (1), a `sleep` run in the background; KING-22286
+  pushes report 20261015-1247, section 3 "Pace", paced by the ping.
+- **The empty string for a string-or-null argument** (`stand-facts.md`, connector): feature-settings
+  reports 20261012-1535 (`config-update-schema-07`, a plain `string` took `""`) and 20261014-1507
+  (`setting-update-gap-01`, `PASS` there and `BLOCKED` at its next run on the same plan version).
+- **Finding ids in discovery order** (`report-blocks.md`): decided in this pass, 2026-10-15; the
+  status table already carries the id at the call, so a renumbering at the finish moved ids a
+  reader had already seen.
+- **A read after a refused confirm** (`rules.md`, writes): KING-22286 pushes report 20261015-1247,
+  F19.
+- **Partial-run dependencies, counts that name their handles, every artifact in the §0 table**
+  (`rules.md`, partial runs; `plan-template.md`): KING-22288 A/B tests report 20261015-0916,
+  section 8 (`PART1_FIX`); feature-schemas report 20261014-1257 (`create-sem-01`); KING-22286
+  pushes report, the `status-sem-10` plan defect.
+- **The `curl` shapes printed before case 1; a block whose rows are in place is not sent; a case
+  after the restore expects the Part A answer** (`mcp-run/SKILL.md` §1; `rules.md`, Part A /
+  Part B; `plan-template.md`): KING-22273 tags report 20261015-1107, section 3 "Pause and resume"
+  and PD-owner; feature-settings report 20261012-1535, `role-setting-update-05` and the "Part A
+  starting state" plan defect (section 8).
+- **The violation `path` without the leading slash** (`plan-template.md`): kinoa-mcp
+  `McpToolRegistry.schemaViolations`, KING-23277; the strip came in with commit `c1af14c`
+  (2026-10-06), verified at `e375f2d` (2026-10-15).
+- **`len<N>-` probes counted by the script** (`plan-template.md`, check 19): KING-22273 tags
+  report 20261015-1107, PD-literal (a 1001-character value nobody could count).
+- **A plan older than its report** (check 20; `mcp-run/SKILL.md` §1 step 4): KING-22288 run
+  20261015-0916 on plan v1, with the 20261012-0911 report already on disk.
+- **The side-by-side suffix** (`file-layout.md`; checks 3 and 13): the two KING-22279 templates
+  reports of 20261012-0741 (`-opu`, `-son`), one plan run by two chats at the same time.
+- **Every sub-entity of the story is a plan input** (`story-readers.md`; `plan-template.md`,
+  §1.3): the KING-22308 feature-schemas plans v1 and v2 read the research sub-task KING-22527 as
+  a work item; the dashboard then refused every schema created through MCP (KING-23439,
+  2026-10-13), and the root cause was filed as KING-23448 by a person, from the sub-task's
+  validation table.
+- **The hand-over names the check numbers; a property checked only by reading says so**
+  (`mcp-plan/SKILL.md` §3): in the eval run of 2026-10-16 a planning chat wrote "every `game_id`
+  is a fixture uuid" three times, and one row sent `not-a-game`. Hence check 24 too.
+- **A quick `ls -la` or `echo` changes nothing** (red-flag rows of both SKILL files): in the eval
+  run of the 0.7.1 skills, every chat ran read-only commands the closed list leaves out.
+- **The planner reads the case status table; check 22** (`mcp-plan/SKILL.md` §1): the eval run
+  of 2026-10-16 retired `create-schema-15` and `list-schema-07` of the webhooks v2 plan again,
+  although the 20260916-0944 report graded both (the regression of 2026-10-06, above); the
+  planner could not apply the rule because it never read the rows the report graded.
+
 ## Why the plan rules exist (moved 2026-10-06)
 
 Moved out of the plan-side files after a blind review.
