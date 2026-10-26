@@ -265,7 +265,13 @@ the one home of that list (`file-layout.md`, maintaining the rules).
 - The inventory has one case per tool the story names, with the story's names
   (`plan-template.md`, the preflight).
 - No case expects a refusal that an owner ruling calls correct: a non-uuid player id, a `${…}`
-  in a field name, a reused confirm token (`rules.md`, statuses).
+  in a field name, a reused confirm token, a preview token for input the backend then refuses
+  (`rules.md`, statuses).
+- Every row that expects a backend refusal sends both legs and a read, and is decided on the
+  executing leg. Only `schema` rows and refusals by the role mapping expect no token on the
+  preview (`rules.md`, writes; `plan-template.md`, cases are data). An earlier finding "the
+  preview approves what the confirm refuses" keeps its case, rewritten to that shape, and its
+  §1.2 row says the owner ruled it expected on 2026-10-26 (`file-layout.md`, comparing runs).
 - Each §1.2 row's case really covers it, by the rule of its row (`file-layout.md`, comparing
   runs; `plan-template.md`, §1.2), and every known issue of the story has a row. None of them
   added a section or changed the section order (§4 above, `plan-template.md`).
@@ -342,6 +348,8 @@ When one of these fires, a tool or a bug ends up unproven while the plan reads a
 | "The probe is interesting, it can stay unwired" | A `gap` or `grey` row with no §1.1 row and no AC bullet is dropped (`plan-template.md`, hypotheses). |
 | "The operator says the delete is irreversible, but the `sem` cases can settle that" | An irreversible tool is an interview answer, not a hypothesis: no case undoes it (§2, question 5; `rules.md`, subjects and artifacts). |
 | "The last run's row went out fine, but the new rule says the connector converts it" | A row an earlier report shows was sent and graded stays a case (`plan-template.md`, soundness rules). |
+| "A duplicate name must be refused at preview, so step 1 expects no token" | Validation lives in the backend; the row sends both legs and is decided on the executing leg (`rules.md`, writes). |
+| "The preview mints a token for bad input anyway, so the rule row is pointless" | The row stays; it proves the confirm leg refuses and nothing changed (`rules.md`, writes). |
 | "The game was empty when I looked, so `exactly 2 items` holds" | Counts are relative to a `BASE_` handle or scoped to the stamp (`plan-template.md`, cases are data). |
 
 ### Pace — writing the file

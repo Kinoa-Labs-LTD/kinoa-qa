@@ -116,7 +116,7 @@ One line per rule, with the run behind it:
 
 - **Preview-leg grading**, one finding per tool for "the preview approves what the confirm
   refuses" (`rules.md`, writes): KING-22308 feature-settings run 20261012-1535, F10 and F11;
-  owner ruling 2026-10-12.
+  owner ruling 2026-10-12. Replaced on 2026-10-26 (KING-23809, below).
 - **The wait is measured with `kinoa_system_ping`; `sleep 60` only in the foreground**
   (`stand-facts.md`, budgets): KING-22273 tags report 20261015-1107, PD-wait; KING-22288 A/B
   tests report 20261015-0916, "Run deviations" (1), a `sleep` run in the background; KING-22286
@@ -229,3 +229,19 @@ Moved out of the run-side files after a blind review.
   ran under. As a `pre-` case right after `USER_ID`, the snapshot names Part A's role, and a
   deferred case is `BLOCKED — deferred to Part B` on evidence. A chat that resumes inside Part B
   still never takes it again.
+
+## Validation lives in the backend (KING-23809, 2026-10-26)
+
+The 2026-10-12 ruling made every preview token for invalid input a finding. Runs before and after
+it filed the same pattern again and again, though validation in the backend only is a requirement:
+the KING-22279 templates run (a duplicate slot name), the KING-22273 tags run (a category name
+that another category holds, also in lower case and with spaces around it, and a rename to it)
+and the KING-21979 bundles run (11 cases: an unknown id, `not-a-uuid`, an update or delete
+outside DRAFT, a delete under a role that may not delete). In each one the confirm leg refused the
+input. The owner ruled on 2026-10-26 that this is expected (`rules.md`, statuses
+and writes): such a row is decided on the executing leg and its read. Only the MCP server's own
+checks — the input schema and the role mapping — stay on the preview leg. The runs also showed
+that a tool may still check a rule early (`kinoa_tag_create`, `tag_name_taken`), so a refusal on
+either leg passes. When a run cannot tell whether such a behaviour is a defect, it writes a note,
+not a finding: the reverse of the general rule in `report-blocks.md`, because here the doubt is
+about the design, and the design is already decided.

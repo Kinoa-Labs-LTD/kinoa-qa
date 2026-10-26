@@ -162,7 +162,11 @@ Three rules keep the split honest:
   `GREEN` is not allowed. Notes never change the overall status; findings do
   ([the overall status](report-spec.md#the-overall-status)).
 - **When the run cannot decide, it writes a finding**, and the finding says what is uncertain. The
-  reader can downgrade it; the run must not hide it.
+  reader can downgrade it; the run must not hide it. One exception: when the doubt is whether a
+  preview or a confirm leg behaves as the backend-only validation intends — a token for input
+  the backend refuses, a refusal on one leg instead of the other — the run writes a note whose
+  `Why it is not a finding` line says what is uncertain (`rules.md`, writes). A preview token for input that the confirm leg then
+  refuses is expected, and on its own it is neither a note nor a finding.
 - **A note is never invented to fill the section.** "No notes." is a valid section 5.
 
 ### The block

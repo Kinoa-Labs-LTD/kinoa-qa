@@ -198,7 +198,10 @@ A status not read off an envelope is invented, and a note in place of a finding 
 | "The cell lists five fields and one differs, so the case is `FAIL`" | Grade on the clause before `Also record:`; a mismatch after it is a note (`rules.md`, statuses). |
 | "The wrong-type value came back `ok`, so the schema check is missing" | The connector converted it: `BLOCKED — the connector converts the argument type` (`stand-facts.md`, connector). |
 | "Nothing could run, but there are no FAILs, so the report is `GREEN`" | A run with no case run is `BLOCKED — <reason>` (`report-spec.md`, the overall status). |
-| "The preview never validates, so I'll grade the rule rows on the confirm leg" | A row that expects a refusal with no token is graded on the preview leg; a token there fails it (`rules.md`, writes). |
+| "The preview gave a token for a taken name, so the preview approves what the confirm refuses — a finding" | Validation lives in the backend: grade the row on the confirm leg and the read; the token goes after `Also record:` (`rules.md`, writes). |
+| "The plan row expects no token on the preview of invalid input" | An older row; grade it on the executing leg and name it as a plan defect in section 8 (`rules.md`, statuses). |
+| "A Viewer got a token, but the confirm leg refused, so it is fine" | A refusal by the role mapping is the MCP server's own: graded on the preview leg (`rules.md`, writes). |
+| "I cannot tell whether this token-then-refusal is a defect, so I'll leave it out" | Write a note that says what is uncertain; it is never dropped and never a finding on doubt alone (`rules.md`, writes). |
 | "The 11th write went through, so the limit is broken" | Limits count per replica: `OBSERVED` unless the stand runs a single replica (`stand-facts.md`, budgets). |
 
 ### Pace

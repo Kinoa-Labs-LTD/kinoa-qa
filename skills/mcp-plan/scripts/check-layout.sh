@@ -105,6 +105,7 @@ declare -a owned=(
   'filled in one way only|fixed-data.md'
   'reusable while the arguments stay the same|rules.md'
   'Owner rulings: expected behaviour|rules.md'
+  'Validation lives in the backend, so the preview|rules.md'
   'nothing else comes before them|plan-template.md'
   'fits the tightest limit of the domain|fixed-data.md'
   'One determination per delete or lifecycle tool|rules.md'

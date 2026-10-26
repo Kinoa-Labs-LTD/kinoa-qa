@@ -178,7 +178,12 @@ section's AC list (§1.1 holds only the deviations), not through the rows.
 several steps, each step's part opens with its own deciding assertion, and the case is decided by
 the executing leg's outcome read, not by the preview wording. The deciding clause of a preview
 leg is only that the preview came back with its token (`meta.confirmToken` present); what the
-preview says goes after the label. Everything else comes after the literal label `Also record:`,
+preview says goes after the label. A row that expects a refusal from the backend — every `rule`
+row, and every `gap`, `sem`, `iso` or `role` row whose refusal is not the input schema or the
+permission check of the role mapping — sends both legs and then a read, because the backend validates only on the executing
+leg (`rules.md`, writes). Its step 1 opens with `a preview, or already the refusal of step 2`,
+step 2 opens with the refusal, and the read shows that nothing changed. Only a `schema` row and
+a refusal by the permission check expect no token on the preview leg. Everything else comes after the literal label `Also record:`,
 written exactly so, with nothing between the words and the colon. A mismatch before the label is
 the case's `FAIL`. A mismatch after it is a note, never a status (`rules.md`, statuses), so no
 status word (`OBSERVED`, `BLOCKED`, `FAIL`) follows the label: a status the cell cannot decide
@@ -240,6 +245,7 @@ is the only example of the plan shape; do not open an old plan to see the format
 |---|---|---|
 | `get-ok-01` | `kinoa_widget_get {"game_id": P1, "widget_id": W_A}` | `data.widget.id` = `W_A`. Also record: `ok: true`; `data.widget.name` = `NAME-widget-a` |
 | `create-ok-01` | 1. `kinoa_widget_create {"game_id": P1, "name": "NAME-widget-b", "size": 3}` 2. the call of step 1 plus `"confirm_token": <token of step 1>` 3. `kinoa_widget_get {"game_id": P1, "widget_id": W_B}` | 1. `meta.confirmToken` present. Also record: `ok: true`; `data.status` = `preview`; `data.intendedChange.name` = `NAME-widget-b`. 2. `data.created` = `true`. `Record: W_B` = `data.widget.id`. 3. `data.widget.size` = `3`. Also record: `ok: true`; `data.widget.name` = `NAME-widget-b` |
+| `create-rule-01` | 1. `kinoa_widget_create {"game_id": P1, "name": "NAME-widget-b", "size": 2}` 2. the call of step 1 plus `"confirm_token": <token of step 1>` 3. `kinoa_widget_list {"game_id": P1, "search": "NAME-widget-b"}` | 1. a preview, or already the refusal of step 2 (then step 2 is not sent). Also record: whether `meta.confirmToken` is present. 2. `error.code` = `VALIDATION_FAILED`, a violation on `name`. Also record: `ok: false`; the violation's `rule` and `hint`. 3. `data.items` holds only `W_B` |
 | `list-sem-01` | `kinoa_widget_list {"game_id": P1, "page_size": 100}` | `data.totalItems` = `BASE_P1` + 2 (`W_A`, `W_B`). Also record: `W_A` and `W_B` are among the items |
 
 ## B2. Checkpoint 2 — COMPANY Operator, GAME Viewer on `P1`
@@ -298,7 +304,7 @@ Whether a tool is a read or a write is its `readOnlyHint` (`rules.md`, writes), 
 | Happy path | `ok` | The successful call(s) on the tool's own subject. Both legs of a write. Every tool has at least one. |
 | Semantics | `sem` | What the tool really does: list inventory and paging, lifecycle transitions and `availableActions`, and the delete determination (the procedure is in `rules.md`, delete semantics). |
 | Schema | `schema` | Rejections the server makes against the declared input schema, in the error envelope: missing required, enum, range, length, `additionalProperties`, an object where an array is declared. If a row sends a top-level value of another JSON type (a string for a boolean or an integer, a number for a string), a `null` for a string argument, or an empty string for an argument declared string-or-null, the connector converts it before the call leaves, so the row cannot reach the server: it is not written, and that check belongs in a functional test (`stand-facts.md`, connector). The registry checks the schema before the tool runs and answers `ok: false`, `error.code` = `VALIDATION_FAILED`, a violation with `rule` = `input_schema` and `path` = the argument path without the leading slash (`name`, `resources/0/resource_key`; `null` for a root-level error) — verified at commit `e375f2d`, 2026-10-15. The violations are in `error.violations[]`. A missing required argument is a root-level error: its `path` is `null` and only the wording names the argument (`required property 'game_id' not found`). The `Expected` cell asserts the code, the rule and the pointer; never the violation's wording, which is the validator's and depends on the locale. |
-| Tool rules | `rule` | Rejections the tool itself makes: cross-field, backend-state, semantic. |
+| Tool rules | `rule` | Rejections the tool or its backend makes: cross-field, backend-state, semantic. A write's rule is graded on the executing leg, so the row sends both legs and a read (cases are data, above). |
 | Gap hunt | `gap` | Inputs the documented rules do not cover, sent to see what happens. Every row is wired to a §1.1 hypothesis or to an AC bullet (hypotheses, below). |
 | Isolation | `iso` | Unknown id, foreign game, cross-game reads, not-found shapes. |
 
