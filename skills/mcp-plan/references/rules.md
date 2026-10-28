@@ -200,6 +200,10 @@ are correct. A case expects them, and a run never reports them as a finding or a
   only the first, outer `${` … `}` pair of a placeholder. So the field name `${x} }` gives the body
   `{"${x} }":"${${x} }}"}`, and that is expected.
 - **A confirm token can be used again** while the arguments stay the same (see Writes below).
+- **A preview may mint a token for input that the backend then refuses** (2026-10-26,
+  KING-23809). Validation belongs to the backend only, by requirement, so the preview does not
+  promise that the confirm leg will succeed. The case is graded on the executing leg (see Writes
+  below). This replaces the ruling of 2026-10-12 that called this pattern a finding.
 
 A ruling beats a plan case written before it. When a plan row still expects the refusal a ruling
 calls correct, grade the case against the ruling, and name the row in section 8 of the report as
@@ -307,12 +311,40 @@ says which of the two sources the write list came from.
   refused on the *first* leg and never receives a token, so expect `PERMISSION_DENIED` /
   `GAME_ACCESS_DENIED` in place of a preview rather than after one. A denied write also spends no
   preview budget.
-- **A row that expects a refusal with no token is graded on the preview leg.** A preview that
-  mints a token fails the case. The run then sends the confirm leg too, so the report shows
-  whether the rule is enforced there or not at all; an artifact that this executes goes into
-  section 9. One finding per tool, not per row, names the pattern "the preview approves what the
-  confirm refuses" (owner ruling, 2026-10-12). Such a row is never rewritten for the confirm leg,
-  and this pattern is never a note.
+- **Validation lives in the backend, so the preview does not validate** (owner ruling,
+  2026-10-26, KING-23809; it replaces the ruling of 2026-10-12). The backend decides on the
+  executing leg whether the input is valid: a name another entity holds (in any case, with
+  spaces around it), an id that does not exist or is not a uuid, a state the entity is not in, a
+  backend rule on who may do what. A preview that mints a token for such input, and a preview
+  message such as "Will create …", are expected. Only the MCP server's own checks refuse on the
+  preview leg: the input schema (`rule` = `input_schema`, the `schema` kind of
+  `plan-template.md`) and the permission check above, for a role or game the plan's role mapping
+  denies.
+- **A row that expects a backend refusal is graded on the executing leg.** It sends the preview,
+  then the confirm leg with the token, then the read the case names. It passes when the confirm
+  leg refuses with the code the row expects and the read shows that nothing changed. A refusal
+  already on the preview leg passes too, because some tools check a rule early (for example
+  `tag_name_taken`); the confirm leg is then not sent. Whether the preview minted a token, and
+  which leg refused, are recorded after `Also record:`. Neither one is a status, and neither one
+  alone is a finding. The case fails when the confirm leg executes the input, when the read shows
+  a change, or when the refusal is not one the row accepts (for example `TOOL_EXECUTION_FAILED`
+  or an internal error in place of the validation error). An artifact that the confirm leg
+  creates goes into section 9. A row written before 2026-10-26 that expects such a refusal with
+  no token, or sends one leg only, is graded the same way: the run sends the confirm leg with the
+  token and then the read of "a read after a refused executing leg" below, and names the row
+  in section 8 as a plan defect.
+- **A row that expects one of the MCP server's own refusals is graded on the preview leg.** A
+  schema violation or a role the role mapping denies must be refused with no token. A preview
+  that mints a token fails the case. The run then sends the confirm leg too, so the report shows
+  whether the refusal happens there or not at all; an artifact that this executes goes into
+  section 9. One finding per tool, not per row, names the pattern.
+- **When the run cannot tell whether such a behaviour is a defect, it writes a note.** This is
+  for the two legs only: the run cannot tell whether the MCP server or the backend owns a refusal
+  (the role mapping does not name the rule), the confirm leg refuses with a message that does not
+  say which rule the input broke, or one tool checks at preview a rule that a sibling tool leaves
+  to the backend. The case is graded on the executing leg as above, and the note's `Why it is
+  not a finding` line says what is uncertain (`report-blocks.md`, note or finding). Such a
+  behaviour is never left out of the report: it is at least a note.
 - **A read after a refused executing leg.** After a refused executing leg of an update, delete or
   lifecycle tool, send the `_get` of the subject before the next case. After a refused create,
   send the listing filtered by the run's stamp when the tool's list takes a search; else send one
@@ -482,8 +514,9 @@ once, wherever the run is. A connector does not come back when, after a `session
 answer, the ping gets no answer for five minutes (pinged again about once a minute; these pings
 are outside any case), or when the harness shows it as needing authorization. Until then the
 drop is case (a). The case in flight gets no row, when its deciding envelope was not captured.
-A row that [writes](#writes) grades on the preview leg gets its row as soon as that envelope is
-in the file — `FAIL` when the preview minted a token — and the confirm leg that rule then sends
+A row that expects one of the MCP server's own refusals, which [writes](#writes) grades on the
+preview leg, gets its row as soon as that envelope is in the file — `FAIL` when the preview
+minted a token — and the confirm leg that rule then sends
 is the first step of the new chat, written in the finding as "confirm leg not sent: the
 connector dropped". The new chat, started once the operator has
 connected it again, runs the case in flight again, reading its subject first when the lost call

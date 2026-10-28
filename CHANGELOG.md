@@ -9,6 +9,31 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.7.2 — 2026-10-26
+
+**`mcp-plan` and `mcp-run`: validation lives in the backend** (KING-23809). A preview that
+mints a confirm token for input the backend then refuses on the confirm leg is no longer a
+finding: validation in the backend only is a requirement (owner ruling of 2026-10-26, which
+replaces the ruling of 2026-10-12). Update the plugin before the next plan or run.
+
+- **`rules.md`.** Statuses: a new owner ruling. Writes: a row that expects a backend refusal (a
+  taken name, an unknown or non-uuid id, a wrong state, a backend role rule) is graded on the
+  executing leg and its read; a refusal already on the preview passes too; the token and the
+  leg that refused are recorded after `Also record:`. Only the MCP server's own checks — the input
+  schema and the role mapping — are still graded on the preview leg. A plan row written before
+  the ruling is graded the same way and named in section 8 as a plan defect. When the run cannot
+  tell whether such a behaviour is a defect, it writes a note, never a finding on doubt alone,
+  and never leaves it out. Pauses (b): the preview-leg row of a dropped connector is now only a
+  row that expects an MCP-server refusal.
+- **`report-blocks.md`.** Note or finding: the one exception to "when the run cannot decide, it
+  writes a finding".
+- **`plan-template.md`.** Cases are data: a backend-refusal row sends both legs and a read; a new
+  `create-rule-01` example row; the `rule` kind says so.
+- **`mcp-plan/SKILL.md`, `mcp-run/SKILL.md`.** §5 checklist lines and red-flag rows for the new
+  grading. `background.md` records why. `check-layout.sh` check 4 owns the new rule's phrase.
+- **Evals.** `mcp-run` eval 8 (`backend-only-validation-preview-token`) with the fixture plan
+  `KING-99009-widgets-test-plan.md`.
+
 ## 0.7.1 — 2026-10-16
 
 **`mcp-plan` and `mcp-run`: the gaps the 0.7.0 eval run found** (KING-23440, the eval run of
