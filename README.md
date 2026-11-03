@@ -1,6 +1,6 @@
 # kinoa-qa
 
-QA plugin for Claude Code. Five skills:
+QA plugin for Claude Code. Six skills:
 
 - **`/kinoa-qa:testplan`** turns a Jira Story (+ optional Confluence PRD + optional linked
   Figma mockups + optional service-repo OpenSpec specs) into a validator-checked QA **Test
@@ -21,6 +21,9 @@ QA plugin for Claude Code. Five skills:
 - **`/kinoa-qa:mcp-run`** runs such a plan against the deployed stand through the `kinoa`
   connector, one case at a time, and writes the **test report** into `~/.kinoa-qa/mcp/reports/`.
   See [Usage: `/kinoa-qa:mcp-run`](#usage-kinoa-qamcp-run).
+- **`/kinoa-qa:token-report`** shows the **tokens and estimated cost of the current Claude Code
+  session** as one table, by skill run, then agent, then model. It writes no file. See
+  [Usage: `/kinoa-qa:token-report`](#usage-kinoa-qatoken-report).
 
 A smoke plan is a Jira sub-task, not a `test-plan.md`. `testplan` reads one only when you ask
 it to push that sub-task to TestOps as one case, with `/kinoa-qa:testplan --from-smoke
@@ -56,6 +59,7 @@ environment (your Claude Code MCP settings); the plugin probes for the tools at 
 | **`kinoa` connector** | `mcp-run` — required | The deployed stand's MCP server (HTTP `/mcp`, OAuth login): the plan's cases call the `kinoa_*` tools through it | **Checked at the start**: with no `kinoa_*` tool, `mcp-run` says the `kinoa` connector is missing or not logged in and stops, with no report file. It looks the tools up in the session's tool list (e.g. `kinoa_system_ping`) and calls none. It never falls back to the local stdio server. See [The `kinoa` connector](#the-kinoa-connector-for-the-mcp-skills). |
 | **`kinoa` connector** | `mcp-plan` — optional | Comparing the tools the story names with the stand's `tools/list`, before the plan is written | The plan's header decisions say `not done: no connector in this chat`, and the run's inventory cases check the tools instead. `tools/list` then comes from the server source when it is open (`skills/mcp-plan/references/plan-template.md`, "Without a connector"). |
 | **bash** and **perl** | `mcp-plan`, `mcp-run` — required | `check-layout.sh`, which both skills run on the skill folders and the data folder (bash 3.2 or newer, `perl -CSD`, plus awk, sed and grep) | The layout check cannot run. macOS and most Linux systems ship both. |
+| **python3** | `token-report` — required | `token_report.py`, which reads the current session's transcripts under `$CLAUDE_CONFIG_DIR/projects/` when that is set, else `~/.claude/projects/` (standard library only) | The report cannot run. It needs no MCP server, connector or credential. |
 | **Jira REST (`JIRA_EMAIL` + `JIRA_API_TOKEN`)** | `smoke-run` — required | `jiraReport.mjs` posts the run report as a comment; `jiraAttach.mjs` uploads the evidence screenshots | **Checked at the start**: `smoke-run` names the missing variable and stops. A `jiraReport.mjs … --dry-run` rehearsal needs neither. See [Jira API token](#jira-api-token). |
 
 `smoke-run`'s two scripts are Node (18 or newer) and are run as
@@ -668,6 +672,42 @@ plans in `mcp-qa-plan/docs/plans/` and the reports in `mcp-qa-execute/docs/repor
 `mcp-qa-ready` is a separate skill and not part of this plugin: keep it where it is, but after
 the move it no longer finds the plans, the reports or the `mcp-plan` references, until it moves
 too.
+
+## Usage: `/kinoa-qa:token-report`
+
+```
+/kinoa-qa:token-report
+```
+
+**Use it when** you want to know how many tokens this session used and what they cost, or which
+skill run, agent or model was the expensive one.
+
+**What it does** — runs `<plugin>/skills/token-report/scripts/token_report.py` and shows the
+Markdown it prints, unchanged. One row per skill run → agent (`main session` or a subagent) →
+model, with input, output, cache write and cache read tokens and the estimated cost in USD; a
+subtotal per skill run, in time order, and a session total; a skill that runs twice gets a second
+group, `<name> (run 2)`. A run starts at a skill's slash command or at a `Skill` call made before
+any other tool call since the user's last message, and lasts until the next run starts; a skill
+loaded in the middle of a task stays in the run that loaded it. A reference skill loaded as the
+first tool call after a user message (for example after a "go" answer in the middle of another
+skill run) still starts a new run. Tokens before the first run are under `no skill`. A subagent
+(workflow subagents included) counts under the run active when it started; a forked skill's
+agent, such as `code-review`, under that skill. Compare rows by cost: cache reads dominate the
+token counts but are the cheapest tokens. It writes no file.
+
+**Needs** nothing beyond Claude Code CLI and `python3`: no MCP server, connector or credential.
+It reads the session's own transcript files under `$CLAUDE_CONFIG_DIR/projects/` when that is
+set, else `~/.claude/projects/`, found by
+`CLAUDE_CODE_SESSION_ID`; without them it prints the reason and no report.
+
+**Limits.** The current session only (a resumed session includes the sessions it continues) —
+not a past session by id, not a team or monthly total, not Claude Desktop, claude.ai or Cursor.
+The costs are estimates from `<plugin>/skills/token-report/prices.json`, list prices as of the
+date in the report header; a model with no price is left out of the cost totals, which a note
+names. The current turn's tokens may be missing or partial. The transcript format is internal to
+Claude Code, so a report that looks wrong after an update may be the format, not the session.
+
+See `skills/token-report/SKILL.md` for the full workflow.
 
 ## Versions and updating
 

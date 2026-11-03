@@ -1,0 +1,2 @@
+{"type": "user", "isSidechain": true, "agentId": "ro1", "sessionId": "old-session", "cwd": "/fake-project", "message": {"role": "user", "content": "Go"}}
+{"type": "assistant", "isSidechain": true, "agentId": "ro1", "sessionId": "old-session", "cwd": "/fake-project", "requestId": "req_ro1", "message": {"id": "msg_req_ro1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 10, "output_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}, "content": [{"type": "text", "text": "Done."}]}}

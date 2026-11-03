@@ -9,6 +9,36 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.7.3 — 2026-11-03
+
+**New skill `/kinoa-qa:token-report`: where the tokens of this session went** (KING-24007). It
+runs one script, `<plugin>/skills/token-report/scripts/token_report.py` (Python 3, standard
+library only), and shows the Markdown table it prints. It writes no file and needs nothing
+beyond Claude Code CLI. Update the plugin to get the skill.
+
+- **What it reports.** Input, output, cache write and cache read tokens, and the estimated cost
+  in USD, one row per skill run → agent (`main session` or a subagent's type with its
+  description) → model, with a subtotal per skill run, in time order, and a session total; a
+  second run of the same skill is its own group, `<name> (run 2)`. A request the transcript
+  repeats is counted once. A run starts at a skill's slash command or at a `Skill` call made
+  before any other tool call since the user's last message, and lasts until the next run; a skill
+  loaded in the middle of a task stays in the run that loaded it. Tokens before the first run are
+  under `no skill`. A subagent, workflow subagents included, counts under the run active when it
+  started; a forked skill's agent (e.g. `code-review`) under that skill.
+- **Where it reads.** The current session's transcript files under
+  `$CLAUDE_CONFIG_DIR/projects/` when that is set, else `~/.claude/projects/`, found
+  by `CLAUDE_CODE_SESSION_ID`, with its subagents' transcripts; a session resumed from earlier
+  sessions includes their tokens, and the header says how many. Without the variable or the
+  transcript it exits 1 with the reason and prints no report.
+- **Prices.** `<plugin>/skills/token-report/prices.json`, list prices as of 2026-10-06, the date
+  the report header prints. A model with no price shows `no price` and is left out of the cost
+  totals, which a note names.
+- **Limits.** The current session only — not a past session by id, not a team or monthly total,
+  not other clients. The costs are estimates. The current turn's tokens may be missing or
+  partial. The transcript format is internal to Claude Code and may change with an update.
+- **Tests.** `skills/testplan/scripts/test_token_report.py`, on fixture transcripts under
+  `skills/token-report/scripts/fixtures/`; `test_plugin_manifest.py` expects six skills.
+
 ## 0.7.2 — 2026-10-26
 
 **`mcp-plan` and `mcp-run`: validation lives in the backend** (KING-23809). A preview that
