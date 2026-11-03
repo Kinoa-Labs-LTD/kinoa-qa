@@ -749,10 +749,10 @@ class McpSkillsAreDocumented(unittest.TestCase):
     def setUp(self):
         self.readme = read_flat("README.md")
 
-    def test_the_intro_lists_five_skills_with_their_usage_anchors(self):
+    def test_the_intro_lists_six_skills_with_their_usage_anchors(self):
         intro = self.readme[:self.readme.index("## Prerequisites")]
-        self.assertIn("QA plugin for Claude Code. Five skills:", intro)
-        for anchor in ("(#usage-kinoa-qamcp-plan)", "(#usage-kinoa-qamcp-run)"):
+        self.assertIn("QA plugin for Claude Code. Six skills:", intro)
+        for anchor in ("(#usage-kinoa-qamcp-plan)", "(#usage-kinoa-qamcp-run)", "(#usage-kinoa-qatoken-report)"):
             with self.subTest(anchor=anchor):
                 self.assertIn(anchor, intro)
 

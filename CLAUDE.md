@@ -33,3 +33,6 @@ Two silent truncations have now shipped from this.
 
 A parser of Jira text is tested on a raw MCP response saved under `scripts/fixtures/`, not
 only on the template the skill writes — Jira reads Markdown back in a different shape.
+
+Adding or removing a skill also updates the hard-coded skill inventories in `test_plugin_manifest.py`
+and `test_skill_docs.py`, and the skill count in plugin.json, marketplace.json and the README intro.
