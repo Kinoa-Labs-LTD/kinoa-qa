@@ -81,16 +81,34 @@ chat has: no script, no loop and no bearer token borrowed from the connector (`r
 and method). If the calls cannot be sent fast enough to reach the limit inside one window, the probe
 is `OBSERVED` with the number of calls that did go out, whatever the replica count.
 
-A write-heavy plan still keeps executing writes to **≤ 8 per minute** with an explicit 60 s pause
-between write blocks: a per-replica ceiling only ever gives more headroom than the single-replica
-number, so pacing to the strict number is always safe. The run keeps the same pace: at most 8
-executing writes a minute outside the flood probe, and the plan's pauses are kept, not shortened.
+A write-heavy plan keeps executing writes to **≤ 8 per minute**: a per-replica ceiling only ever
+gives more headroom than the single-replica number, so pacing to the strict number is always safe.
+The rule is a count, not a clock: before an executing write, if 8 executing writes went out in the
+last 60 s (outside the flood probe), the run waits until the oldest of them is 60 s old. A pause
+whose purpose is the write budget is a budget point, and the run may skip it when the count is
+lower. A wait the case needs or measures is never skipped. Which waits are which is in
+[`plan-template.md`](plan-template.md#cases-are-data-prose-is-commentary).
 
-**The wait is measured with `kinoa_system_ping`:** its `serverTime` before and after the pause
-says when the 60 s have passed, and these pings are outside any case. `sleep 60` may stand in
-for the ping — repeated as many times as a wait needs, never a larger number — only where the
-harness runs it in the foreground, never in the background. Report section 3 says which of the
-two was used.
+The time of an executing write is the `serverTime` of the first `kinoa_system_ping` read after
+it. A write with no ping read after it yet counts as made at the moment of the check, so the run
+then waits the full 60 s from that ping. The run does not need a ping after every write. The run
+keeps the times of its executing writes of the last 60 s. A segment agent returns them, and the
+main chat passes them to the next agent ([`segments.md`](segments.md)), so the count holds across
+the boundary. Before an agent returns, when its last executing writes have no ping read after
+them, it sends one `kinoa_system_ping` and dates those writes by it.
+
+**A wait is filled first.** Before the run waits for the budget, it does the work that spends no
+write budget: reads, previews that the server refuses, schema cases and report work.
+
+**The time of a wait is read from `kinoa_system_ping`:** its `serverTime` says when the 60 s have
+passed. When no work can fill the wait, the run waits with the harness's background wait. In Claude
+Code that is `Bash` with `run_in_background` and `sleep <n>`, where `n` is the number of seconds
+still missing. The chat does nothing toward the stand until the completion notice arrives, and then
+sends one ping to read the server clock. A segment agent waits the same way. While the wait runs,
+the chat runs no command and reads no file to check on it; the completion notice is the only signal.
+The notice may come later than the `n` seconds, never earlier, so the one ping after it reads the
+server clock. The ping loop, about once a minute, stays the fallback where no background wait
+exists. Report section 3 says which was used.
 
 Parallel calls
 are for the flood only. The steps of a case, and the cases themselves, go out one call at a time in
@@ -131,4 +149,4 @@ call the connector changes or cannot send ends with the fixed label of its fact:
 | It sends parallel tool calls one after another, about 1.5 s each, so about 40 calls leave per minute | a flood probe for the 60 / minute preview limit cannot reach it; the 10 / minute write limit is reached only when the write round trips are short | the flood is `OBSERVED` with its count (budgets, how the flood is sent) |
 | It does not show the `tools/list` annotations | a case that asserts an annotation | `BLOCKED — annotations not shown by the connector`; the write list uses the `confirm_token` fallback (`rules.md`, writes) |
 | It reads `tools/list` once per session, never again | a Part B case that expects `tools/list` to change after a role flip | `BLOCKED — the connector does not re-read tools/list` |
-| It drops the session now and then (a `session expired` answer with no envelope) and reconnects on the next call | none: the lost call is sent again in place, and a connector that does not come back is handed over (`rules.md`, pauses) | no label; the call is sent again |
+| It drops the session now and then (a `session expired` answer with no envelope) and reconnects on the next call | none: what the run does after a drop, for a lost executing leg too, and when the connector does not come back, is in `rules.md` (the connector) | no label |

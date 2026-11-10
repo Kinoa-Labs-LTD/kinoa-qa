@@ -9,6 +9,186 @@ The version lives in `.claude-plugin/plugin.json` and nowhere else. Claude Code 
 installed plugin **only when that string changes**, so a merge that does not bump it never
 reaches anyone who already installed the plugin.
 
+## 0.8.1 — 2026-11-10
+
+**`mcp-run`: the segment agents cost less to run, and the finish checks the risky grades**
+(KING-24108, the second step of the cost pass). Run 20261109-1725 showed that segments halved the
+context but added requests, and that the agents' own reading and the case responses they keep were
+most of the rest (`<plugin>/skills/mcp-plan/references/background.md`, the cost pass). This version
+changes how a segment agent reads and writes, and adds a check of the grades at the finish. Update
+the plugin before the next run; plans and reports that exist stay valid.
+
+What changes for the operator:
+
+- **A segment agent writes the report once per plan section.** It no longer writes a row after
+  every case. When a section's last case has run, it writes the rows, the `Record:` values and the
+  finding and note blocks of that section, and then starts the next. The main chat still writes one
+  case at a time. A stop in the middle of a section writes the rows of the cases the agent still
+  holds the envelopes of.
+- **`stopped: context compacted`.** An agent that finds its context summarized returns this at
+  once and writes nothing it no longer holds. It never runs the post-compaction checklist.
+- **A lost section is run again.** A section is lost when its agent died, returned nothing or
+  returned `stopped: context compacted`, and the section has no row. The operator is not asked.
+  The main chat starts one agent that looks for the subjects of the lost attempt, and runs the
+  whole section again with fresh subjects. Their names carry a suffix `r<n>` only when the lost
+  attempt left subjects. In every lost section the agent reads the state of the subjects outside
+  the section first, and blocks a case only when its starting state is gone. Section 3 gets one
+  line for it, and the section 9 agent writes the rows of the lost subjects.
+- **A write that may have gone out without an answer** has one home in `rules.md`: read the
+  subject first; applied, grade on the outcome read; not applied, send the same confirm again. A
+  dropped connector, a compaction and a segment agent's brief all point at it. It is not the
+  "first attempt took effect → `FAIL`" branch of the retry rule.
+- **Besides its own range, a segment agent reads the plan's header lines, §1 and §1.1, and the
+  preflight paragraph of section 3,** so it knows the replica count, the write mode, the tools'
+  own caps and the tools on the stand.
+- **A segment agent reads only the headings it needs.** `segments.md` has a table, `What a segment
+  agent reads`: one row per heading of the references, and who reads it. The brief points at the
+  table and no longer lists reference files. The agent never reads the plan's §0 or the report
+  whole.
+- **Tool schemas by exact name.** A segment agent loads the schemas of the tools of its range by
+  exact name, in one load. The main chat does the same for its own tools (the preflight,
+  §Hand-off and Part B), and keeps long values short in its working text.
+- **A check agent at the finish.** After the section 9 agent, `check-layout.sh grades` lists the
+  rows a misgrade is likely on, and one more agent re-reads only those rows against the `Expected`
+  cells and the evidence in section 3. It never edits a file and never calls the stand. It returns
+  `correct:`, `doubt:` and `unsupported:` lines, and the main chat applies the `correct:` lines
+  only. Section 3 gets a `Grade check:` line, and the hand-over names each doubt. A run with no
+  segments makes the same check in the main chat.
+- **The main chat writes the section 3 paragraph of the section 9 agent,** from the agent's
+  return and its `deviations` line, as it does for a segment.
+- **No domain split.** A domain is not divided across more agents: the response of a case varies
+  from 2.8k to 4k tokens, so the case count of a split does not tell its size.
+
+The files and their rules:
+
+- **`check-layout.sh grades <report> [<previous report>]`.** Lists, in the order of the case
+  status table, the rows with `FAIL`, `OBSERVED` or `BLOCKED`, and the rows whose grade changed
+  since the previous report (matched by case id), then `targeted <n> of <m>`. A `BLOCKED` row with
+  a fixed label is skipped, and a previous row with a fixed label counts as no previous row, so a
+  full run after a partial or dry-run run does not list every case that run left out. The label
+  is found in the third cell, `section 8: <the label>`, as `report-spec.md` now says. It exits 0,
+  or 2 on a usage error. `rules.md` lists it in the closed
+  list of shell commands.
+- **`segments.md`.** New sections `What a segment agent reads`, `A lost section` and `The check
+  agent`; the stop reasons `context compacted` and `connector lost`.
+- **`rules.md`, pauses.** New headings `### The connector` and `### A write that may have gone out
+  without an answer`; a segment agent reads both.
+- **`mcp-run/SKILL.md`.** §3, step 1: re-resolve the ids, check the risky grades, then count and
+  check the layout; the `grades` line in the fence; the schemas of the main chat; a changed
+  red-flag row.
+- **`rules.md`, `report-spec.md`, `fixed-data.md`, `file-layout.md`.** Capture at the call for a
+  segment agent (per section); the check line of section 3; the re-run suffix `r<n>`; the homes
+  of the new rules.
+- **Evals.** `mcp-run` eval 9 now also checks that the brief points at the reading table. New eval
+  10 (`check-agent-corrects-a-planted-grade`) on the fixtures of `KING-99010-widgets`: the check
+  agent corrects a planted `PASS` and leaves the other row, and edits nothing. `test_check_layout.py`
+  and `test_mcp_skills.py` cover `grades` and the new rules.
+
+Measured run (2026-11-10, report 20261110-1052, the same KING-23083 pre plan, Sonnet 5.5 main
+chat, previous report 20261109-1725): **$89.57, 20 % below 0.8.0's $112.56**. That is 72 % of the
+$123.81 baseline, so the ≤ $61.91 target of 0.8.0 is still missed. The run took 2 h 30 min
+(0.8.0: 3 h 34 min). Requests fell to 1,426 (1,641), and the average context fell to 242k (266k).
+The main chat cost $15.73 (171 requests, average 365k; 0.8.0: $20.64, 199 requests, 411k).
+Thirteen segment agents cost $69.86 (sixteen cost $86.79). Segment sizes (cost): S1 $0.89, S2
+$4.29, S3 $9.59, S4 $4.01, S5 $10.56, S6 $5.54, S7 $5.86, S8a $5.38, S8b $3.67, S8c $11.79, S9
+$3.49, S10 $1.51, Grey $3.28. The finish agents cost $3.43: the section 9 agent $0.75, the
+sections 6 and 7 agent $1.41, and the check agent $1.27. No cleanup agent was needed. Two schema
+checks that the main chat sent for `pre-85` cost $0.56. The results are the same as 1725:
+698 `PASS`, 21 `FAIL`, 2 `OBSERVED` and 10 `BLOCKED` of 731. The grade check targeted 33 of 731
+rows and returned `correct: none`.
+
+## 0.8.0 — 2026-11-09
+
+**`mcp-run`: Part A runs in segment agents, one at a time** (KING-24108, the cost pass). A run's
+cost is the size of the context times the number of requests, and one chat that sends every case
+carries a context that grows for hours (`<plugin>/skills/mcp-plan/references/background.md`, the
+cost pass). The main chat now keeps the judgment work and gives the long, mechanical Part A to
+sub-agents with a fresh context. Update the plugin before the next run; plans and reports that
+exist stay valid, and the new plan check is date-gated.
+
+What changes for the operator:
+
+- **Segments.** When the Part A slice of a run holds more than 6 tool-section cases (`pre-`
+  cases are never counted), the main chat starts one segment agent per segment of the plan's §1.4
+  and one more for §Grey, one at a time, and checks the report file after each return. At the
+  finish, one more agent re-resolves the ids the run created and writes section 9. A new
+  agent resumes from the first case with no row. With 6 cases or fewer, nothing changes: the
+  main chat runs Part A itself. The preflight, §Hand-off, Part B and the finish stay in the main
+  chat in every run.
+- **One message before case 1, in more runs.** A run that prints `curl` lines or uses segments
+  now sends it even when the run reason was given; it asks for the run reason only when it is
+  missing.
+- **One more question.** In a run that uses segments, that message also asks which model the
+  segment agents run on; the default is `mcp.segment_model` of `<plugin>/config.json`
+  (`sonnet`). The main chat stays on its own model.
+- **Five permission shapes.** The same message now asks to allow five shapes, not three: the
+  three `curl` lines of the admin role API, `sleep <n>` and `grep -nE`.
+- **Budget-driven pauses.** A run waits for the write budget only when 8 executing writes went
+  out in the last 60 s; it fills a wait with reads and report work first, and waits with a
+  background `sleep <n>` where the harness has a background wait (the chat is woken once, no ping
+  loop; the ping loop stays the fallback where there is none). The write times come from the
+  `serverTime` of the first ping after the write. The segment boundary is the hand-over to a
+  fresh context.
+- **A plan with no §1.4 still runs in segments.** The run cuts it at every Part A tool section
+  whose tool family differs from the one before, writes the derived table into section 3 and a
+  `Plan defect for the next version` row in section 8. A new plan (version date 2026-11-09 or
+  later) carries `### 1.4 Segments`, and `mcp-plan` writes it.
+- **`check-layout.sh status <report file>`.** Prints the counts, the last row, the cases with no
+  row, the highest finding and note ids and the `record:` lines of section 3; exit 2 on a
+  missing or unreadable report. The main chat runs it after every segment agent.
+
+The files and their rules:
+
+- **`segments.md`** (new, in `mcp-plan`'s references). What a segment agent does, the brief the
+  main chat fills in, the return shape, the stop conditions (`stopped: <reason>`; an agent never
+  asks the operator), when segments are used, and the dispatch (one at a time, the model of
+  `mcp.segment_model`).
+- **`mcp-run/SKILL.md`.** The main chat orchestrates (§2); step 6 of §1 asks the five shapes and
+  the segment model; new fence lines for `check-layout.sh status`, `grep -nE` and `sleep <n>`;
+  new red-flag rows (an agent never asks; the file check cannot wait; seven cases are not
+  small).
+- **`rules.md`.** The closed list of shell commands gains `grep -nE` for the execution chat and
+  `sleep <n>` in the background form (`sleep 60` is gone). Pauses: the segment boundary is the
+  context hand-over.
+- **`stand-facts.md`.** Budget-driven pauses, a wait is filled first, the background wait (a
+  segment agent waits the same way; the notice may come late, never early), the write time from
+  the `serverTime` of the first ping after the write, and one ping before an agent returns
+  when its last writes have none.
+- **`plan-template.md`, `mcp-plan/SKILL.md`.** `### 1.4 Segments`; a `## Segments` section with
+  the derived cut for an older plan; the `grey-NN` mint row of the token-expiry pair as the one
+  `grey-NN` row allowed in a tool section; a budget point (a wait for the write pace only,
+  skippable) and a measured wait (never skipped) are told apart. `mcp-plan` writes §1.4.
+- **`report-spec.md`.** Section 3: one paragraph per segment (id and sections, model, start and
+  end, the executing writes of the last 60 s, the return and its `deviations` line,
+  `re-dispatched from <case>`), one for the section 9 agent, and the derived segments table; a
+  section first written later goes in its numbered place; one shape of a recorded value, `Record: <HANDLE>`.
+- **`check-layout.sh`.** The `status` mode above; check 27: `§1.4 Segments` in a stable-id plan
+  dated 2026-11-09 or later.
+- **`background.md`.** Why `sleep` was foreground only, and the cost evidence of 2026-11-09.
+- **`config.json`.** `mcp.segment_model`, default `sonnet`.
+- **Evals.** `mcp-run` eval 9 (`segment-agent-stops-without-asking`) on the fixture plan
+  `KING-99008-widgets-test-plan-v2.md`: a segment agent that finds no `kinoa_*` tool stops and
+  asks nothing. `test_check_layout.py` and `test_mcp_skills.py` cover `status` and check 27.
+
+Measured run (2026-11-09, report 20261109-1725, the KING-23083 pre plan as it is, Sonnet 5.5
+main chat): **the target is missed.** It cost $112.56 against the target of ≤ $61.91 (half of the
+$123.81 of run 20261109-0846): 91 % of the baseline. Requests rose to 1,641 (1,076 before), and
+the average context fell to 266k (512k). The main chat cost $20.64 (199 requests, average 411k).
+Sixteen segment agents cost $86.79. The finish agents cost $5.14: the cleanup agent, the section 9
+agent and the sections 6 and 7 agent. Segment sizes (cases, cost): S1 4 $0.89, S2 51 $5.28, S3
+76 $10.54, S4 42 $4.73, S5 91 $13.75, S6 54 $7.08, S7 55 $7.76, S8a 45 $7.63, S8b 29 $3.61, S8c
+72 $12.56, S9 4 $0.77, S10 6 $1.23, S11 9 $1.64, S12 22 $3.34, S13 9 $1.39, Grey 14 $4.59. Every
+agent opens at 68k tokens before its first read and passes 120–165k once it has read the
+references and §0, which is 190M of the agents' 355M context tokens. Checklist:
+- `rows 731 of 731`.
+- Every segment has its paragraph.
+- The only `RATE_LIMITED` answers are the `grey-10` and `grey-11` floods.
+- The 60 s window check cannot be made from section 3, which keeps only each segment's last-minute
+  write times.
+- 25 grades differ from 20261109-0846. Most come from the renewed login and from the leftovers of
+  the earlier run. `grey-10` and `grey-11` are now `OBSERVED`, which is what `stand-facts.md`
+  (budgets) asks of a rate-limit probe: the earlier run's `PASS` was the slip.
+
 ## 0.7.3 — 2026-11-03
 
 **New skill `/kinoa-qa:token-report`: where the tokens of this session went** (KING-24007). It

@@ -11,6 +11,7 @@
   },
   "jira_base_url": "https://kinoadev.atlassian.net",
   "mcp": {
-    "reader_model": "sonnet"
+    "reader_model": "sonnet",
+    "segment_model": "sonnet"
   }
 }

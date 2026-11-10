@@ -103,6 +103,14 @@ existence oracle.
 One stamp per run makes its artifacts identifiable afterwards, so a run resumed after a pause keeps
 its stamp (`rules.md`, pauses).
 
+**A section that is run again** after it was lost ([`segments.md`](segments.md#a-lost-section))
+adds a re-run suffix `r<n>` after the stamp, where `<n>` counts the re-runs of that section from 1.
+The suffix is joined with `-` in `NAME` and `NAME_S`, and with `_` in `KEY` and `KEY_S`:
+`KING21979-QA-20260903-1130-r1` and `king21979_qa_20260903_1130_r1`. Only the names that the
+re-run section creates carry it, so they never collide with the lost attempt's. The suffix adds
+three characters to each of them; what happens when a name is then longer than the limit below is in
+`segments.md`.
+
 **Every name and key the plan creates fits the tightest limit of the domain.** `NAME` and `KEY`
 are 26 characters on their own (`KING21970-QA-20260924-0820`), so a suffix can push a name over
 a backend limit that no schema declares.

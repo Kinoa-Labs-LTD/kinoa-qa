@@ -232,9 +232,12 @@ created with the harness's file write tool, every later piece is added with the 
 edit tool, and a row is checked by reading it. First write the header, §0 and §1, with §1.1, §1.2
 and §1.3 as headings only (a subsection the plan does not need is left out, heading included,
 as `plan-template.md` says). Then append one section per write: Preflight, each tool section,
-§Hand-off, each Part B checkpoint, REPORT. Only then read the code: write §Grey and insert it
-before §Hand-off, add the grey-box probes of Part B, and fill §1.1. Then update §0's artifacts
-table, the `**Name limit:**` line and the header's `**Checked against:**` with what §Grey added.
+§Hand-off, each Part B checkpoint, REPORT. After the last tool section, write §1.4 and insert it
+after §1.3 (`plan-template.md`, segments). Only then read the code: write §Grey and insert it
+before §Hand-off, put the mint row of the token-expiry pair into its tool section, add the
+grey-box probes of Part B, and fill §1.1. Then update §0's artifacts table, the `**Name limit:**`
+line and the header's `**Checked against:**` with what §Grey added, and the §1.4 row of the mint
+row's segment.
 Design the cases of a section only while writing that section, and never design the whole plan in
 one reasoning step: it hits the output limit before the first line is saved. §1.2 gets its case
 ids in the mapping pass above, once the tool sections exist.
@@ -257,6 +260,9 @@ the one home of that list (`file-layout.md`, maintaining the rules).
 - Every value a case takes from an earlier case is a `Record:` handle of that case, and every
   count is relative to a `BASE_` handle or scoped to the stamp (`plan-template.md`, cases are
   data).
+- §1.4 names every Part A tool section once, consecutively, every handle a segment reads is
+  recorded earlier or in it, and no confirm token or wait crosses a cut (`plan-template.md`,
+  segments).
 - Every `gap` and `grey-NN` id appears in §1.1 or in the REPORT section's AC list
   (`plan-template.md`, hypotheses).
 - The preflight records `USER_ID` and then `ROLES_BEFORE`, in that order (`plan-template.md`, the
@@ -345,6 +351,7 @@ When one of these fires, a tool or a bug ends up unproven while the plan reads a
 | "The schema has no `maxLength`, so a descriptive suffix is safe" | With no declared limit the limit is 30 (`fixed-data.md`, naming every artifact). |
 | "A row that ends `BLOCKED` still shows the reader what was not checked" | A check that can only be `BLOCKED` is a §1 line, not a case (`plan-template.md`, soundness rules). |
 | "The run will see which part of the `Expected` cell matters" | The deciding assertion opens the cell; the rest follows `Also record:` (`plan-template.md`, cases are data). |
+| "The segments can be derived at run time, §1.4 is optional" | A plan dated 2026-11-09 or later needs it; the run derives only for older plans (`plan-template.md`, segments). |
 | "The probe is interesting, it can stay unwired" | A `gap` or `grey` row with no §1.1 row and no AC bullet is dropped (`plan-template.md`, hypotheses). |
 | "The operator says the delete is irreversible, but the `sem` cases can settle that" | An irreversible tool is an interview answer, not a hypothesis: no case undoes it (§2, question 5; `rules.md`, subjects and artifacts). |
 | "The last run's row went out fine, but the new rule says the connector converts it" | A row an earlier report shows was sent and graded stays a case (`plan-template.md`, soundness rules). |

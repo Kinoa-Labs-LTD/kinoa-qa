@@ -1,15 +1,132 @@
 #!/usr/bin/env bash
 # Mechanical checks for the mcp-plan / mcp-run skills and their data folder.
 # Run from anywhere: bash <plugin>/skills/mcp-plan/scripts/check-layout.sh [<data folder>]
+#                or: bash <plugin>/skills/mcp-plan/scripts/check-layout.sh status <report file>
+#                or: bash <plugin>/skills/mcp-plan/scripts/check-layout.sh grades <report file> [<previous report file>]
 # (<plugin>/skills = the folder holding both skill folders; the script locates them from its own path.)
 # <data folder> holds plans/ and reports/ and defaults to ~/.kinoa-qa/mcp; CI passes the eval
 # fixture tree, <plugin>/skills/mcp-run/evals.
 # Exit code 1 if any check fails, 2 on a usage error. Prints one line per problem.
+# `status <report file>` is not a check: it reads one report and prints its counts, last row, the plan
+# cases with no row, the highest finding and note ids and the recorded handles (S. status mode below);
+# it exits 0, or 2 when the report is missing or unreadable.
+# `grades <report file> [<previous report file>]` is not a check either: it lists the case rows of one
+# report that a check agent re-grades (G. grades mode below); it exits 0, or 2 on a usage error.
 
 set -u
-usage() { echo "usage: bash check-layout.sh [<data folder>]"; exit 2; }
+usage() { echo "usage: bash check-layout.sh [<data folder>] | bash check-layout.sh status <report file> | bash check-layout.sh grades <report file> [<previous report file>]"; exit 2; }
+# Every table row is split on `|` through these two: hold_pipes turns each escaped `\|` into the
+# byte $PIPE_HOLD so it stays inside its cell, give_pipes turns it back on the way out.
+# Usage: hold_pipes [<file>] | awk -F'|' '…' | give_pipes
+PIPE_HOLD="$(printf '\037')"
+hold_pipes() { sed "s/\\\\|/$PIPE_HOLD/g" "$@"; }
+give_pipes() { sed "s/$PIPE_HOLD/\\\\|/g"; }
+# The case status table of section 3, one line per row: <id> TAB <status> TAB <third cell>, with the
+# row cells split with escaped `\|` held back (a `\|` in any cell would shift the split; only these
+# three cells are read, and a `\|` is given back in the third cell). A fenced block counts for none of it.
+case_rows() {  # $1 = report
+  hold_pipes "$1" | awk -F'|' '
+    /^[ \t]*```/ { f = !f; next }
+    f { next }
+    /^## / { s = ($0 ~ /^## 3\./); t = 0; next }
+    s && /^\| *Case *\| *Status *\|/ { t = 1; next }
+    s && t && /^\|[-: |]*\|$/ { next }
+    s && t && /^\|/ { id = $2; st = $3; gsub(/[ `]/, "", id); gsub(/[ `]/, "", st); print id "\t" st "\t" $4; next }
+    t { t = 0; s = 0 }' | give_pipes
+}
+# S. status mode: `status <report file>` reads one report and prints, in this order and nothing else:
+#    `PASS <n> · FAIL <n> · OBSERVED <n> · BLOCKED <n> · rows <n> of <N>` (the counts of the section 3
+#    case status table, N = the case rows of the plan, `?` when the plan is not found), `last row: <id>`,
+#    `no row: <plan case ids with no table row, in plan order>`, `highest finding: F<n>`,
+#    `highest note: N<n>` (`none` where there is no such row, id or heading), then one `record: …` line
+#    per `Record:` handle of section 3, with its line number in the file. The plan is the
+#    `*-test-plan*.md` named on the first `Plan file:` line of section 1, at `<report folder>/../plans/`.
+#    A fenced block counts for none of it. A pause or a run in progress still prints everything it has.
+status_mode() {  # $1 = report
+  local rep="$1" rows plan_name plan_path ids_plan ids_rep missing total hf hn
+  rows="$(case_rows "$rep" | cut -f1,2)"
+  plan_name="$(awk '/^## 1\./ { f = 1; next } f && /^## / { exit } f && /Plan file:/ { print; exit }' "$rep" \
+    | grep -oE '[A-Za-z0-9._-]*-test-plan[A-Za-z0-9._-]*\.md' | head -1)"
+  plan_path="$(dirname "$rep")/../plans/$plan_name"
+  ids_rep="$(printf '%s\n' "$rows" | awk -F'\t' 'NF { print $1 }')"
+  if [ -n "$plan_name" ] && [ -f "$plan_path" ]; then
+    ids_plan="$(grep -oE '^\| `[a-z0-9-]+` \|' "$plan_path" | tr -d '|` ')"
+    missing="$(awk 'NR == FNR { seen[$0]; next } NF && !($0 in seen) { printf "%s%s", (m++ ? " " : ""), $0 }' \
+      <(printf '%s\n' "$ids_rep") <(printf '%s\n' "$ids_plan"))"
+    total="$(printf '%s\n' "$ids_plan" | awk 'NF { n++ } END { print n + 0 }')"
+    [ -n "$missing" ] || missing="none"
+  else
+    total="?"
+    if [ -n "$plan_name" ]; then missing="? (plan not found: $plan_path)"; else missing="? (plan not found: no *-test-plan*.md on the Plan file: line of section 1)"; fi
+  fi
+  printf '%s\n' "$rows" | awk -F'\t' -v total="$total" '
+    NF { n++; c[$2]++; last = $1 }
+    END { printf "PASS %d \302\267 FAIL %d \302\267 OBSERVED %d \302\267 BLOCKED %d \302\267 rows %d of %s\n", c["PASS"], c["FAIL"], c["OBSERVED"], c["BLOCKED"], n, total
+          print "last row: " (n ? last : "none") }' | give_pipes
+  echo "no row: $missing"
+  hf="$(grep -oE '^### F[0-9]+ ' "$rep" | sed -E 's/^### F([0-9]+) $/\1/' | sort -n | tail -1)"
+  hn="$(grep -oE '^### N[0-9]+ ' "$rep" | sed -E 's/^### N([0-9]+) $/\1/' | sort -n | tail -1)"
+  echo "highest finding: ${hf:+F}${hf:-none}"
+  echo "highest note: ${hn:+N}${hn:-none}"
+  # The Record: lines, section 3 only. The text is matched as a line, not split on `|`, so a value that
+  # holds `\|` prints whole. A value is the backticked text after `=`, or, with no backticks, the text up
+  # to the end of the sentence (never cut at a space).
+  perl -CSD -ne '
+    if (/^\s*```/) { $fence = !$fence; next }
+    next if $fence;
+    if (/^## /) { $in = /^## 3\./; next }
+    next unless $in;
+    while (/`?Record:\s+([A-Z][A-Z0-9_]*)`?\s*(?:=\s*(`[^`]*`|.+?(?=\.(?:\s|$)|\s*`?Record:|$))|(not recorded))/g) {
+      my ($h, $v, $n) = ($1, $2, $3);
+      if (defined $v) { $v =~ s/[\s.,;:]+$// unless $v =~ /^`/; print "record: $h = $v (line $.)\n" }
+      else { print "record: $h not recorded (line $.)\n" }
+    }' "$rep"
+}
+# G. grades mode: `grades <report> [<previous report>]` prints, in the report's case status table order,
+#    one line per targeted row, `<case id> <STATUS>`, with ` was <PREVIOUS STATUS>` appended when the
+#    status differs from the previous report's row of that case (matched by case id, not row order) and
+#    ` new` appended when a previous report is given and has no row for the case; then the last line,
+#    `targeted <n> of <m>` (m = the rows of the report's case status table). A targeted row is any row
+#    graded FAIL, OBSERVED or BLOCKED, plus any row whose status differs from the previous report's; a
+#    PASS row with no previous row is not targeted. A row whose third cell holds `excluded by the
+#    operator` or `writes disabled server-side (dry-run)` (the fixed BLOCKED labels of mcp-plan
+#    references/rules.md and stand-facts.md) is never targeted, even when it differs. A previous
+#    row whose third cell holds one of them counts as no previous row: a case the previous run did
+#    not send is not targeted when it is now PASS, and is ` new` when it is not. Exit 0; 2 on a
+#    usage error (the argument count is not 2 or 3, a file is missing or unreadable, an argument starts
+#    with `-`). The reader is case_rows, so a `\|` in a cell keeps its row whole.
+grades_mode() {  # $1 = report, $2 = previous report or empty
+  # The previous stream opens with a `#` line, so that awk's first input is never empty.
+  awk -F'\t' -v has_prev="$([ -n "${2:-}" ] && echo 1 || echo 0)" '
+    function fixed(c) { return index(c, "excluded by the operator") || index(c, "writes disabled server-side (dry-run)") }
+    NR == FNR { if ($1 != "#" && !fixed($3)) prev[$1] = $2; next }
+    { m++ }
+    fixed($3) { next }
+    {
+      id = $1; st = $2
+      if (id in prev) { if (prev[id] != st) { out = id " " st " was " prev[id] } else if (st != "PASS") { out = id " " st } else { next } }
+      else if (st != "PASS") { out = id " " st (has_prev == 1 ? " new" : "") }
+      else { next }
+      print out; n++
+    }
+    END { print "targeted " n + 0 " of " m + 0 }' \
+    <(printf '#\t#\t#\n'; if [ -n "${2:-}" ]; then case_rows "$2"; fi) <(case_rows "$1")
+}
+if [ "${1:-}" = grades ]; then
+  { [ $# -eq 2 ] || [ $# -eq 3 ]; } || usage
+  for a in "${@:2}"; do
+    case "$a" in -*) usage;; esac
+    { [ -f "$a" ] && [ -r "$a" ]; } || usage
+  done
+  grades_mode "$2" "${3:-}"; exit 0
+fi
+if [ "${1:-}" = status ]; then
+  { [ $# -eq 2 ] && [ -f "$2" ] && [ -r "$2" ]; } || usage
+  status_mode "$2"; exit 0
+fi
 [ $# -le 1 ] || usage
 case "${1:-}" in -*) usage;; esac
+
 PLAN="$(cd "$(dirname "$0")/.." && pwd)"          # mcp-plan
 ROOT="$(dirname "$PLAN")"                          # <plugin>/skills: the folder holding the skill folders
 EXEC="$ROOT/mcp-run"
@@ -25,13 +142,6 @@ problem() { echo "PROBLEM: $*"; fail=1; }
 STABLE_ID_ROW='^\| `?[a-z][a-z-]*-[0-9]{2}`? \|'
 LEGACY_ID_ROW='^\| `?[A-Z][0-9]+-[A-Z][0-9]+`? \|'
 is_stable_plan() { grep -qE "$STABLE_ID_ROW" "$1"; }
-# Every table row is split on `|` through these two: hold_pipes turns each escaped `\|` into the
-# byte $PIPE_HOLD so it stays inside its cell, give_pipes turns it back on the way out.
-# Usage: hold_pipes [<file>] | awk -F'|' '…' | give_pipes
-PIPE_HOLD="$(printf '\037')"
-hold_pipes() { sed "s/\\\\|/$PIPE_HOLD/g" "$@"; }
-give_pipes() { sed "s/$PIPE_HOLD/\\\\|/g"; }
-
 # 1. Every relative markdown link resolves from the file's own folder, and so does its #anchor:
 #    the anchor must be the GitHub slug of a heading in the target file (lower-cased, punctuation
 #    other than '-' and '_' dropped, each space a '-', a repeated heading suffixed -1, -2 …;
@@ -117,6 +227,7 @@ declare -a owned=(
   'The rows in effect are read, not asked|rules.md'
   'A count is never an absolute number|plan-template.md'
   'graded on the clause before .Also record:|rules.md'
+  'server never answered the chat|rules.md'
 )
 # The home is compared by full path, so a SKILL file is scanned unless it is the home itself, and
 # the references are scanned against each other. A phrase check is paraphrase-blind: it catches a
@@ -410,7 +521,22 @@ done
 #        `<tool>-<kind>` group (and `pre`, `grey`, `handoff`, `role-<tool>`), the ids no earlier version
 #        of the plan holds are the numbers after the highest one any earlier version used, with no
 #        gap (plan-template.md, stable case ids). PROBLEM for the first id of a group that skips.
+#    27. A plan of version date SEGMENTS_FROM or later carries `### 1.4 Segments`, the table that
+#        cuts Part A into the segments the run hands to sub-agents (plan-template.md, §1.4): a row
+#        per segment, `| Segment | Sections | Reads | Records | Writes | Note |`, `Sections` being
+#        `A<n>` or a range `A<n>–A<m>` (en dash or hyphen). A Part A tool section is a `## A<n>.`
+#        heading, n >= 1, whose title starts with a backticked `kinoa_` tool name; §A0, the Grey box
+#        (`## A<n>. Grey box` or `## Grey`), the Hand-off and Part B are no segment. PROBLEM for:
+#        no heading or no row; a tool section in no segment; a tool section in two segments; a row
+#        that names a section which is no tool section; two segments in table order that do not run
+#        on from one another over the tool sections; a handle used in a segment before the segment
+#        that records it — a handle is a `Record: X` token of an `Expected` cell in a tool section,
+#        a use is that token as a whole word in a `Call` cell of a tool section; a handle that §0
+#        names as a constant or that §A0 records is skipped, and so is a use outside the tool
+#        sections; a `grey-NN` row under a tool section whose id the paragraph of the Grey box (the
+#        text before its table) does not name.
 NAMES_FROM=20261016
+SEGMENTS_FROM=20261109
 plan_unlisted_names() {  # $1 = plan; prints one problem per line, for check 18
   local plan="$1" zero lit id
   zero="$(awk '/^## 0\./ { f = 1; next } f && /^## / { exit } f' "$plan")"
@@ -422,6 +548,98 @@ plan_unlisted_names() {  # $1 = plan; prints one problem per line, for check 18
     next unless defined $F[1] && $F[1] =~ /^ *`?([a-z][a-z0-9-]*-[0-9]{2})`? *$/;
     my $id = $1; my $c = $F[2] // "";
     print "$id\t$1" while $c =~ /(?<![A-Za-z0-9_-])((?:NAME(?:_S)?-|KEY_)[A-Za-z0-9_-]+)/g;' | sort -u)
+}
+plan_segments() {  # $1 = plan; prints one problem per line, for check 27
+  hold_pipes "$1" | perl -CSD -F'\|' -lane '
+    BEGIN { $tail = " (plan-template.md, \x{a7}1.4)" }
+    if (/^\s*```/) { $fence = !$fence; next }
+    next if $fence;
+    if (/^#{1,3} /) {                       # a heading ends the table and sets the section kind
+      $seg = 0; $kind = "other"; $table = "";
+      if (/^### 1\.4\b/) { $seg = 1; $has14 = 1 }
+      elsif (/^## 0\./) { $kind = "zero" }
+      elsif (/^## (?:A(\d+)\.\s*)?(.*)/) {
+        my ($n, $t) = (defined $1 ? $1 + 0 : undef, $2);
+        if ($t =~ /^\W*Grey\b/i) { $kind = "grey"; $grey_seen = 1 }
+        elsif ($t =~ /^\W*Hand-?off\b/i) { $kind = "handoff" }
+        elsif (defined $n && $n == 0) { $kind = "a0" }
+        elsif (defined $n && $t =~ /^`kinoa_/) { $kind = "tool"; $sec = $n; push @secs, $n; $istool{$n} = 1 }
+      }
+      next;
+    }
+    if ($kind eq "grey" && !$seen_table && !/^\|/) { $prose .= "$_\n"; next }
+    if ($kind eq "grey" && /^\|/) { $seen_table = 1 }
+    if (!/^\|/) { $table = "" if $kind eq "zero"; next }
+    my $cell = sub { my $v = $F[$_[0]] // ""; $v =~ s/\x1f/|/g; $v };
+    if ($seg) {
+      (my $id = $cell->(1)) =~ s/[\s`]//g;
+      next if $id eq "" || $id =~ /^:?-+:?$/ || $id eq "Segment";
+      my @r; my $sc = $cell->(2);
+      while ($sc =~ /A(\d+)\s*(?:[\x{2013}-]\s*A(\d+))?/g) { push @r, [$1 + 0, ($2 // $1) + 0] }
+      push @segs, [$id, [@r]]; next;
+    }
+    if ($kind eq "zero") {
+      (my $h = $cell->(1)) =~ s/[\s`]//g;
+      if (!$table) { $table = $h; next }
+      if ($table eq "Constant" && $h !~ /^:?-+:?$/) { $const{$h} = 1 }
+      next;
+    }
+    (my $id = $cell->(1)) =~ s/^\s*`?|`?\s*$//g;
+    next unless $id =~ /^[a-z][a-z0-9-]*-[0-9]{2}$/;
+    my ($c, $e) = ($cell->(2), $cell->(3));
+    if ($kind eq "a0") { $a0{$1} = 1 while $e =~ /Record:\s+([A-Z][A-Z0-9_]*)/g; next }
+    next unless $kind eq "tool";
+    push @rows, [$sec, $id, $c, $e];
+    push @greys, [$sec, $id] if $id =~ /^grey-[0-9]{2}$/;
+    END { CHECK: {
+      if (!$has14 || !@segs) { print "\x{a7}1.4 Segments is missing$tail"; last CHECK }
+      my (%in, %named);
+      for my $s (@segs) { for my $range (@{$s->[1]}) { for my $n ($range->[0] .. $range->[1]) {
+        if (!$istool{$n}) {
+          print "segment $s->[0] names A$n, which is not a Part A tool section$tail" unless $named{"$s->[0] $n"}++;
+          next;
+        }
+        push @{$in{$n}}, $s->[0] unless grep { $_ eq $s->[0] } @{$in{$n}} } } }
+      for my $n (@secs) {
+        if (!$in{$n}) { print "section A$n is in no segment of \x{a7}1.4$tail" }
+        elsif (@{$in{$n}} > 1) { print "section A$n is in two segments of \x{a7}1.4: " . join(", ", @{$in{$n}}) . $tail }
+      }
+      my %pos; $pos{$secs[$_]} = $_ for 0 .. $#secs;      # tool sections, judged by their place in Part A
+      my $span = sub { my ($lo, $hi);
+                       for my $p (@{$_[0][1]}) { for my $n ($p->[0] .. $p->[1]) { next unless $istool{$n};
+                         $lo = $n if !defined $lo || $n < $lo; $hi = $n if !defined $hi || $n > $hi } }
+                       return defined $lo ? ($lo, $hi) : () };
+      for my $i (1 .. $#segs) {
+        my ($plo, $phi) = $span->($segs[$i - 1]); my ($lo, $hi) = $span->($segs[$i]);
+        next unless defined $plo && defined $lo;
+        next if grep { my @l = @{$in{$_} // []}; @l > 1 && (grep { $_ eq $segs[$i][0] } @l) && (grep { $_ eq $segs[$i - 1][0] } @l) } ($lo .. $hi);   # an overlap is reported above
+        print "the segments of \x{a7}1.4 are not consecutive: $segs[$i - 1][0] ends at A$phi, $segs[$i][0] starts at A$lo$tail" if $pos{$lo} != $pos{$phi} + 1;
+      }
+      my %rec;       # handle -> [segment index, segment id, row id] of its earliest record
+      my %segidx; $segidx{$segs[$_][0]} = $_ for 0 .. $#segs;
+      my $seg_of = sub { my $l = $in{$_[0]}; $l ? $l->[0] : undef };
+      for my $row (@rows) {
+        my $sid = $seg_of->($row->[0]); next unless defined $sid;
+        while ($row->[3] =~ /Record:\s+([A-Z][A-Z0-9_]*)/g) {
+          my $h = $1; next if $const{$h} || $a0{$h};
+          $rec{$h} = [$segidx{$sid}, $sid, $row->[1]] if !$rec{$h} || $segidx{$sid} < $rec{$h}[0];
+        }
+      }
+      my %said;
+      for my $row (@rows) {
+        my $sid = $seg_of->($row->[0]); next unless defined $sid;
+        for my $h (sort keys %rec) {
+          next if $said{$h} || $segidx{$sid} >= $rec{$h}[0];
+          next unless $row->[2] =~ /(?<![A-Za-z0-9_-])\Q$h\E(?![A-Za-z0-9_-])/;
+          $said{$h} = 1;
+          print "`$h` is used in segment $sid (`$row->[1]`) but recorded in segment $rec{$h}[1] (`$rec{$h}[2]`)$tail";
+        }
+      }
+      for my $g (@greys) {
+        next if $prose =~ /(?<![A-Za-z0-9_-])\Q$g->[1]\E(?![A-Za-z0-9_-])/;
+        print "`$g->[1]` sits in section A$g->[0] and the paragraph of \x{a7}Grey does not name it$tail";
+      }
+    } }' | give_pipes
 }
 plan_graded_rows() {  # $1 = plan; prints one problem per line, for check 22
   local plan="$1" name kd rep ids id st
@@ -515,6 +733,13 @@ for plan in "$PLANS"/*-test-plan*.md; do
   pdate="$(grep -m1 -oE '^\*\*Plan version:\*\* *[0-9]+ *\([0-9]{4}-[0-9]{2}-[0-9]{2}' "$plan" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tr -d -)"
   [ -n "$pdate" ] && [ "$pdate" -ge "$NAMES_FROM" ] || continue
   while IFS= read -r p; do [ -n "$p" ] && problem "${plan#$DATA/}: $p"; done < <(plan_unlisted_names "$plan"; plan_len_probes "$plan"; plan_graded_rows "$plan"; plan_call_objects "$plan"; plan_nn_numbers "$plan")
+done
+for plan in "$PLANS"/*-test-plan*.md; do   # check 27 has its own date gate
+  [ -e "$plan" ] || continue
+  is_stable_plan "$plan" || continue
+  pdate="$(grep -m1 -oE '^\*\*Plan version:\*\* *[0-9]+ *\([0-9]{4}-[0-9]{2}-[0-9]{2}' "$plan" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tr -d -)"
+  [ -n "$pdate" ] && [ "$pdate" -ge "$SEGMENTS_FROM" ] || continue
+  while IFS= read -r p; do [ -n "$p" ] && problem "${plan#$DATA/}: $p"; done < <(plan_segments "$plan")
 done
 
 # 20. A plan older than its report: a runnable plan whose header says `**Earlier runs:** none`

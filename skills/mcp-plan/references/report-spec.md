@@ -8,13 +8,14 @@ A report names a reference as plain text, `mcp-plan references/<file>.md` (for e
 and to earlier reports ([`file-layout.md`](file-layout.md#links-inside-the-files)).
 
 The report **is** these ten sections, in this order, each headed `## <n>. <Section>`. Nothing else
-is a section.
+is a section. A section first written later goes in its numbered place, before any higher section
+already in the file.
 
 | # | Section | What it contains |
 |---|---|---|
 | 1 | Header | Date (UTC), stand, MCP connector, the caller's `user_id` as `kinoa_system_ping` returned it (never a login or an e-mail), the fixed data actually used, plan file + plan version, and the four run lines from [`file-layout.md`](file-layout.md#many-reports-for-one-plan): `Run`, `Plan file`, `Run reason`, `Previous report` |
 | 2 | Overall status | `GREEN` if the run has zero `FAIL`s **and** zero finding blocks, else `RED`; `BLOCKED — <reason>` when no case ran (see [the overall status](#the-overall-status)); then the counts, as the one-row table `\| PASS \| FAIL \| OBSERVED \| BLOCKED \| Total \|` counted from [the case status table](#the-case-status-table), which must sum to the plan's case count — exactly one status per plan case, so a case deferred from Part A and re-run in Part B is counted once, under the status it ended with, and the cases outside a partial run's slice are counted under their `BLOCKED` label ([`rules.md`](rules.md#partial-runs)). A partial run adds one sentence: the status covers only the cases that ran. The finding count and the note count follow as two separate numbers; neither is a status. When a previous report exists, the comparison table below closes the section |
-| 3 | What was done, per part | In a partial run, a first paragraph that names the slice as the operator gave it, the cases the slice pulled in and the checkpoints applied. Then one prose paragraph per plan section and per Part B checkpoint: the preflight paragraph names the role Part A ran under, read from `ROLES_BEFORE` ([`rules.md`](rules.md#part-a--part-b)); a checkpoint paragraph gives the rows the `GET` showed after the block and when, how many attempts the block took, and, when the checkpoint fell back to the operator, why and the rows the operator pasted. Includes the delete-semantics verdict, one sentence per destructive tool. Ends with [the case status table](#the-case-status-table) |
+| 3 | What was done, per part | In a partial run, a first paragraph that names the slice as the operator gave it, the cases the slice pulled in and the checkpoints applied. Then one prose paragraph per plan section and per Part B checkpoint: the preflight paragraph names the role Part A ran under, read from `ROLES_BEFORE` ([`rules.md`](rules.md#part-a--part-b)); a checkpoint paragraph gives the rows the `GET` showed after the block and when, how many attempts the block took, and, when the checkpoint fell back to the operator, why and the rows the operator pasted. Includes the delete-semantics verdict, one sentence per destructive tool. In a run that used segment agents, one paragraph per segment: its id and sections, the model, start and end, the times of its executing writes of the last 60 s, its return (`done`, or `stopped` with the reason and the case), the return's `deviations` line, and `re-dispatched from <case>` when a gap was run again; the section 9 agent gets one such paragraph too, with its counts per label; with the derived segments table when the plan has no §1.4 ([`segments.md`](segments.md); the shape of a recorded value is [below](#recorded-values-and-segment-paragraphs)). Ends with [the case status table](#the-case-status-table) |
 | 4 | Findings | The body of the report: one line that lists the finding ids by severity, most severe first, then one block per defect in id order, in the finding block contract of [`report-blocks.md`](report-blocks.md#the-finding-block-contract) |
 | 5 | Notes | Every non-blocking inconsistency or flaw the run saw: one block per note, in the note block contract of [`report-blocks.md`](report-blocks.md#the-note-block-contract). Empty only if the run really saw none — then write "No notes." |
 | 6 | AC traceability | One row per acceptance-criterion bullet: case ids, verdict, and the finding id where it failed |
@@ -50,9 +51,34 @@ pointing at the one section 8 exclusion row, so until then the last row is the l
 | `role-create-02` | `BLOCKED` | section 8: the fallback to the operator at B2 |
 
 The third cell holds the finding and note ids of the case, or for a `BLOCKED` case the section 8
-row that names it, or `—`. A case deferred from Part A keeps its one row, whose status changes
+row that names it, or `—`. A `BLOCKED` case with a fixed label writes the label in that cell
+after `section 8: `, word for word as its home writes it after `BLOCKED — ` (`rules.md`, partial
+runs; `stand-facts.md`, the dry-run kill-switch). `check-layout.sh grades` finds these rows by
+those words. A case deferred from Part A keeps its one row, whose status changes
 when Part B grades it. The section 2 counts are counted from this table, so its row count equals
 their `Total`.
+
+## Recorded values and segment paragraphs
+
+A recorded value is written as `` `Record: <HANDLE>` = `<value>` ``, and a value the case did not
+produce as `` `Record: <HANDLE>` not recorded (<case id>) ``. The line stands alone or inside the
+paragraph of its plan section. `check-layout.sh status` reads these lines, and a resuming chat
+rebuilds its handles from them. A handle is upper case letters, digits and `_`, and starts with a
+letter. A handle written any other way is not found.
+
+A passing case keeps a short record: its ids, its status and the values a later case or the
+finish needs. The envelope stays verbatim for what a finding, a note, a hypothesis verdict or a
+`Record:` value rests on ([`rules.md`](rules.md#capture-at-the-call)).
+
+The main chat writes the segment paragraph, after it has checked the agent's return against the
+file, and the derived segments table before the first segment of a plan with no §1.4. The agent
+writes the paragraphs of the plan sections of its range, with their `Record:` lines.
+
+At the finish, the main chat writes the check line of section 3, after the check agent returns
+([`segments.md`](segments.md#the-check-agent)). It starts `Grade check:` and names every correction
+the main chat applied, as `<case id>: <OLD> → <NEW>`, or says `none`. It also names each `doubt:`
+and `unsupported:` item of the return, and the report is not changed for them. In a run with no
+segments, the main chat writes the same line from its own check.
 
 ## The overall status
 
