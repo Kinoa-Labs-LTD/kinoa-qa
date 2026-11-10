@@ -72,14 +72,14 @@ sleep <n>                                    # the background wait of a pause th
    operator to add the `kinoa` connector or log in to it (`stand-facts.md`, connector). With
    `rules.md` unreadable, the plugin is incomplete: stop the same way and tell the operator to
    update or reinstall the `kinoa-qa` plugin.
-2. **Pick the plan** — the file the user names, else the highest version. Say which, and its
-   `**Plan version:**`, before case 1.
+2. **Pick the plan** — the file the user names, else the highest version, after the `mkdir` and
+   the `ls` of the plans folder. Say which, and its `**Plan version:**`, before case 1.
 3. **Read its §0**, before any tool call. What a missing value does to the run, and what the
    runner never does about it: `fixed-data.md`, games and players (the run reads §0 and nothing
    else). A run blocked here writes no report file: the hand-over names the block and the
    constants.
 4. **Pick the baseline** — the newest report for the same `<KEY>-<domain>` in which a case ran, or
-   none (`file-layout.md`, finding the files). Read its findings and its notes and write down the
+   none, from the `ls` of the reports folder (`file-layout.md`, finding the files). Read its findings and its notes and write down the
    ids to re-check (older reports have no Notes section, see `file-layout.md`). When the plan says
    `**Earlier runs:** none` and a report for its `<KEY>-<domain>` exists, say in the first
    message that a new plan version is due, then run as the rules say: an id with no §1.2 row is
@@ -104,8 +104,8 @@ sleep <n>                                    # the background wait of a pause th
    anything. A plan with no
    Part B: print no `curl` line and send no snapshot `GET` beyond a `pre-` case that sends it;
    section 10 says no checkpoint ran. A plan with Part B but no `ADMIN_API` in §0: print no `curl`
-   line, write a `Plan defect for the next version` row in section 8, and the operator applies the
-   rows (`fixed-data.md`, games and players; `rules.md`, Part A / Part B).
+   line, write a `Plan defect for the next version` row in section 8 once step 8 has created the
+   report file, and the operator applies the rows (`fixed-data.md`, games and players; `rules.md`, Part A / Part B).
 7. **Resume, when the operator names an existing report file or says "continue".** The run is
    the one that file records: reuse its `Run` stamp, skip the `date` command, and read what
    step 3 of the post-compaction checklist lists (`rules.md`, pauses; in a report with no case
@@ -133,8 +133,9 @@ segments and §Grey to segment agents, one at a time, and checks the report file
    the tool inventory (a story tool the stand does not list: `rules.md`, statuses), the write
    list (`rules.md`, writes) and `meta.dryRun` on the first preview (`stand-facts.md`, dry-run).
    The main chat loads only the schemas of its own tools: the tools of the preflight, of
-   §Hand-off and of Part B, by exact name, in one load (in Claude Code: `ToolSearch` with
-   `select:`). It never loads them by keyword or all at once. The segment agents load their own
+   §Hand-off and of Part B, and in a run with no segments also those of Part A, §Grey and the
+   section 9 re-resolve (the `_get` and list tools of what the run creates), by exact name, in
+   one load (in Claude Code: `ToolSearch` with `select:`). It never loads them by keyword or all at once. The segment agents load their own
    (`segments.md`, what a segment agent reads).
    It keeps long values short in its working text. A list it needs once, such as the projects, is
    read once, and only the rows the run uses are written down. A download link is noted by its
@@ -177,7 +178,8 @@ way. Two cases are exceptions:
 
 - `stopped: connector lost` is handled as `rules.md`, pauses, says for the connector (case b).
 - An agent that dies, returns nothing or returns `stopped: context compacted` leaves nothing to
-  fix, so the operator is not asked. Its section with no row goes straight to
+  fix, so the operator is not asked. The section of the first case of its range with no row
+  goes straight to
   [`segments.md`, a lost section](../mcp-plan/references/segments.md#a-lost-section): follow that section.
 
 **One case at a time** in the main chat, with the harness's file write and edit tools. A segment
@@ -192,7 +194,8 @@ call when the context was compacted or the connector dropped.
 1. Close the grades and the ids of the report, in this order.
    - **Re-resolve every id the run created** and label it per the artifact contract
      (`report-blocks.md`). In a run with segments, one agent does this: it writes the section 9 rows
-     itself and returns the count per label (`segments.md`). The main chat writes the section 3
+     itself and returns the count per label (`segments.md`). In a run with no segments, the main
+     chat does it itself. The main chat writes the section 3
      paragraph of the section 9 agent from its return, as it does for a segment, including the
      agent's `deviations` line (`report-spec.md`, section 3).
    - **Check the risky grades.** The check agent does this. The main chat runs
@@ -212,7 +215,8 @@ call when the context was compacted or the connector dropped.
      - one line of section 3, the check line, names every change, or says `none`
        (`report-spec.md`, recorded values and segment paragraphs).
    - **Count section 2, and write or recount sections 6 and 7,** from the case status table, with
-     the finding ids and the finding count that the corrections left. A partial run adds the rows
+     the finding ids and the finding count that the corrections left. The counts sum to the plan's
+     case count, from the row count of §1. A partial run adds the rows
      of the cases outside its slice first (`report-spec.md`, the case status table). Then the main
      chat runs `check-layout.sh` (§1, the full form) once, and fixes what it names in the report.
      A `PROBLEM` line about any other file was not caused by the run: do not fix it, and

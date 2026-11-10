@@ -64,8 +64,13 @@ status_mode() {  # $1 = report
     END { printf "PASS %d \302\267 FAIL %d \302\267 OBSERVED %d \302\267 BLOCKED %d \302\267 rows %d of %s\n", c["PASS"], c["FAIL"], c["OBSERVED"], c["BLOCKED"], n, total
           print "last row: " (n ? last : "none") }' | give_pipes
   echo "no row: $missing"
-  hf="$(grep -oE '^### F[0-9]+ ' "$rep" | sed -E 's/^### F([0-9]+) $/\1/' | sort -n | tail -1)"
-  hn="$(grep -oE '^### N[0-9]+ ' "$rep" | sed -E 's/^### N([0-9]+) $/\1/' | sort -n | tail -1)"
+  # The block headings outside a fenced block: an example block quoted in a fence holds no id.
+  block_ids() {  # $1 = F or N
+    awk -v k="$1" '/^[ \t]*```/ { f = !f; next } !f && $0 ~ ("^### " k "[0-9]+ ") { s = $2; sub(/^[FN]/, "", s); print s }' "$rep" \
+      | sort -n | tail -1
+  }
+  hf="$(block_ids F)"
+  hn="$(block_ids N)"
   echo "highest finding: ${hf:+F}${hf:-none}"
   echo "highest note: ${hn:+N}${hn:-none}"
   # The Record: lines, section 3 only. The text is matched as a line, not split on `|`, so a value that

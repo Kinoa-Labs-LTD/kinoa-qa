@@ -7,6 +7,8 @@ A report names a reference as plain text, `mcp-plan references/<file>.md` (for e
 `mcp-plan references/report-spec.md`), never as a link into the plugin. It links only to its plan
 and to earlier reports ([`file-layout.md`](file-layout.md#links-inside-the-files)).
 
+## The ten sections
+
 The report **is** these ten sections, in this order, each headed `## <n>. <Section>`. Nothing else
 is a section. A section first written later goes in its numbered place, before any higher section
 already in the file.
@@ -149,7 +151,8 @@ Five rules keep the table honest:
   always has its block in section 4 or 5 of this report, with this run's envelopes. A new defect takes the next free id
   after the highest id of the previous report.
 - **The comparison table carries no bug keys.** The `TRACKED in <KEY>` marker lives on the finding
-  block, which the row's id points at.- **The comparison never changes the overall status.** `GREEN` / `RED` is decided by this run's
+  block, which the row's id points at.
+- **The comparison never changes the overall status.** `GREEN` / `RED` is decided by this run's
   own `FAIL`s and findings alone ([the overall status](#the-overall-status)). A run that fixed nine
   of ten defects is still `RED`.
 

@@ -431,7 +431,9 @@ none of what it holds can be reconstructed afterwards:
   one case at a time. When the last case of a section has run, and before the first call of the
   next section (or before the agent returns), the file holds the rows of every case of that
   section, its `Record:` values and every finding or note block it produced, with their envelopes.
-  The agent writes them in as few edits as the file tool allows. Three things do not move:
+  The agent writes them in as few edits as the file tool allows, and the section's rows of the
+  case status table go in last, all in one edit, so an agent that dies leaves its section with
+  every row or with none ([`segments.md`](segments.md#a-lost-section)). Three things do not move:
   - an envelope is copied verbatim from the tool result, which is still in the agent's context;
   - isolation evidence is still taken while the state is live;
   - a `Record:` value that a later case of the same section uses is taken from the agent's own
@@ -449,11 +451,12 @@ the role cache and a rate-limit window are void. A confirm token is reused while
 ([writes](#writes)); the preview leg is sent again only when the token expired. An expiry after
 a pause is never a defect: re-mint it and run the case again.
 
-**The context is handed over at every segment boundary.** An `mcp-run` chat does not stop and
-does not hand over because of the number of tool calls, a large context or a compaction. Part A
-runs in segment agents, one per segment of the plan, each in a fresh context
-([`segments.md`](segments.md)); that is how the run keeps its context small, and the main chat's
-own context holds the preflight, §Hand-off, Part B and the finish. Hand over to a new chat only
+**Segment agents keep the context small, not hand-overs.** An `mcp-run` chat does not stop and
+does not hand over because of the number of tool calls, a large context or a compaction. In a run
+with more than 6 tool-section cases, Part A runs in segment agents, one per segment of the plan,
+each in a fresh context ([`segments.md`](segments.md), when segments are used); that is how the
+run keeps its context small, and the main chat's own context holds the preflight, §Hand-off,
+Part B and the finish. A smaller run is small enough for the main chat. Hand over to a new chat only
 when (1) the connector does not come back or has lost its authorization (the connector, case b
 below), or (2) the operator asks. The harness's own context warning changes nothing: the file is
 already current (the before stage), and the chat goes on.

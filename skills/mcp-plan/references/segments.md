@@ -74,6 +74,7 @@ whole. It never runs the post-compaction checklist.
 | `stand-facts.md` | `## Server budgets and timings` | segment, check |
 | `stand-facts.md` | `## The dry-run kill-switch` | segment, check |
 | `stand-facts.md` | `## Connector` | segment, check |
+| `report-spec.md` | `## The ten sections` | segment, section 9 |
 | `report-spec.md` | `## The case status table` | segment, check |
 | `report-spec.md` | `## Recorded values and segment paragraphs` | segment, check |
 | `report-spec.md` | `## Naming things — the whole report, not just the findings` | segment, section 9 |
@@ -119,6 +120,10 @@ the brief.
 - It writes the report file once per plan section, when the section's last case has run, as
   [`rules.md`](rules.md#capture-at-the-call) says. It never keeps a finished section in its chat
   while it runs the next one.
+- A case of its range that it leaves `BLOCKED`, and a plan defect it finds, get their section 8
+  rows in the same write, in the shape and the place of
+  [`report-spec.md`](report-spec.md#the-ten-sections) (section 8, and a section first written
+  goes in its numbered place).
 - It ends with the [return](#the-return-shape), or stops as the
   [stop conditions](#stop-conditions) say.
 
@@ -170,8 +175,9 @@ point and returns `stopped: <reason>`:
   ([what it reads](#what-a-segment-agent-reads)): `stopped: connector not visible`;
 - the connector does not come back, or has lost its authorization (`rules.md`,
   [the connector](rules.md#the-connector), case b): `stopped: connector lost`;
-- a game of the plan's §0 answers `PROJECT_ACCESS_DENIED` to a case that does not expect it;
-- a permission prompt is denied.
+- a game of the plan's §0 answers `PROJECT_ACCESS_DENIED` to a case that does not expect it:
+  `stopped: project access denied (<case id>, <game uuid>)`;
+- a permission prompt is denied: `stopped: permission denied (<case id>, <the command or tool>)`.
 
 **Context compacted.** An agent that finds its context summarized returns
 `stopped: context compacted` at once. It writes nothing it no longer holds verbatim, and it never
@@ -192,8 +198,10 @@ record). A doubt is a note or a finding, never a question.
 ## A lost section
 
 A section is lost when its agent died, returned nothing or returned `stopped: context compacted`,
-and the section has no row. It is the section of the first case of the range with no row. Nothing
-else makes a section lost. An agent that stopped for another reason wrote the rows of the cases it
+and the section has no row, or only some of its rows. The rows of a section go in last, in one
+edit (`rules.md`, capture at the call), so a dead agent normally leaves every row or none; a
+section with some rows is the exception, and it is lost all the same. It is the section of the
+first case of the range with no row. Nothing else makes a section lost. An agent that stopped for another reason wrote the rows of the cases it
 ran first, so its section is not lost: the next agent starts from the first case with no row
 (`mcp-run/SKILL.md`, §2, when an agent stops or dies).
 
@@ -208,7 +216,10 @@ had written are not touched. For that section the agent does these things, in th
    from the subjects it finds.
 2. **Run the whole section again, from its first case, with fresh subjects.** The names it creates
    follow step 1 (`fixed-data.md`, naming every artifact). Its `Record:` values replace the lost
-   ones. Each grade comes from the fresh calls. A case whose re-run name would be longer than the
+   ones. Each grade comes from the fresh calls. What the lost attempt wrote for the section gives
+   way to the re-run: a row of one of its cases is replaced by the re-run's row, and a finding or
+   note block whose `Case:` line names one of its cases is removed before the re-run writes its
+   own blocks, which then take the next free ids in the file. A case whose re-run name would be longer than the
    plan's `**Name limit:**` is `BLOCKED`, and its section 8 row names the lost section.
 3. **Block a case only when its starting state is gone.** This step applies to every lost section,
    whether step 1 found subjects or not. Before a case that needs a subject outside the section

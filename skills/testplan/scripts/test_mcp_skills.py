@@ -1788,5 +1788,68 @@ class FinalReview20261110(unittest.TestCase):
         self.assertIn("segments.md#a-lost-section", stops)
 
 
+class ReviewFixes20261110(unittest.TestCase):
+    """The review of mcp-run of 2026-11-10: the gaps between SKILL.md and its references."""
+
+    REFS = "skills/mcp-plan/references/"
+
+    def flat(self, text):
+        return " ".join(text.split())
+
+    def test_a_section_writes_its_rows_last_and_a_partly_written_one_is_lost(self):
+        capture = self.flat(section_lines(read(self.REFS + "rules.md"), "## Capture at the call"))
+        self.assertIn("rows of the case status table go in last, all in one edit", capture)
+        lost = self.flat(section_lines(read(self.REFS + "segments.md"), "## A lost section"))
+        self.assertIn("and the section has no row, or only some of its rows", lost)
+        self.assertIn("is removed before the re-run writes its own blocks", lost)
+
+    def test_the_re_run_suffix_is_conditional_in_both_homes(self):
+        naming = self.flat(section_lines(read(self.REFS + "fixed-data.md"), "## Naming every artifact"))
+        self.assertIn("when the lost attempt left subjects on the stand", naming)
+        self.assertIn("with none found, the names carry no suffix", naming)
+
+    def test_a_segment_agent_reads_the_ten_sections(self):
+        self.assertIn("## The ten sections", read(self.REFS + "report-spec.md").splitlines())
+        body = section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads")
+        rows = {(f.strip("`"), h.strip("`")): r for f, h, r in
+                (split_table_row(l) for l in body.splitlines() if l.startswith("| `"))}
+        readers = [p.strip() for p in rows[("report-spec.md", "## The ten sections")].split(",")]
+        self.assertEqual(["segment", "section 9"], readers)
+        does = self.flat(section_lines(read(self.REFS + "segments.md"), "## What the agent does"))
+        self.assertIn("get their section 8 rows in the same write", does)
+
+    def test_no_bullet_is_glued_to_the_line_before_it(self):
+        for name in sorted(os.listdir(os.path.join(ROOT, self.REFS))):
+            for n, line in enumerate(read(self.REFS + name).splitlines(), 1):
+                with self.subTest(file=name, line=n):
+                    self.assertNotRegex(line, r"[.:;]- \*\*")
+
+    def test_the_main_chat_loads_the_part_a_tools_in_a_run_with_no_segments(self):
+        run = self.flat(read(RUN_SKILL))
+        self.assertIn("in a run with no segments also those of Part A, §Grey and the section 9 re-resolve", run)
+        self.assertIn("In a run with no segments, the main chat does it itself.", run)
+
+    def test_every_stop_condition_names_its_return(self):
+        stops = section_lines(read(self.REFS + "segments.md"), "## Stop conditions")
+        bullets = [b for b in re.split(r"\n(?=- )", stops.split("**Context compacted.**")[0]) if b.startswith("- ")]
+        self.assertEqual(4, len(bullets), bullets)
+        for bullet in bullets:
+            with self.subTest(bullet=bullet[:40]):
+                self.assertIn("`stopped: ", bullet)
+
+    def test_pauses_ties_the_segment_agents_to_the_threshold(self):
+        pauses = self.flat(section_lines(read(self.REFS + "rules.md"), "## Pauses"))
+        self.assertNotIn("handed over at every segment boundary", pauses)
+        self.assertIn("In a run with more than 6 tool-section cases, Part A runs in segment agents", pauses)
+
+    def test_every_printed_command_of_step_1_to_8_is_named_by_a_step(self):
+        run = self.flat(read(RUN_SKILL))
+        for phrase in ("after the `mkdir` and the `ls` of the plans folder",
+                       "from the `ls` of the reports folder", "from the row count of §1",
+                       "once step 8 has created the report file"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, run)
+
+
 if __name__ == "__main__":
     unittest.main()

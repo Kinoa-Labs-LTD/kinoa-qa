@@ -326,6 +326,12 @@ class StatusMode(unittest.TestCase):
         out = self.run_status(text).stdout.splitlines()
         self.assertEqual(["highest finding: F10", "highest note: N3"], out[3:5])
 
+    def test_a_fenced_finding_or_note_heading_is_not_an_id(self):
+        fence = "```markdown\n### F9 — an example   [severity: minor]\n### N7 — an example   [impact: low]\n```"
+        text = report().replace("## 4. Findings\n\nNone.", "## 4. Findings\n\n### F2 — x   [severity: minor]\n\n" + fence)
+        out = self.run_status(text).stdout.splitlines()
+        self.assertEqual(["highest finding: F2", "highest note: none"], out[3:5])
+
     def test_prints_every_record_of_section_3_with_its_line(self):
         text = report().replace("Part A ran start to finish under the `COMPANY` `operator` row.",
             "`Record: W_A` = `6e5d = a \\| b`. Then `Record: BASE_P1` not recorded (pre-05).")

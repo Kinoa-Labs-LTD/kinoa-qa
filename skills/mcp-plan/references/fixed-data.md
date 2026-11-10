@@ -104,7 +104,9 @@ One stamp per run makes its artifacts identifiable afterwards, so a run resumed 
 its stamp (`rules.md`, pauses).
 
 **A section that is run again** after it was lost ([`segments.md`](segments.md#a-lost-section))
-adds a re-run suffix `r<n>` after the stamp, where `<n>` counts the re-runs of that section from 1.
+adds a re-run suffix `r<n>` after the stamp when the lost attempt left subjects on the stand
+(step 1 there decides it; with none found, the names carry no suffix). `<n>` counts the re-runs
+of that section from 1.
 The suffix is joined with `-` in `NAME` and `NAME_S`, and with `_` in `KEY` and `KEY_S`:
 `KING21979-QA-20260903-1130-r1` and `king21979_qa_20260903_1130_r1`. Only the names that the
 re-run section creates carry it, so they never collide with the lost attempt's. The suffix adds

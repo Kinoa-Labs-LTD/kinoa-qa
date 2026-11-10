@@ -83,6 +83,16 @@ The files and their rules:
   10 (`check-agent-corrects-a-planted-grade`) on the fixtures of `KING-99010-widgets`: the check
   agent corrects a planted `PASS` and leaves the other row, and edits nothing. `test_check_layout.py`
   and `test_mcp_skills.py` cover `grades` and the new rules.
+- **Review fixes (2026-11-10).** A segment agent writes a section's case rows last, in one edit,
+  and a section left with only some rows after a death is lost too; the re-run replaces that
+  section's rows and blocks. `fixed-data.md` now adds the `r<n>` suffix only when the lost
+  attempt left subjects, as `segments.md` does. `report-spec.md` has a `## The ten sections`
+  heading, which a segment agent and the section 9 agent read, and a segment agent writes the
+  section 8 rows of its range. With no segments, the main chat loads the Part A, §Grey and
+  section 9 tools too, and re-resolves section 9 itself. Every stop condition names its
+  `stopped:` return. `rules.md`, pauses, ties the segment agents to the threshold of 6.
+  `check-layout.sh status` no longer takes a finding or note id from a fenced block. A bullet of
+  the comparison rules in `report-spec.md` is on its own line again.
 
 Measured run (2026-11-10, report 20261110-1052, the same KING-23083 pre plan, Sonnet 5.5 main
 chat, previous report 20261109-1725): **$89.57, 20 % below 0.8.0's $112.56**. That is 72 % of the
