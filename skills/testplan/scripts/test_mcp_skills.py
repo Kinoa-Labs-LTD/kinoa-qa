@@ -323,6 +323,17 @@ class DataFolderIsCreated(unittest.TestCase):
         self.assertNotIn("docs/plans", layout)
         self.assertNotIn("docs/reports", layout)
 
+    def test_the_run_skill_fences_the_status_mode_and_the_two_greps(self):
+        text = read(RUN_SKILL)
+        for command in ("bash <plugin>/skills/mcp-plan/scripts/check-layout.sh status ~/.kinoa-qa/mcp/reports/<report file>",
+                        "bash <plugin>/skills/mcp-plan/scripts/check-layout.sh grades ~/.kinoa-qa/mcp/reports/<report file> ~/.kinoa-qa/mcp/reports/<previous report>",
+                        "grep -nE '<pattern>' ~/.kinoa-qa/mcp/plans/<plan file>",
+                        "grep -nE '<pattern>' ~/.kinoa-qa/mcp/reports/<report file>",
+                        "sleep <n>"):
+            with self.subTest(command=command):
+                self.assertTrue(fences_command(text, command), command)
+        self.assertFalse(fences_command(text, "sleep 60"))
+
 
 class PlansNameReferencesAsText(TempTree):
     def test_flags_a_link_into_references_and_passes_plain_text(self):
@@ -377,6 +388,15 @@ class RunChecksTheConnectorFirst(unittest.TestCase):
 
     def test_mcp_run_checks_the_connector_before_it_creates_the_report(self):
         self.assertEqual([], connector_check_problems(read(RUN_SKILL)))
+
+    def test_step_6_asks_for_the_five_permission_shapes_and_the_segment_model(self):
+        steps = dict(numbered_steps(section_lines(read(RUN_SKILL), "## 1.")))
+        for needle in ("curl", "`sleep <n>`", "`grep -nE`", "mcp.segment_model"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, steps[6])
+
+    def test_the_run_skill_reads_segments_md_before_the_first_segment(self):
+        self.assertIn("](../mcp-plan/references/segments.md)", read(RUN_SKILL))
 
 
 class SkillsAreNamedAfterTheirFolders(unittest.TestCase):
@@ -799,13 +819,14 @@ class CheckLayoutOnFixtures(TempTree):
 def current_plan(create_call='`kinoa_widget_create {"game_id": "7d3e1c2a-5b64-4f80-9a1b-2c3d4e5f6a7b", "name": "NAME-a", "size": 3}`',
                  artifacts="| `W_A` | `NAME-a` | `P1` | the widget | `create-ok-01` | exists | yes |",
                  earlier_runs="none", known_issues="", header_extra="", extra_rows="",
-                 extra_sections=""):
-    """A minimal plan under the current layout (version date 2026-10-16) that passes every check of
-    check-layout.sh as written; a test breaks one thing in it and looks for the line it gets."""
+                 extra_sections="", version_date="2026-10-16"):
+    """A minimal plan under the current layout (version date 2026-10-16, or `version_date`) that
+    passes every check of check-layout.sh as written; a test breaks one thing in it and looks for
+    the line it gets."""
     return ("# KING-99001 — widgets via the AI agent: Test Plan\n\n"
             "**Story:** https://kinoadev.atlassian.net/browse/KING-99001\n"
             "**Under test:** `kinoa_widget_create`, on the **deployed test stand**\n"
-            "**Plan version:** 1 (2026-10-16)\n"
+            "**Plan version:** 1 (" + version_date + ")\n"
             "**Earlier runs:** " + earlier_runs + "\n"
             "**Decisions from the interview:** artifacts are kept\n" + header_extra +
             "**Checked against:** `tools/list of 2026-10-16; server source not available`\n\n"
@@ -1111,7 +1132,7 @@ class RulesPass20261016(unittest.TestCase):
                 self.assertIn(check, section(template, "Cases are data, prose is commentary"))
         self.assertIn("check 26", section(template, "Stable case ids"))
         part_ab = section(read_flat(REFERENCES + "/rules.md"), "Part A / Part B")
-        self.assertIn("measured like the pause between write blocks", part_ab)
+        self.assertIn("measured as the time of a wait", part_ab)
         self.assertIn("the rows in effect are unknown", part_ab)
         run = section(read_flat(RUN_SKILL), "1. Find the files")
         self.assertIn("Each command runs at the step that names it", run)
@@ -1152,6 +1173,682 @@ class RulesPass20261016(unittest.TestCase):
         label = "`not re-checked (last seen: status <x> in <case>)`"
         self.assertIn(label, section(read_flat(REFERENCES + "/report-blocks.md"), "The artifact contract"))
         self.assertIn(label, read_flat(REFERENCES + "/language.md"))
+
+
+class Segments20261109(unittest.TestCase):
+    """Check 27 of check-layout.sh (KING-24108): a plan dated 2026-11-09 or later carries a
+    `### 1.4 Segments` table that cuts Part A into consecutive segments, with no handle used in a
+    segment before the segment that records it."""
+
+    PLAN = "plans/KING-99001-widgets-test-plan.md"
+    P = "PROBLEM: plans/KING-99001-widgets-test-plan.md: "
+    TAIL = " (plan-template.md, §1.4)"
+    HEAD = "### 1.4 Segments\n\n| Segment | Sections | Reads | Records | Writes | Note |\n|---|---|---|---|---|---|\n"
+    TABLE_ROW = "| S1 | A1 | — | `W_A` | 1 | widgets |"
+    TABLE_HEADER = "| Id | Call | Expected |\n|---|---|---|\n"
+
+    def check(self, files):
+        data = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, data, ignore_errors=True)
+        for folder in FIXTURE_FOLDERS:
+            os.makedirs(os.path.join(data, folder))
+        for rel_path, text in files.items():
+            with open(os.path.join(data, rel_path), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        result = run_bash(CHECK_LAYOUT, data)
+        return result.returncode, result.stdout + result.stderr
+
+    def segmented(self, table_rows, extra_rows="", version_date="2026-11-09", after_sections=""):
+        return current_plan(version_date=version_date, extra_sections=self.HEAD + table_rows + "\n\n",
+                            extra_rows=extra_rows).replace("\n# REPORT", after_sections + "\n# REPORT")
+
+    def section(self, number, title, rows):
+        return "\n## A%d. %s\n\n%s%s" % (number, title, self.TABLE_HEADER, "".join(rows))
+
+    def update_section(self, number, call_tail='"game_id": P1', expected="`ok: true`", cid="update-ok-01"):
+        return self.section(number, "`kinoa_widget_update`",
+                            ["| `%s` | `kinoa_widget_update {%s}` | %s |\n" % (cid, call_tail, expected)])
+
+    def unwired(self, out):
+        """The PROBLEM lines other than the wiring of a `grey-NN` row, which these plans leave bare."""
+        return [l for l in flagged_lines(out) if "is wired to no" not in l]
+
+    def only(self, out):
+        return [l for l in out.splitlines() if "§1.4" in l]
+
+    def test_a_plan_dated_2026_11_09_without_1_4_fails(self):
+        code, out = self.check({self.PLAN: current_plan(version_date="2026-11-09")})
+        self.assertIn(self.P + "§1.4 Segments is missing" + self.TAIL, out.splitlines(), out)
+        self.assertEqual(1, code, out)
+
+    def test_a_1_4_heading_with_no_table_row_is_missing_too(self):
+        code, out = self.check({self.PLAN: current_plan(version_date="2026-11-09",
+                                                        extra_sections=self.HEAD + "\n")})
+        self.assertEqual([self.P + "§1.4 Segments is missing" + self.TAIL], self.only(out), out)
+
+    def test_a_plan_dated_before_the_gate_is_not_checked(self):
+        code, out = self.check({self.PLAN: current_plan()})
+        self.assertEqual([], self.only(out), out)
+        self.assertEqual(0, code, out)
+        code, out = self.check({self.PLAN: current_plan(version_date="2026-11-08")})
+        self.assertEqual([], self.only(out), out)
+
+    def test_one_segment_over_the_one_tool_section_passes(self):
+        code, out = self.check({self.PLAN: self.segmented(self.TABLE_ROW)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_a_section_in_no_segment_and_a_section_in_two(self):
+        rows = self.update_section(2)
+        code, out = self.check({self.PLAN: self.segmented("| S1 | A1 | — | — | 1 | a |", extra_rows=rows)})
+        self.assertIn(self.P + "section A2 is in no segment of §1.4" + self.TAIL, out.splitlines(), out)
+        self.assertEqual(1, code, out)
+        two = "| S1 | A1–A2 | — | — | 1 | a |\n| S2 | A2 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(two, extra_rows=rows)})
+        self.assertIn(self.P + "section A2 is in two segments of §1.4: S1, S2" + self.TAIL, out.splitlines(), out)
+        self.assertNotIn("not consecutive", out)
+
+    def test_segments_that_skip_a_section_are_not_consecutive(self):
+        rows = self.update_section(2) + self.update_section(3, cid="update-ok-02")
+        table = "| S1 | A1 | — | — | 1 | a |\n| S2 | A3 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertIn(self.P + "the segments of §1.4 are not consecutive: S1 ends at A1, S2 starts at A3" + self.TAIL,
+                      out.splitlines(), out)
+
+    def test_a_second_segment_that_starts_before_the_first_ends_is_not_consecutive(self):
+        rows = self.update_section(2)
+        table = "| S1 | A2 | — | — | 1 | a |\n| S2 | A1 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertIn(self.P + "the segments of §1.4 are not consecutive: S1 ends at A2, S2 starts at A1" + self.TAIL,
+                      out.splitlines(), out)
+
+    def test_an_en_dash_and_a_hyphen_range_both_read(self):
+        rows = self.update_section(2)
+        for dash in ("–", "-"):
+            with self.subTest(dash=dash):
+                code, out = self.check({self.PLAN: self.segmented("| S1 | A1%sA2 | — | — | 1 | a |" % dash,
+                                                                  extra_rows=rows)})
+                self.assertEqual([], flagged_lines(out), out)
+                self.assertEqual(0, code, out)
+
+    def test_a_handle_recorded_in_a_later_segment_fails(self):
+        rows = (self.update_section(2, '"game_id": P1, "ref": W_B', cid="update-ok-01")
+                + self.section(3, "`kinoa_widget_create`", ["| `create-ok-02` | `kinoa_widget_create {\"game_id\": P1}` "
+                                                             "| `ok: true`. `Record: W_B` |\n"]))
+        table = "| S1 | A1–A2 | — | — | 1 | a |\n| S2 | A3 | — | `W_B` | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertEqual([self.P + "`W_B` is used in segment S1 (`update-ok-01`) but recorded in segment S2 "
+                          "(`create-ok-02`)" + self.TAIL], self.only(out), out)
+        self.assertEqual(1, code, out)
+        same = "| S1 | A1–A3 | — | `W_B` | 1 | a |"
+        code, out = self.check({self.PLAN: self.segmented(same, extra_rows=rows)})
+        self.assertEqual([], flagged_lines(out), out)
+
+    def test_a_zero_constant_used_as_a_handle_is_not_reported(self):
+        rows = (self.update_section(2)
+                + self.section(3, "`kinoa_widget_create`", ["| `create-ok-02` | `kinoa_widget_create {\"game_id\": P1}` "
+                                                             "| `ok: true`. `Record: P1` |\n"]))
+        table = "| S1 | A1–A2 | — | — | 1 | a |\n| S2 | A3 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertEqual([], flagged_lines(out), out)
+        self.assertEqual(0, code, out)
+
+    def test_a_handle_recorded_in_a0_counts_as_recorded_before_s1(self):
+        later = self.section(3, "`kinoa_widget_create`", ["| `create-ok-02` | `kinoa_widget_create {\"game_id\": P1}` "
+                                                           "| `ok: true`. `Record: USER_ID` |\n"])
+        rows = self.update_section(2, '"game_id": P1, "by": USER_ID') + later
+        table = "| S1 | A1–A2 | — | — | 1 | a |\n| S2 | A3 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertEqual([], flagged_lines(out), out)
+
+    def test_a_use_of_a_handle_no_tool_section_records_is_not_reported(self):
+        rows = self.update_section(2, '"game_id": P1, "ref": ROLES_BEFORE')
+        code, out = self.check({self.PLAN: self.segmented("| S1 | A1–A2 | — | — | 1 | a |", extra_rows=rows)})
+        self.assertEqual([], flagged_lines(out), out)
+
+    def test_a_use_in_part_b_grey_or_hand_off_is_not_reported(self):
+        grey = self.section(2, "Grey box", ["| `grey-01` | `kinoa_widget_create {\"game_id\": P1, \"ref\": W_B}` | `ok: true` |\n"])
+        handoff = self.section(3, "Hand-off", ["| `handoff-01` | `kinoa_widget_get {\"game_id\": P1, \"ref\": W_B}` | `ok: true` |\n"])
+        last = self.section(4, "`kinoa_widget_update`", ["| `update-ok-01` | `kinoa_widget_update {\"game_id\": P1}` "
+                                                        "| `ok: true`. `Record: W_B` |\n"])
+        part_b = ("# PART B — role-gated checks\n\n## B1. Checkpoint 1 — GAME Viewer on `P1`\n\n" + self.TABLE_HEADER +
+                  "| `role-create-01` | `kinoa_widget_create {\"game_id\": P1, \"ref\": W_B}` | "
+                  "`error.code` = `PERMISSION_DENIED` |\n\n")
+        plan = self.segmented("| S1 | A1 | — | — | 1 | a |\n| S2 | A4 | — | `W_B` | 1 | b |",
+                              extra_rows=grey + handoff + last, after_sections="\n" + part_b)
+        plan = plan.replace("| `pre-01` | `tools/list` | `kinoa_widget_create` is listed |",
+                            "| `pre-01` | `tools/list` and W_B | `kinoa_widget_create` is listed |")
+        code, out = self.check({self.PLAN: plan})
+        self.assertEqual([], self.only(out), out)
+
+    def test_a_grey_row_inside_a_tool_section_must_be_named_in_the_grey_paragraph(self):
+        row = ("| `grey-06` | `kinoa_widget_create {\"game_id\": P1}` | `ok: true` |\n")
+        for prose, named in (("The seams of the guard; `grey-01` replays the token.", False),
+                             ("The seams of the guard; `grey-06` mints the token.", True)):
+            with self.subTest(named=named):
+                grey = ("\n## A2. Grey box\n\n" + prose + "\n\n" + self.TABLE_HEADER
+                        + "| `grey-01` | `kinoa_widget_create {\"game_id\": P1}` | `ok: true` |\n")
+                code, out = self.check({self.PLAN: self.segmented("| S1 | A1 | — | — | 1 | a |",
+                                                                  extra_rows=row + grey)})
+                line = self.P + "`grey-06` sits in section A1 and the paragraph of §Grey does not name it" + self.TAIL
+                if named:
+                    self.assertEqual([], self.only(out), out)
+                else:
+                    self.assertEqual([line], self.only(out), out)
+
+    def test_a_cell_with_an_escaped_pipe_still_yields_the_handle_and_the_use(self):
+        use = ("| `create-ok-02` | `kinoa_widget_create {\"game_id\": P1, \"name\": \"a \\| b\", \"ref\": W_B}` "
+               "| `ok: true` |\n")
+        rec = self.update_section(2, expected="`x` = `a \\| b`. `Record: W_B`")
+        table = "| S1 | A1 | — | — | 1 | a |\n| S2 | A2 | — | `W_B` | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=use + rec)})
+        self.assertEqual([self.P + "`W_B` is used in segment S1 (`create-ok-02`) but recorded in segment S2 "
+                          "(`update-ok-01`)" + self.TAIL], self.only(out), out)
+
+
+    GREY_A2 = ("\n## A2. Grey box\n\nThe seams of the guard; `grey-01` replays the token.\n\n" + TABLE_HEADER
+               + "| `grey-01` | `kinoa_widget_create {\"game_id\": P1}` | `ok: true` |\n")
+
+    def test_a_grey_box_after_one_tool_section_needs_no_segment(self):
+        code, out = self.check({self.PLAN: self.segmented(self.TABLE_ROW, extra_rows=self.GREY_A2)})
+        self.assertEqual([], self.unwired(out), out)
+
+    def test_a_hand_off_section_needs_no_segment_either(self):
+        handoff = self.section(3, "Hand-off", ["| `handoff-01` | `kinoa_widget_get {\"game_id\": P1}` | `ok: true` |\n"])
+        code, out = self.check({self.PLAN: self.segmented(self.TABLE_ROW, extra_rows=self.GREY_A2 + handoff)})
+        self.assertEqual([], self.unwired(out), out)
+
+    def test_a_row_that_names_a_section_that_is_no_tool_section_fails(self):
+        table = self.TABLE_ROW + "\n| S2 | A9 | — | — | 1 | b |"
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=self.GREY_A2)})
+        self.assertEqual([self.P + "segment S2 names A9, which is not a Part A tool section" + self.TAIL],
+                         self.only(out), out)
+        self.assertEqual(1, code, out)
+        for named, shown in (("A2", "A2"), ("A1–A2", "A2"), ("A0", "A0")):
+            with self.subTest(named=named):
+                code, out = self.check({self.PLAN: self.segmented("| S1 | %s | — | — | 1 | a |" % named,
+                                                                  extra_rows=self.GREY_A2)})
+                self.assertIn(self.P + "segment S1 names %s, which is not a Part A tool section" % shown + self.TAIL,
+                              out.splitlines(), out)
+
+    def test_consecutive_is_judged_over_the_tool_sections_only(self):
+        rows = self.update_section(2) + self.GREY_A2.replace("A2.", "A3.") + self.update_section(4, cid="update-ok-02")
+        table = ("| S1 | A1 | — | — | 1 | a |\n| S2 | A2 | — | — | 1 | b |\n"
+                 "| S3 | A4 | — | — | 1 | c |")
+        code, out = self.check({self.PLAN: self.segmented(table, extra_rows=rows)})
+        self.assertEqual([], self.unwired(out), out)
+        skip = "| S1 | A1 | — | — | 1 | a |\n| S2 | A4 | — | — | 1 | c |"
+        code, out = self.check({self.PLAN: self.segmented(skip, extra_rows=rows)})
+        self.assertIn(self.P + "the segments of §1.4 are not consecutive: S1 ends at A1, S2 starts at A4" + self.TAIL,
+                      out.splitlines(), out)
+
+
+
+class ConfigNamesTheSegmentModel(unittest.TestCase):
+    def test_config_names_the_segment_model(self):
+        self.assertEqual("sonnet", json.loads(read("config.json"))["mcp"]["segment_model"])
+
+
+class SectionWrites20261109(unittest.TestCase):
+    """KING-24108 0.8.0 step 2: a segment agent writes the report per plan section, and a lost section is
+    re-run. Text checks: these markdown files are the implementation the agents follow."""
+
+    REFS = "skills/mcp-plan/references/"
+
+    def flat(self, rel_path, heading=None):
+        text = read(rel_path)
+        if heading is not None:
+            text = section_lines(text, heading)
+        return " ".join(text.split())
+
+    def test_capture_at_the_call_names_the_segment_agent_exception(self):
+        text = self.flat(self.REFS + "rules.md", "## Capture at the call")
+        self.assertIn("A segment agent writes per plan section", text)
+        self.assertIn("segments.md", text)
+
+    def test_segments_md_has_the_compaction_stop_and_the_lost_section(self):
+        text = self.flat(self.REFS + "segments.md")
+        self.assertIn("stopped: context compacted", text)
+        self.assertIn("## A lost section", read(self.REFS + "segments.md"))
+        lost = self.flat(self.REFS + "segments.md", "## A lost section")
+        for word in ("re-run", "section 9", "section 8"):
+            with self.subTest(word=word):
+                self.assertIn(word, lost)
+
+    def test_a_stop_mid_section_writes_what_it_holds(self):
+        text = self.flat(self.REFS + "segments.md", "## Stop conditions")
+        self.assertIn("the last section it ran has its rows", text)
+
+    def test_a_lost_section_has_one_trigger_and_its_subjects_reach_section_9_at_the_finish(self):
+        lost = self.flat(self.REFS + "segments.md", "## A lost section")
+        self.assertIn("returned nothing or returned `stopped: context compacted`, and the section has "
+                      "no row", lost)
+        self.assertIn("Nothing else makes a section lost", lost)
+        self.assertNotIn("the return names", lost)
+        self.assertNotIn("the section is not lost", lost)
+        self.assertIn("The recovery agent writes no section 9 row", lost)
+        self.assertIn("name and id of every subject", lost)
+        text = self.flat(self.REFS + "segments.md")
+        self.assertIn("lost-section line of section 3 lists are ids the run created", text)
+        run = self.flat("skills/mcp-run/SKILL.md")
+        self.assertNotIn("fresh subjects", run)
+
+    def test_fixed_data_names_the_re_run_suffix(self):
+        text = self.flat(self.REFS + "fixed-data.md", "## Naming every artifact")
+        self.assertIn("`r<n>`", text)
+
+    def test_the_run_skill_no_longer_says_one_case_at_a_time_in_every_agent(self):
+        text = self.flat("skills/mcp-run/SKILL.md")
+        self.assertNotIn("in the main chat and in every segment agent", text)
+        self.assertTrue("(segments.md, a lost section)" in text or "segments.md#a-lost-section" in text)
+
+    def test_the_context_red_flag_names_the_segment_exception(self):
+        rows = [l for l in read("skills/mcp-run/SKILL.md").splitlines()
+                if l.startswith("| \"I'll write up this section's cases once it is done\"")]
+        self.assertEqual(1, len(rows), rows)
+        self.assertIn("segment agent", rows[0])
+        answer = rows[0].strip().strip("|").split(" | ")[-1]
+        self.assertLessEqual(len(answer.split()), 25, answer)
+
+
+def split_table_row(line):
+    """The cells of one markdown table row. A `\\|` inside a cell is part of the cell, not a
+    delimiter; the cell keeps a plain `|`."""
+    inner = line.strip()
+    inner = inner[1:] if inner.startswith("|") else inner
+    inner = inner[:-1] if inner.endswith("|") and not inner.endswith("\\|") else inner
+    return [c.replace("\\|", "|").strip() for c in re.split(r"(?<!\\)\|", inner)]
+
+
+class ReadingTable20261109(unittest.TestCase):
+    """KING-24108 0.8.0 step 2: a segment agent reads only the reference sections its reading table
+    lists, and the main chat loads only its own tool schemas."""
+
+    REFS = "skills/mcp-plan/references/"
+    READERS = {"segment", "check", "section 9"}
+
+    def flat(self, rel_path, heading=None):
+        text = read(rel_path)
+        if heading is not None:
+            text = section_lines(text, heading)
+        return " ".join(text.split())
+
+    def rows(self):
+        """The data rows of the table under `## What a segment agent reads`, as cell lists."""
+        body = section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads")
+        table = [l for l in body.splitlines() if l.startswith("|")]
+        self.assertGreater(len(table), 3, "no table under the heading")
+        self.assertEqual(["File", "Heading", "Read by"], split_table_row(table[0]))
+        out = [split_table_row(l) for l in table[2:]]
+        for cells in out:
+            self.assertEqual(3, len(cells), cells)
+        return out
+
+    def test_the_parser_keeps_an_escaped_pipe_inside_a_cell(self):
+        cells = split_table_row("| `a.md` | `## One \\| two` | segment, check |")
+        self.assertEqual(["`a.md`", "`## One | two`", "segment, check"], cells)
+
+    def test_every_heading_of_the_table_exists_in_its_file(self):
+        checked = 0
+        for file_name, heading, _ in self.rows():
+            if not (heading.startswith("`") and heading.endswith("`")):
+                continue
+            heading = heading.strip("`")
+            lines = [l.rstrip() for l in read(self.REFS + file_name.strip("`")).splitlines()]
+            with self.subTest(file=file_name, heading=heading):
+                self.assertIn(heading, lines)
+            checked += 1
+        self.assertGreaterEqual(checked, 20)
+
+    def test_read_by_holds_only_known_readers(self):
+        for file_name, heading, read_by in self.rows():
+            for part in read_by.split(","):
+                part = re.sub(r"\s*\(.*\)\s*$", "", part).strip()
+                with self.subTest(file=file_name, heading=heading, part=part):
+                    self.assertIn(part, self.READERS)
+
+    def test_pauses_is_not_read_by_a_segment_agent(self):
+        for file_name, heading, read_by in self.rows():
+            if heading.strip("`") == "## Pauses":
+                self.assertNotIn("segment", [re.sub(r"\s*\(.*\)\s*$", "", p).strip()
+                                             for p in read_by.split(",")])
+
+    def test_the_brief_no_longer_points_at_the_whole_file_checklist(self):
+        brief = " ".join(section_lines(read(self.REFS + "segments.md"), "## The brief").split())
+        self.assertNotIn("step 1 of the post-compaction checklist", brief)
+        self.assertIn("what-a-segment-agent-reads", brief)
+
+    def test_segments_md_no_longer_sends_a_segment_agent_to_the_checklist(self):
+        text = " ".join(read(self.REFS + "segments.md").split())
+        for old in ("as steps 2 and 3 of the post-compaction", "as step 6 of the post-compaction",
+                    "the post-compaction checklist, step 4", "with the references of step 1"):
+            with self.subTest(old=old):
+                self.assertNotIn(old, text)
+
+    def test_no_pauses_pointer_remains_in_segments_md(self):
+        for n, line in enumerate(read(self.REFS + "segments.md").splitlines(), 1):
+            with self.subTest(line=n):
+                self.assertNotIn("pauses", line.lower(), line)
+
+    def test_the_connector_stop_points_at_the_connector_case_b(self):
+        stops = self.flat(self.REFS + "segments.md", "## Stop conditions")
+        self.assertIn("[the connector](rules.md#the-connector), case b): `stopped: connector lost`", stops)
+        self.assertNotIn("sent again in place", stops)
+        connector = self.flat(self.REFS + "stand-facts.md", "## Connector")
+        self.assertNotIn("the lost call is sent again in place", connector)
+        self.assertIn("for a lost executing leg too", connector)
+        self.assertIn("`rules.md` (the connector)", connector)
+
+    def test_the_pointer_counts_of_the_brief_agree_with_the_intro(self):
+        text = read(self.REFS + "segments.md")
+        intro = " ".join(text.split("Contents:")[0].split())
+        intro_n = re.search(r"reads the (\w+) sections its brief points at", intro).group(1)
+        brief = " ".join(section_lines(text, "## The brief").split())
+        pointer_n = re.search(r"to its (\w+) sections", brief).group(1)
+        self.assertEqual(intro_n, pointer_n)
+        ordinal = {"three": "fourth", "four": "fifth", "five": "sixth"}[pointer_n]
+        self.assertIn("and a {} pointer, to [a lost section]".format(ordinal), brief)
+        self.assertIn("reads a " + ordinal, intro)
+
+    def test_the_contents_line_and_the_intro_name_the_reading_table(self):
+        text = read(self.REFS + "segments.md")
+        contents = next(l for l in text.splitlines() if l.startswith("Contents:"))
+        self.assertIn("(#what-a-segment-agent-reads)", contents)
+        self.assertIn("## What a segment agent reads", text.splitlines())
+
+    def test_a_segment_agent_loads_its_schemas_by_exact_name(self):
+        text = " ".join(read(self.REFS + "segments.md").split())
+        self.assertIn("by exact name, in one load", text)
+        self.assertIn("`ToolSearch` with `select:`", text)
+
+    def test_the_main_chat_loads_its_schemas_by_exact_name(self):
+        text = " ".join(read(RUN_SKILL).split())
+        self.assertIn("by exact name, in one load", text)
+
+    def test_the_layout_doc_names_the_reading_table_in_the_segments_row(self):
+        rows = [l for l in read(self.REFS + "file-layout.md").splitlines()
+                if "| `segments.md`" in l or l.rstrip().endswith("`segments.md` — execution chat and its segment agents |")]
+        self.assertEqual(1, len(rows), rows)
+        self.assertIn("reading table", rows[0])
+
+
+class CheckAgent20261109(unittest.TestCase):
+    """KING-24108 0.8.0 step 2: at the finish a check agent re-reads the rows `check-layout.sh grades`
+    lists and proposes corrections; the main chat applies them."""
+
+    REFS = "skills/mcp-plan/references/"
+
+    def flat(self, rel_path, heading=None):
+        text = read(rel_path)
+        if heading is not None:
+            text = section_lines(text, heading)
+        return " ".join(text.split())
+
+    def test_segments_md_has_the_check_agent_and_its_return_shape(self):
+        text = read(self.REFS + "segments.md")
+        self.assertIn("## The check agent", text.splitlines())
+        agent = section_lines(text, "## The check agent")
+        for phrase in ("correct: <case id>", "unsupported:", "doubt: <case id>", "never edits",
+                       "checked: <n> rows", "done | stopped: <reason>"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, agent)
+
+    def test_the_check_agent_brief_points_at_the_reading_table_and_the_grades_lines(self):
+        agent = self.flat(self.REFS + "segments.md", "## The check agent")
+        self.assertIn("(#what-a-segment-agent-reads)", agent)
+        self.assertIn("check-layout.sh", agent)
+        self.assertIn("grades", agent)
+        self.assertIn("`mcp.segment_model`", agent)
+        self.assertIn("previous report", agent)
+
+    def test_the_contents_line_and_the_intro_name_the_check_agent(self):
+        text = read(self.REFS + "segments.md")
+        contents = " ".join(text.split("Contents:")[1].split("\n\n")[0].split())
+        self.assertIn("(#the-check-agent)", contents)
+        intro = " ".join(text.split("Contents:")[0].split())
+        self.assertIn("the check agent", intro)
+
+    def test_a_check_row_of_the_reading_table_exists(self):
+        body = self.flat(self.REFS + "segments.md", "## What a segment agent reads")
+        self.assertRegex(body, r"\| [^|]*\bcheck\b[^|]* \|")
+
+    def test_the_finish_runs_the_check_before_check_layout(self):
+        finish = self.flat(RUN_SKILL, "## 3. Finish")
+        self.assertIn("check agent", finish)
+        self.assertIn("check-layout.sh", finish)
+        self.assertLess(finish.index("check agent"), finish.index("check-layout.sh"))
+
+    def test_the_finish_applies_each_correction_in_the_main_chat(self):
+        finish = self.flat(RUN_SKILL, "## 3. Finish")
+        for phrase in ("`correct:`", "finding block", "response not captured", "withdraw",
+                       "section 8", "check line"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, finish)
+
+    def test_the_finish_writes_the_section_9_paragraph_from_its_return(self):
+        finish = self.flat(RUN_SKILL, "## 3. Finish")
+        self.assertIn("section 3 paragraph of the section 9 agent", finish)
+        self.assertIn("`deviations`", finish)
+
+    def test_the_closed_list_names_three_forms(self):
+        target = self.flat(self.REFS + "rules.md", "## Target and method")
+        self.assertIn("`check-layout.sh` in its three forms", target)
+        self.assertNotIn("both its forms", target)
+
+    def test_report_spec_names_the_check_line(self):
+        recorded = self.flat(self.REFS + "report-spec.md", "## Recorded values and segment paragraphs")
+        self.assertIn("check agent", recorded)
+
+    def test_the_layout_doc_owns_the_grades_mode_and_the_check_agent(self):
+        layout = self.flat(self.REFS + "file-layout.md")
+        self.assertIn("`check-layout.sh grades`", layout)
+        self.assertIn("check agent", layout)
+
+    def test_a_fail_that_becomes_any_other_status_loses_its_finding(self):
+        finish = self.flat(RUN_SKILL, "## 3. Finish")
+        self.assertIn("a `FAIL` that becomes any other status has its finding withdrawn", finish)
+        self.assertIn("unless the block still accounts for another `FAIL` case", finish)
+        self.assertIn("its id leaves the line that opens section 4", finish)
+        self.assertIn("the finding ids and the finding count that the corrections left", finish)
+
+    def test_the_segments_list_names_the_check_agent_as_a_finish_agent(self):
+        used = self.flat(self.REFS + "segments.md", "## When segments are used")
+        self.assertIn("the section 9 agent re-resolves the created ids at the finish", used)
+        self.assertIn("the check agent re-reads the risky grades", used)
+        self.assertIn("the rest of the finish stay in the main chat", used)
+
+
+def subsection_lines(text, heading):
+    """From the line that is `heading` up to the next heading of the same or a higher level, as the
+    reading table of segments.md tells an agent to read."""
+    lines = text.splitlines()
+    level = len(heading) - len(heading.lstrip("#"))
+    start = lines.index(heading)
+    end = next((i for i in range(start + 1, len(lines))
+                if re.match(r"#{1,%d} " % level, lines[i])), len(lines))
+    return "\n".join(lines[start:end])
+
+
+class FinalReview20261110(unittest.TestCase):
+    """KING-24108 0.8.0 step 2, the final review: a write that may have gone out without an answer has one
+    home that a segment agent reads; a lost section has one trigger; a segment agent reads the plan
+    header, §1 and §1.1; the fixed-label third cell is pinned."""
+
+    REFS = "skills/mcp-plan/references/"
+    WRITE = "### A write that may have gone out without an answer"
+    ANCHOR = "#a-write-that-may-have-gone-out-without-an-answer"
+
+    def flat(self, text):
+        return " ".join(text.split())
+
+    def rules(self):
+        return read(self.REFS + "rules.md")
+
+    def table_rows(self):
+        body = section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads")
+        return [split_table_row(l) for l in body.splitlines() if l.startswith("| `")]
+
+    def test_the_write_rule_has_one_home_under_pauses(self):
+        text = self.rules()
+        lines = text.splitlines()
+        self.assertIn(self.WRITE, lines)
+        self.assertIn("### The connector", lines)
+        self.assertGreater(lines.index(self.WRITE), lines.index("## Pauses"))
+        home = self.flat(subsection_lines(text, self.WRITE))
+        for phrase in ("Read the subject first", "grade the case on its outcome read",
+                       "Write the confirm envelope as not captured", "`BLOCKED — response not captured`",
+                       "send the same confirm again with the same token",
+                       "send the preview again first", "Here the server never answered the chat"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, home)
+        self.assertEqual(1, self.flat(text).count("Here the server never answered the chat"))
+
+    def test_the_reading_table_lists_both_headings_for_segment(self):
+        rows = {(f.strip("`"), h.strip("`")): r for f, h, r in self.table_rows()}
+        for heading in ("### The connector", self.WRITE):
+            with self.subTest(heading=heading):
+                self.assertIn(("rules.md", heading), rows)
+                self.assertIn("segment", [p.strip() for p in rows[("rules.md", heading)].split(",")])
+
+    def test_the_reading_rule_stops_at_a_higher_heading_too(self):
+        body = self.flat(section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads"))
+        self.assertIn("reads to the next heading of the same or a higher level", body)
+
+    def test_the_connector_subsection_holds_no_other_bold_section_of_pauses(self):
+        connector = subsection_lines(self.rules(), "### The connector")
+        self.assertNotIn("**A chat that resumes inside Part B**", connector)
+        self.assertNotIn("post-compaction checklist.**", connector)
+
+    def test_every_pointer_goes_to_the_one_home(self):
+        text = self.rules()
+        checklist = self.flat(text.split("**After stage — the post-compaction checklist.**")[1]
+                              .split("**A checkpoint and the four ways")[0])
+        step4 = checklist.split(" 4. ")[1].split(" 5. ")[0]
+        step8 = checklist.split(" 8. ")[1].split(" 9. ")[0]
+        for name, step in (("step 4", step4), ("step 8", step8)):
+            with self.subTest(step=name):
+                self.assertIn("(" + self.ANCHOR + ")", step)
+        self.assertNotIn("decide the retry", step8)
+        connector = self.flat(subsection_lines(text, "### The connector"))
+        case_a = connector.split("(a) ")[1].split("(b) ")[0]
+        case_b = connector.split("(b) ")[1]
+        self.assertIn("never sent again blind", case_a)
+        self.assertIn("(" + self.ANCHOR + ")", case_a)
+        self.assertIn("(" + self.ANCHOR + ")", case_b)
+        self.assertNotIn("Applied: grade", case_a)
+
+    def test_the_brief_line_points_at_the_write_rule_not_the_retry_rule(self):
+        brief = self.flat(section_lines(read(self.REFS + "segments.md"), "## The brief"))
+        line = brief.split("**When the first case is a write that an earlier agent may have sent**")[1]
+        line = line.split("- **")[0]
+        self.assertIn("(rules.md" + self.ANCHOR + ")", line)
+        self.assertNotIn("the retry rule", line)
+
+    def test_a_segment_agent_never_hands_over(self):
+        connector = self.flat(subsection_lines(self.rules(), "### The connector"))
+        self.assertIn("A segment agent never hands over: for it, case (b) is the stop "
+                      "`stopped: connector lost`", connector)
+
+    def test_step_3_of_a_lost_section_applies_to_every_lost_section(self):
+        lost = section_lines(read(self.REFS + "segments.md"), "## A lost section")
+        steps = dict(numbered_steps(lost))
+        self.assertIn("This step decides only the suffix", steps[1])
+        self.assertIn("This step applies to every lost section", steps[3])
+        self.assertIn("`**Name limit:**`", steps[2])
+        self.assertNotIn("Name limit", steps[3])
+        self.assertIn("a delete whose target the lost attempt already removed", steps[3])
+
+    def test_a_segment_agent_reads_the_plan_header_and_the_preflight_paragraph(self):
+        does = self.flat(section_lines(read(self.REFS + "segments.md"), "## What the agent does"))
+        self.assertIn("the plan's header lines, §1 and §1.1", does)
+        self.assertIn("the preflight paragraph of section 3 of the report", does)
+
+    def test_the_check_agent_reads_the_plan_header_and_states_no_flood_rule(self):
+        text = read(self.REFS + "segments.md")
+        self.assertNotIn("A flood probe is", self.flat(text))
+        agent = self.flat(section_lines(text, "## The check agent"))
+        self.assertIn("it reads the plan's header lines by search", agent)
+        self.assertIn("rate-limit rules of `stand-facts.md` (budgets)", agent)
+
+    def test_the_section_9_agent_loads_its_schemas_by_name(self):
+        body = self.flat(section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads"))
+        self.assertIn("The section 9 agent has no `Call` cells: it loads the `_get` and list tools "
+                      "of the entities the run created, by exact name, in one load", body)
+
+    def test_report_spec_pins_the_third_cell_of_a_fixed_label_row(self):
+        table = self.flat(section_lines(read(self.REFS + "report-spec.md"), "## The case status table"))
+        self.assertIn("writes the label in that cell after `section 8: `", table)
+        self.assertIn("`check-layout.sh grades` finds these rows by those words", table)
+
+    def test_a_compacted_agent_goes_straight_to_a_lost_section(self):
+        run = self.flat(section_lines(read(RUN_SKILL), "## 2."))
+        stops = run.split("**When an agent stops or dies.**")[1].split("**One case at a time**")[0]
+        self.assertIn("returns `stopped: context compacted` leaves nothing to fix, so the operator is "
+                      "not asked", stops)
+        self.assertIn("segments.md#a-lost-section", stops)
+
+
+class ReviewFixes20261110(unittest.TestCase):
+    """The review of mcp-run of 2026-11-10: the gaps between SKILL.md and its references."""
+
+    REFS = "skills/mcp-plan/references/"
+
+    def flat(self, text):
+        return " ".join(text.split())
+
+    def test_a_section_writes_its_rows_last_and_a_partly_written_one_is_lost(self):
+        capture = self.flat(section_lines(read(self.REFS + "rules.md"), "## Capture at the call"))
+        self.assertIn("rows of the case status table go in last, all in one edit", capture)
+        lost = self.flat(section_lines(read(self.REFS + "segments.md"), "## A lost section"))
+        self.assertIn("and the section has no row, or only some of its rows", lost)
+        self.assertIn("is removed before the re-run writes its own blocks", lost)
+
+    def test_the_re_run_suffix_is_conditional_in_both_homes(self):
+        naming = self.flat(section_lines(read(self.REFS + "fixed-data.md"), "## Naming every artifact"))
+        self.assertIn("when the lost attempt left subjects on the stand", naming)
+        self.assertIn("with none found, the names carry no suffix", naming)
+
+    def test_a_segment_agent_reads_the_ten_sections(self):
+        self.assertIn("## The ten sections", read(self.REFS + "report-spec.md").splitlines())
+        body = section_lines(read(self.REFS + "segments.md"), "## What a segment agent reads")
+        rows = {(f.strip("`"), h.strip("`")): r for f, h, r in
+                (split_table_row(l) for l in body.splitlines() if l.startswith("| `"))}
+        readers = [p.strip() for p in rows[("report-spec.md", "## The ten sections")].split(",")]
+        self.assertEqual(["segment", "section 9"], readers)
+        does = self.flat(section_lines(read(self.REFS + "segments.md"), "## What the agent does"))
+        self.assertIn("get their section 8 rows in the same write", does)
+
+    def test_no_bullet_is_glued_to_the_line_before_it(self):
+        for name in sorted(os.listdir(os.path.join(ROOT, self.REFS))):
+            for n, line in enumerate(read(self.REFS + name).splitlines(), 1):
+                with self.subTest(file=name, line=n):
+                    self.assertNotRegex(line, r"[.:;]- \*\*")
+
+    def test_the_main_chat_loads_the_part_a_tools_in_a_run_with_no_segments(self):
+        run = self.flat(read(RUN_SKILL))
+        self.assertIn("in a run with no segments also those of Part A, §Grey and the section 9 re-resolve", run)
+        self.assertIn("In a run with no segments, the main chat does it itself.", run)
+
+    def test_every_stop_condition_names_its_return(self):
+        stops = section_lines(read(self.REFS + "segments.md"), "## Stop conditions")
+        bullets = [b for b in re.split(r"\n(?=- )", stops.split("**Context compacted.**")[0]) if b.startswith("- ")]
+        self.assertEqual(4, len(bullets), bullets)
+        for bullet in bullets:
+            with self.subTest(bullet=bullet[:40]):
+                self.assertIn("`stopped: ", bullet)
+
+    def test_pauses_ties_the_segment_agents_to_the_threshold(self):
+        pauses = self.flat(section_lines(read(self.REFS + "rules.md"), "## Pauses"))
+        self.assertNotIn("handed over at every segment boundary", pauses)
+        self.assertIn("In a run with more than 6 tool-section cases, Part A runs in segment agents", pauses)
+
+    def test_every_printed_command_of_step_1_to_8_is_named_by_a_step(self):
+        run = self.flat(read(RUN_SKILL))
+        for phrase in ("after the `mkdir` and the `ls` of the plans folder",
+                       "from the `ls` of the reports folder", "from the row count of §1",
+                       "once step 8 has created the report file"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, run)
 
 
 if __name__ == "__main__":

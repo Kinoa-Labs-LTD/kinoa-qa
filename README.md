@@ -151,8 +151,11 @@ should complete as commands.
 ## Configure
 
 `config.json` and `services.json` are `testplan`'s; the smoke skills read neither, and the MCP
-skills read one key of `config.json`: `mcp.reader_model`, the model `mcp-plan` dispatches its
-story readers on (default `sonnet`; `<plugin>/skills/mcp-plan/references/story-readers.md`).
+skills read two keys of `config.json`: `mcp.reader_model`, the model `mcp-plan` dispatches its
+story readers on (default `sonnet`; `<plugin>/skills/mcp-plan/references/story-readers.md`), and
+`mcp.segment_model`, the model `mcp-run` starts its segment agents on (default `sonnet`;
+`<plugin>/skills/mcp-plan/references/segments.md`). `mcp-run` asks about the second in its one
+message of questions before case 1, and your answer wins for that run.
 
 `config.json` ships with the three Allure custom-field defaults **empty on purpose**, so no
 run inherits another team's values by accident:
@@ -607,11 +610,24 @@ hand:
 ```bash
 bash <plugin>/skills/mcp-plan/scripts/check-layout.sh                 # ~/.kinoa-qa/mcp/
 bash <plugin>/skills/mcp-plan/scripts/check-layout.sh <data folder>   # another folder with plans/ and reports/
+bash <plugin>/skills/mcp-plan/scripts/check-layout.sh status <report file>   # one report: where the run stands
+bash <plugin>/skills/mcp-plan/scripts/check-layout.sh grades <report file> [<previous report file>]   # the rows a check agent re-reads
 ```
 
 It prints one `PROBLEM` line per failure and exits 1 on any, 2 on a usage error, and fails,
 naming the path, when the data folder does not exist. `LEGACY`, `REDACTED` and `OLDER` lines are
 information, not failures. It does not check links in the data folder or in an `evals/` folder.
+
+`status <report file>` is not a check: it reads one report and prints the counts of its case
+status table, the last row, the plan's cases with no row, the highest finding and note ids and
+one `record:` line per `Record:` handle of section 3. It exits 0, or 2 when the report is missing
+or unreadable. `mcp-run` runs it after every segment agent; run it by hand on a run that
+paused.
+
+`grades <report file> [<previous report file>]` is not a check either. It lists the rows of the
+case status table that a check agent re-reads: `FAIL`, `OBSERVED` and `BLOCKED` rows, and rows
+whose grade changed since the previous report, then `targeted <n> of <m>`. It exits 0, or 2 on a
+usage error. `mcp-run` runs it once, at the finish.
 
 See `skills/mcp-plan/SKILL.md` for the full workflow.
 
@@ -637,9 +653,31 @@ A plan whose §0 is missing fixed data is blocked before case 1 too, with no rep
 the run reason if you did not give it, and creates
 `~/.kinoa-qa/mcp/reports/<KEY>-<domain>-test-report-<STAMP>.md` before case 1. Then it runs the
 preflight, Part A to completion, and Part B one role checkpoint at a time, restoring the roles at
-the end; every response is written into the report at the call. Before the report is finished it
+the end; the main chat writes each response into the report at the call (a segment agent's writes
+are under **Segments** below). Before the report is finished it
 runs `check-layout.sh` ([Checking the layout](#checking-the-layout)). The hand-over gives the
 overall status, each `RED` item and the **Rule change proposals**.
+
+**Segments.** The chat you start is the main chat. When Part A has more than 6 tool-section
+cases, it does not send them itself: it gives each segment of the plan's §1.4 (a plan with no §1.4
+is cut by tool family, and a section 8 row asks for the table), and then the grey-box probes, to
+a sub-agent with a fresh context, **one agent at a time**, and checks the report file with
+`check-layout.sh status` after each return. At the finish, one more agent re-resolves the ids the
+run created and writes section 9 of the report, and then one check agent re-reads the grades that
+`check-layout.sh grades` lists as likely misgrades; it never edits the report, and the main chat
+applies its corrections. A segment agent writes the report once per plan section, and it never
+asks you anything: when the
+connector is not visible to it, or a permission prompt is denied, it stops at a safe point and
+returns `stopped: <reason>`, and the main chat tells you the blocker. With 6 cases or fewer,
+nothing is split. The rules are in `<plugin>/skills/mcp-plan/references/segments.md`.
+
+**One message of questions.** Before case 1, a run that prints `curl` lines or uses segments
+sends one message, whether or not you gave the run reason. It asks you to allow the command shapes
+the run uses (the three `curl` lines of the admin role API, `sleep <n>` and `grep -nE`) and, when
+the run uses segments, asks which model the segment agents run on (default `mcp.segment_model`,
+`sonnet`). It asks for the run reason only when you did not give it. Waits for the write budget happen only when 8
+writes went out in the last 60 s, and, where the harness has a background wait, they are one
+background `sleep <n>`, not a ping loop (the ping loop stays the fallback where there is none).
 
 **It runs against the deployed stand.** It creates and changes entities through the connector,
 and Part B changes your roles through the admin role API, then restores them. Its rules, and

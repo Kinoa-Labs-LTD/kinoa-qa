@@ -120,7 +120,8 @@ One line per rule, with the run behind it:
 - **The wait is measured with `kinoa_system_ping`; `sleep 60` only in the foreground**
   (`stand-facts.md`, budgets): KING-22273 tags report 20261015-1107, PD-wait; KING-22288 A/B
   tests report 20261015-0916, "Run deviations" (1), a `sleep` run in the background; KING-22286
-  pushes report 20261015-1247, section 3 "Pace", paced by the ping.
+  pushes report 20261015-1247, section 3 "Pace", paced by the ping. Replaced on 2026-11-09
+  (the cost pass, below).
 - **The empty string for a string-or-null argument** (`stand-facts.md`, connector): feature-settings
   reports 20261012-1535 (`config-update-schema-07`, a plain `string` took `""`) and 20261014-1507
   (`setting-update-gap-01`, `PASS` there and `BLOCKED` at its next run on the same plan version).
@@ -161,6 +162,53 @@ One line per rule, with the run behind it:
   of 2026-10-16 retired `create-schema-15` and `list-schema-07` of the webhooks v2 plan again,
   although the 20260916-0944 report graded both (the regression of 2026-10-06, above); the
   planner could not apply the rule because it never read the rows the report graded.
+
+## The cost pass (KING-24108, 2026-11-09)
+
+### Why `sleep` was foreground only, and what replaces it
+
+The entry of the pruning pass above gives the run behind the old rule: in the KING-22288 A/B tests
+run 20261015-0916 a `sleep` ran in the background, and the chat went on to the next write without
+waiting for it. The rule that followed allowed `sleep 60` only in the foreground, and otherwise
+the ping loop. The 2026-11-09 run 20261109-0846 shows what that cost: 65 idle ping requests, each
+one carrying a context of about 500k tokens, and a `sleep 60` that the harness refused. The
+background wait now in `stand-facts.md` (budgets) is the harness's own: the chat is woken once
+when the command ends, so it cannot go on early. A throwaway test on 2026-11-09 ran a background
+`sleep 20` inside a `general-purpose` `Agent` sub-agent of Claude Code. The completion notice
+reached the sub-agent without polling, 125 s after the start. That is why a segment agent waits
+the same way, and why one ping after the notice stays: the notice came later than asked.
+
+### The cost evidence and the segment decision
+
+Two runs showed where the money goes. The `mcp-plan` run of 2026-11-06 (731-case regression plan,
+Fable 5.1 main chat) cost $56.11: about $21 of output was case rows the main chat had already
+designed, and the context grew to 955k. The `mcp-run` run 20261109-0846 (the same plan, one chat,
+Sonnet 5.5) cost $123.81: 1,076 requests at an average context of 512k, 89 % of the cost in cache
+reads, 65 of the requests idle pings. In both runs the cost is the size of the context times the
+number of requests. The decision of 2026-11-09 is to keep the judgment work in the main chat and
+run the long, mechanical Part A in fresh sub-agent contexts, one segment at a time, that write to
+the report file and return a short summary. The target of the first measured run was half of
+$123.81.
+
+The measured run 20261109-1725 (the same plan with segments, Sonnet 5.5) missed it. It cost
+$112.56, against $61.91 for the target. The run made 1,641 requests at an average context of 266k:
+the context fell by half, but there were 53 % more requests. The context tokens summed over all
+requests fell only from 551M to 436M. More cache writes took back part of that saving, because
+each agent writes its own cache. The main chat cost $20.64 and the 16 segment agents $86.79. Of
+the agents' 355M context tokens, 99M is the harness's own opening context: 68k per request, before
+any read. Another 91M is the reference files and the §0 slices that every agent reads whole
+before its first case. The rest, 165M, is the case responses the agent keeps. S5 (91 cases) grew
+to 400k, and S8c (72 cases) to 410k.
+
+Step 2 of the cost pass answers that run. A segment agent now writes the report once per plan section, not
+after every case, and it reads only the headings of the references that its cases need, with a
+table in `segments.md` that says which. It loads its tool schemas by exact name, and the main chat
+does the same for its own tools, so no schema is loaded that the work does not call.
+A check agent at the finish re-reads only the rows a misgrade is likely on, so the grades get a
+second look without a second run. The domain split was not done: a case response is 2.8k to 4k
+tokens, so the number of cases in a domain does not give its size, and a split would add agents and
+their 68k openings without a sure gain. The step 2 changes are not measured yet; the first real run
+records its token report in the CHANGELOG.
 
 ## Why the plan rules exist (moved 2026-10-06)
 

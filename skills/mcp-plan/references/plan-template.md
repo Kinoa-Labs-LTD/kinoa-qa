@@ -11,7 +11,7 @@ them.
 Contents: [the skeleton](#the-skeleton) · [rules are pointers](#rules-are-pointers) ·
 [cases are data, prose is commentary](#cases-are-data-prose-is-commentary) (with the one row of
 each shape) · [the fixed section order](#the-fixed-section-order) · [the preflight](#the-preflight) ·
-[stable case ids](#stable-case-ids) · [the three soundness rules](#the-three-rules-that-decide-whether-a-plan-is-sound) ·
+[segments](#segments) · [stable case ids](#stable-case-ids) · [the three soundness rules](#the-three-rules-that-decide-whether-a-plan-is-sound) ·
 [hypotheses](#hypotheses-are-the-plans-real-work) · [with and without the server source](#with-and-without-the-server-source)
 (and [without a connector](#without-a-connector)).
 
@@ -128,6 +128,13 @@ text). A field the input marks "no rule" is not a rule and gets no row. A row wi
 The subsection is left out, heading included, only when the header says `**Research inputs:** none`.
 `check-layout.sh` check 21 reads the header line and the rows.
 
+### 1.4 Segments
+| Segment | Sections | Reads | Records | Writes | Note |
+One row per segment, in Part A order, written after the tool sections. The rules, and the one
+example, are in `mcp-plan references/plan-template.md`, segments. A stable-id plan whose
+`**Plan version:**` date is 2026-11-09 or later has this subsection, and `check-layout.sh` check 27
+reads it.
+
 # PART A — everything that needs no permission change
 §A0 Preflight, opened by the tool inventory (see "The preflight"), then one section per tool in
 the fixed order below, then §Grey, then §Hand-off.
@@ -224,9 +231,11 @@ Two limits keep a row atomic:
 
 - A case has one purpose. If the `Expected` cell asserts two unrelated things, it is two cases.
 - A case has at most five steps. A step is one tool call, so the two legs of a write are two steps.
-  A wait inside a case is its own numbered step in the `Call` cell — `wait 60 s` measured by
-  `kinoa_system_ping`, or `sleep 60` (`stand-facts.md`, budgets) — like the `curl` step of
-  `pre-04`, and it counts toward the five.
+  A wait inside a case is its own numbered step in the `Call` cell — `wait <n> s`, run as the
+  background wait of `stand-facts.md` (budgets) — like the `curl` step of `pre-04`. It counts toward the five.
+  A wait whose purpose is the write budget is a budget point (`stand-facts.md`, budgets): the run
+  waits only as long as the budget needs. A wait the case needs or measures — a token's life, a
+  rate window, the role cache — is never skipped, and its step says what it is for.
   A longer scenario is split, and the later case starts from a `Record:` value of the earlier one.
   The one exception is a flood probe (`stand-facts.md`, how the flood is sent): its repeated call
   is one step, written once with the count, because splitting it would reset the window it fills.
@@ -348,6 +357,87 @@ nothing else comes before them.
 
 What a missing tool does to the run is in [`rules.md`](rules.md#statuses).
 
+## Segments
+
+The run gives Part A to sub-agents in segments. A segment is a run of whole tool sections that one
+agent executes. The planner cuts Part A in §1.4, because the planner knows which tools belong
+together and which handles pass between them. Check 27 of `check-layout.sh` reads §1.4 in every
+stable-id plan (its case rows carry stable ids) whose `**Plan version:**` date is 2026-11-09 or
+later.
+
+The table has this header, and one row per segment:
+
+```markdown
+| Segment | Sections | Reads | Records | Writes | Note |
+```
+
+- `Segment` is `S1`, `S2`, and so on. `Sections` is one section, `A5`, or a range, `A5–A10` (an en
+  dash or a hyphen).
+- `Reads` holds the handles of earlier segments that this segment uses in its `Call` cells.
+  `Records` holds the handles this segment records with `Record:`. `Writes` is the number of
+  executing writes it plans. `—` is an empty cell.
+- `Note` is the planner's reason for the cut.
+
+A fictional plan, `kinoa_widget_*` in `A1`–`A4` and `kinoa_gadget_*` in `A5`–`A6`:
+
+```markdown
+| Segment | Sections | Reads | Records | Writes | Note |
+|---|---|---|---|---|---|
+| S1 | A1–A4 | — | W_A, W_B | 6 | `widget`: one family |
+| S2 | A5–A6 | W_B | G_A | 4 | `gadget`: one family |
+```
+
+**A segment is a run of consecutive Part A tool sections.** A tool section is a `## A<n>.` heading
+with n of 1 or more, and a title that starts with a backticked `kinoa_` tool name. §A0, §Grey,
+§Hand-off and Part B are in no segment and have no row.
+
+**One domain is one segment.** A domain is one or more whole tool families that one story
+delivers. A family is the first word after `kinoa_` in the tool name (`tag`, `template`, `abtest`).
+The planner may cut a family into its sub-families, by the second word, when each has its own story
+or its own plan (`feature_schema`, `feature_setting` and `feature_config` are three). The planner
+may join whole families into one domain when one story delivers them. A family is never split
+across segments, except into sub-families. A segment is never cut because it has many cases. The
+planner says which choice was made in `Note`. Check 27 does not judge the grouping.
+
+**Safe points.** A cut is safe when all three hold:
+- no confirm token that one segment mints is confirmed in a later segment, except the
+  token-expiry pair below;
+- no wait spans the boundary of two segments;
+- every value that a segment reads with a handle is recorded earlier, or inside the segment itself.
+
+Check 27 reports the third. It reports a handle that a segment's `Call` cell uses but that only a
+later segment records (`Record: X` in an `Expected` cell). A §0 constant and a handle that §A0
+records are not counted, and a use in §Grey, §Hand-off or Part B is not reported. The planner
+checks the first two.
+
+**The token-expiry pair.** One case mints the token that the expiry probe uses (today `grey-06`),
+and another case confirms it later. The mint is a preview, so it spends no write budget and does
+not break the rule that grey probes go last (`rules.md`, Part A / Part B). The mint row:
+- sits in the first tool section that holds its subject, never in §A0, because its subject does not
+  exist there yet;
+- keeps its `grey-NN` id inside the tool section, so the next plan version keeps the id (stable
+  case ids, below);
+- is named in the paragraph of §Grey, together with the case that confirms it. The confirming case
+  stays in §Grey.
+
+Check 27 reports a `grey-NN` row inside a tool section whose id that paragraph does not name.
+
+**What check 27 reports**, each with a `PROBLEM` line:
+- `§1.4 Segments is missing`: there is no `### 1.4` heading, or no table row under it;
+- a tool section that is in no segment, or in two;
+- a row that names a section that is not a tool section;
+- two segments, in table order, that do not run on from one another over the tool sections;
+- a handle used before the segment that records it, as above;
+- a `grey-NN` row in a tool section that the paragraph of §Grey does not name.
+
+### An older plan
+
+A plan whose `**Plan version:**` date is before 2026-11-09 has no §1.4, and check 27 does not read
+it. A plan with no stable ids has no §1.4 either. The run cuts such a plan with one rule: a new
+segment starts at every Part A tool section whose first word after `kinoa_` differs from that of
+the section before it. A family that comes back later in Part A starts a new segment, so such a
+plan gives several small segments.
+
 ## Stable case ids
 
 An id names the tool, the kind and a number, and it never changes once a plan version has been run.
@@ -365,6 +455,9 @@ An id names the tool, the kind and a number, and it never changes once a plan ve
 group. Role cases are numbered within `role-<tool>` across all checkpoints. The id does not encode
 the checkpoint on purpose: the number of role flips changes between plan versions, and an id that
 named the checkpoint would have to change with it.
+
+One row of a tool section keeps a `grey-NN` id: the mint row of the token-expiry pair
+([segments](#segments)).
 
 The rules that make ids survive a rebuild:
 
