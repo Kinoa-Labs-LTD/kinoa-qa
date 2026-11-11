@@ -200,14 +200,14 @@ any read. Another 91M is the reference files and the §0 slices that every agent
 before its first case. The rest, 165M, is the case responses the agent keeps. S5 (91 cases) grew
 to 400k, and S8c (72 cases) to 410k.
 
-Version 0.8.1 answers that run. A segment agent now writes the report once per plan section, not
+Step 2 of the cost pass answers that run. A segment agent now writes the report once per plan section, not
 after every case, and it reads only the headings of the references that its cases need, with a
 table in `segments.md` that says which. It loads its tool schemas by exact name, and the main chat
 does the same for its own tools, so no schema is loaded that the work does not call.
 A check agent at the finish re-reads only the rows a misgrade is likely on, so the grades get a
 second look without a second run. The domain split was not done: a case response is 2.8k to 4k
 tokens, so the number of cases in a domain does not give its size, and a split would add agents and
-their 68k openings without a sure gain. The 0.8.1 changes are not measured yet; the first real run
+their 68k openings without a sure gain. The step 2 changes are not measured yet; the first real run
 records its token report in the CHANGELOG.
 
 ## Why the plan rules exist (moved 2026-10-06)

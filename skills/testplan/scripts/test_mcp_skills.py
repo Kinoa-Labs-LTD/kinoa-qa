@@ -1390,7 +1390,7 @@ class ConfigNamesTheSegmentModel(unittest.TestCase):
 
 
 class SectionWrites20261109(unittest.TestCase):
-    """KING-24108 0.8.1: a segment agent writes the report per plan section, and a lost section is
+    """KING-24108 0.8.0 step 2: a segment agent writes the report per plan section, and a lost section is
     re-run. Text checks: these markdown files are the implementation the agents follow."""
 
     REFS = "skills/mcp-plan/references/"
@@ -1461,7 +1461,7 @@ def split_table_row(line):
 
 
 class ReadingTable20261109(unittest.TestCase):
-    """KING-24108 0.8.1: a segment agent reads only the reference sections its reading table
+    """KING-24108 0.8.0 step 2: a segment agent reads only the reference sections its reading table
     lists, and the main chat loads only its own tool schemas."""
 
     REFS = "skills/mcp-plan/references/"
@@ -1573,7 +1573,7 @@ class ReadingTable20261109(unittest.TestCase):
 
 
 class CheckAgent20261109(unittest.TestCase):
-    """KING-24108 0.8.1: at the finish a check agent re-reads the rows `check-layout.sh grades`
+    """KING-24108 0.8.0 step 2: at the finish a check agent re-reads the rows `check-layout.sh grades`
     lists and proposes corrections; the main chat applies them."""
 
     REFS = "skills/mcp-plan/references/"
@@ -1670,7 +1670,7 @@ def subsection_lines(text, heading):
 
 
 class FinalReview20261110(unittest.TestCase):
-    """KING-24108 0.8.1, the final review: a write that may have gone out without an answer has one
+    """KING-24108 0.8.0 step 2, the final review: a write that may have gone out without an answer has one
     home that a segment agent reads; a lost section has one trigger; a segment agent reads the plan
     header, §1 and §1.1; the fixed-label third cell is pinned."""
 
